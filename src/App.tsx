@@ -24,6 +24,8 @@ import {
 } from "lucide-react";
 import { supabase } from "./lib/supabase";
 import { GoogleGenAI } from "@google/genai";
+import { User, Session } from "@supabase/supabase-js";
+import { User as UserIcon, LogOut, ShieldCheck, Key } from "lucide-react";
 
 // --- TYPES ---
 interface Suggestion {
@@ -33,6 +35,13 @@ interface Suggestion {
   status: string;
   manifested_code?: string;
   created_at?: string;
+}
+
+interface UserProfile {
+  id: string;
+  full_name?: string;
+  avatar_url?: string;
+  personal_api_key?: string;
 }
 
 // --- 3D COMPONENTS ---
@@ -129,18 +138,40 @@ function ModulePlayer({ code, onClose }: { code: string, onClose: () => void }) 
 
 export default function App() {
   const [isOpen, setIsOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<'mind' | 'identity'>('mind');
   const [input, setInput] = useState("");
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isManifesting, setIsManifesting] = useState<number | null>(null);
   const [activeModule, setActiveModule] = useState<string | null>(null);
 
-  // Gemini AI Initialization
-  const ai = useMemo(() => new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! }), []);
+  // Identity State
+  const [session, setSession] = useState<Session | null>(null);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [userApiKey, setUserApiKey] = useState<string>(() => localStorage.getItem('evolutive_energy_key') || "");
 
-  // Initial fetch
+  // Gemini AI Provider
+  const getAI = (customKey?: string) => {
+    const key = customKey || userApiKey || process.env.GEMINI_API_KEY;
+    if (!key) throw new Error("No Energy Source Found. Connect Identity or Provide Key.");
+    return new GoogleGenAI({ apiKey: key });
+  };
+
+  // Initial fetch and Auth listener
   useEffect(() => {
     fetchSuggestions();
+    
+    if (supabase) {
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        setSession(session);
+      });
+
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+        setSession(session);
+      });
+
+      return () => subscription.unsubscribe();
+    }
   }, []);
 
   const fetchSuggestions = async () => {
@@ -244,6 +275,7 @@ export default function App() {
         - Return ONLY the code block, no markdown formatting.
       `;
 
+      const ai = getAI();
       const result = await ai.models.generateContent({
         model: "gemini-3.1-pro-preview",
         contents: prompt
@@ -350,7 +382,20 @@ export default function App() {
             <div className="p-6 border-b border-indigo-500/30 flex justify-between items-start">
               <div>
                 <h2 className="text-[10px] uppercase tracking-[2px] text-white/40 mb-1">Structure 4.0</h2>
-                <div className="text-[18px] text-white font-medium">The Mind Interface</div>
+                <div className="flex gap-4">
+                  <button 
+                    onClick={() => setActiveTab('mind')} 
+                    className={`text-[18px] font-medium transition-colors ${activeTab === 'mind' ? 'text-white' : 'text-white/20 hover:text-white/40'}`}
+                  >
+                    The Mind
+                  </button>
+                  <button 
+                    onClick={() => setActiveTab('identity')} 
+                    className={`text-[18px] font-medium transition-colors ${activeTab === 'identity' ? 'text-white' : 'text-white/20 hover:text-white/40'}`}
+                  >
+                    Identity
+                  </button>
+                </div>
               </div>
               <button 
                 onClick={() => setIsOpen(false)}
@@ -361,68 +406,142 @@ export default function App() {
             </div>
 
             {/* Suggestions Root - Scrollable */}
-            <div className="flex-1 overflow-y-auto p-6 custom-scrollbar space-y-4">
-              {suggestions.map((s, idx) => (
-                <motion.div 
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: idx * 0.05 }}
-                  key={s.id}
-                  className="group relative p-4 bg-white/[0.03] border border-indigo-500/20 hover:border-indigo-500/40 transition-all rounded-xl"
-                >
-                  <div className="flex items-start gap-4">
-                    <div className="flex flex-col items-center gap-1">
-                      <button onClick={() => handleVote(s.id, s.votes)} className="text-indigo-400/60 hover:text-indigo-400 active:scale-90 transition-all">
-                        <ChevronUp className="w-5 h-5" />
-                      </button>
-                      <span className="text-xs font-mono font-bold text-white/40">{s.votes}</span>
-                    </div>
-                    
-                    <div className="flex-1 min-w-0">
-                      <div className="flex justify-between items-center mb-1">
-                        <span className="text-[9px] uppercase font-bold text-indigo-400 tracking-wider">
-                          {s.status === 'manifested' ? 'App Manifested' : 'Suggestion Pending'}
-                        </span>
+            <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
+              {activeTab === 'mind' ? (
+                <div className="space-y-4">
+                  {suggestions.map((s, idx) => (
+                    <motion.div 
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: idx * 0.05 }}
+                      key={s.id}
+                      className="group relative p-4 bg-white/[0.03] border border-indigo-500/20 hover:border-indigo-500/40 transition-all rounded-xl"
+                    >
+                      <div className="flex items-start gap-4">
+                        <div className="flex flex-col items-center gap-1">
+                          <button onClick={() => handleVote(s.id, s.votes)} className="text-indigo-400/60 hover:text-indigo-400 active:scale-90 transition-all">
+                            <ChevronUp className="w-5 h-5" />
+                          </button>
+                          <span className="text-xs font-mono font-bold text-white/40">{s.votes}</span>
+                        </div>
                         
-                        <div className="flex gap-2">
-                          {s.manifested_code && (
-                            <button onClick={() => setActiveModule(s.manifested_code!)} className="text-[9px] text-indigo-300 hover:text-white uppercase font-bold transition-colors">
-                              Run
-                            </button>
-                          )}
-                          {s.votes >= 20 && s.status === 'pending' && (
-                            <button 
-                              onClick={() => manifestEvolution(s)} 
-                              disabled={!!isManifesting}
-                              className="text-[10px] text-indigo-400 hover:text-white uppercase font-bold transition-all disabled:opacity-50"
-                            >
-                              {isManifesting === s.id ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Manifest'}
-                            </button>
-                          )}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex justify-between items-center mb-1">
+                            <span className="text-[9px] uppercase font-bold text-indigo-400 tracking-wider">
+                              {s.status === 'manifested' ? 'App Manifested' : 'Suggestion Pending'}
+                            </span>
+                            
+                            <div className="flex gap-2">
+                              {s.manifested_code && (
+                                <button onClick={() => setActiveModule(s.manifested_code!)} className="text-[9px] text-indigo-300 hover:text-white uppercase font-bold transition-colors">
+                                  Run
+                                </button>
+                              )}
+                              {s.votes >= 20 && s.status === 'pending' && (
+                                <button 
+                                  onClick={() => manifestEvolution(s)} 
+                                  disabled={!!isManifesting}
+                                  className="text-[10px] text-indigo-400 hover:text-white uppercase font-bold transition-all disabled:opacity-50"
+                                >
+                                  {isManifesting === s.id ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Manifest'}
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                          <p className="text-[12px] text-white/80 leading-snug font-light line-clamp-2">{s.content}</p>
                         </div>
                       </div>
-                      <p className="text-[12px] text-white/80 leading-snug font-light line-clamp-2">{s.content}</p>
+                    </motion.div>
+                  ))}
+                </div>
+              ) : (
+                <div className="space-y-8 py-4">
+                  {!session ? (
+                    <div className="text-center space-y-6 pt-10">
+                      <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mx-auto border border-white/10">
+                        <UserIcon className="w-8 h-8 text-white/20" />
+                      </div>
+                      <div className="space-y-2">
+                        <h3 className="text-sm font-bold uppercase tracking-widest text-indigo-400">Anchor Your Soul</h3>
+                        <p className="text-[11px] text-white/40 leading-relaxed px-10">
+                          Connecting your identity allows you to commit Energy (API Keys) to the collective void.
+                        </p>
+                      </div>
+                      <button 
+                        onClick={() => supabase?.auth.signInWithOAuth({ provider: 'google' })}
+                        className="px-6 py-3 bg-white text-black text-[10px] font-black uppercase tracking-widest hover:bg-indigo-500 hover:text-white transition-all"
+                      >
+                        Sign in with Google
+                      </button>
                     </div>
-                  </div>
-                </motion.div>
-              ))}
+                  ) : (
+                    <div className="space-y-6">
+                      <div className="flex items-center gap-4 p-4 bg-white/5 border border-white/10 rounded-xl">
+                        <img src={session.user.user_metadata.avatar_url} className="w-12 h-12 rounded-full border border-indigo-500/30" referrerPolicy="no-referrer" />
+                        <div className="flex-1">
+                          <h3 className="text-xs font-bold text-white">{session.user.user_metadata.full_name}</h3>
+                          <p className="text-[10px] text-white/40 font-mono">Linked Soul: {session.user.id.slice(0, 8)}...</p>
+                        </div>
+                        <button onClick={() => supabase?.auth.signOut()} className="p-2 hover:bg-red-500/20 text-red-500/60 hover:text-red-500 rounded-lg transition-colors">
+                          <LogOut className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      <div className="space-y-4">
+                        <div className="flex items-center gap-2 text-indigo-400">
+                          <ShieldCheck className="w-4 h-4" />
+                          <span className="text-[10px] uppercase font-bold tracking-widest">Energy Configuration</span>
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <label className="text-[9px] uppercase text-white/40 ml-1">Gemini Energy Source (API Key)</label>
+                          <div className="relative">
+                            <input 
+                              type="password"
+                              value={userApiKey}
+                              onChange={(e) => {
+                                setUserApiKey(e.target.value);
+                                localStorage.setItem('evolutive_energy_key', e.target.value);
+                              }}
+                              placeholder="Paste Key to Empower the Cloud..."
+                              className="w-full bg-white/5 border border-white/10 p-3 text-[11px] text-white focus:outline-none focus:border-indigo-500/50"
+                            />
+                            <Key className="absolute right-3 top-3 w-4 h-4 text-white/10" />
+                          </div>
+                          <p className="text-[9px] text-white/20 italic p-1">
+                            Your key is stored locally and used only for your manifest actions.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Intent Input area */}
-            <div className="p-6 border-t border-indigo-500/30 flex gap-3">
-              <input 
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSuggest()}
-                placeholder="Describe an evolution..."
-                className="flex-1 bg-white/[0.05] border border-white/10 p-3 text-xs text-white focus:outline-none focus:border-indigo-500/50 placeholder:text-white/20"
-              />
-              <button 
-                onClick={handleSuggest}
-                className="w-11 h-11 bg-indigo-500 flex items-center justify-center transition-all active:scale-95"
-              >
-                <Plus className="w-5 h-5 text-white" />
-              </button>
+            <div className="p-6 border-t border-indigo-500/30">
+              {activeTab === 'mind' ? (
+                <div className="flex gap-3">
+                  <input 
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSuggest()}
+                    placeholder="Describe an evolution..."
+                    className="flex-1 bg-white/[0.05] border border-white/10 p-3 text-xs text-white focus:outline-none focus:border-indigo-500/50 placeholder:text-white/20"
+                  />
+                  <button 
+                    onClick={handleSuggest}
+                    className="w-11 h-11 bg-indigo-500 flex items-center justify-center transition-all active:scale-95"
+                  >
+                    <Plus className="w-5 h-5 text-white" />
+                  </button>
+                </div>
+              ) : (
+                <div className="flex justify-center">
+                  <span className="text-[10px] uppercase tracking-widest text-white/20 font-bold">Identity Management Layer</span>
+                </div>
+              )}
             </div>
           </motion.div>
         )}
