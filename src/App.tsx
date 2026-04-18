@@ -149,6 +149,10 @@ export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [userApiKey, setUserApiKey] = useState<string>(() => localStorage.getItem('evolutive_energy_key') || "");
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [isSignUp, setIsSignUp] = useState(false);
 
   // Gemini AI Provider
   const getAI = (customKey?: string) => {
@@ -215,6 +219,22 @@ export default function App() {
       console.error("Error fetching root memory:", err);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleEmailAuth = async () => {
+    if (!supabase) return;
+    setAuthError(null);
+    try {
+      const { error } = isSignUp 
+        ? await supabase.auth.signUp({ email: authEmail, password: authPassword })
+        : await supabase.auth.signInWithPassword({ email: authEmail, password: authPassword });
+      
+      if (error) throw error;
+      setAuthEmail("");
+      setAuthPassword("");
+    } catch (err: any) {
+      setAuthError(err.message);
     }
   };
 
@@ -457,19 +477,58 @@ export default function App() {
               ) : (
                 <div className="space-y-8 py-4">
                   {!session ? (
-                    <div className="text-center space-y-6 pt-10">
+                    <div className="text-center space-y-6 pt-5">
                       <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mx-auto border border-white/10">
                         <UserIcon className="w-8 h-8 text-white/20" />
                       </div>
-                      <div className="space-y-2">
+                      <div className="space-y-1">
                         <h3 className="text-sm font-bold uppercase tracking-widest text-indigo-400">Anchor Your Soul</h3>
-                        <p className="text-[11px] text-white/40 leading-relaxed px-10">
-                          Connecting your identity allows you to commit Energy (API Keys) to the collective void.
+                        <p className="text-[10px] text-white/40 leading-relaxed px-10">
+                          Connecting identity allows you to commit Energy (API Keys).
                         </p>
                       </div>
+
+                      {/* Email Auth Form */}
+                      <div className="space-y-3 px-2">
+                        <input 
+                          type="email"
+                          placeholder="Temporal Email"
+                          value={authEmail}
+                          onChange={(e) => setAuthEmail(e.target.value)}
+                          className="w-full bg-white/5 border border-white/10 p-3 text-[11px] text-white focus:border-indigo-500/50 outline-none"
+                        />
+                        <input 
+                          type="password"
+                          placeholder="Soul Secret"
+                          value={authPassword}
+                          onChange={(e) => setAuthPassword(e.target.value)}
+                          className="w-full bg-white/5 border border-white/10 p-3 text-[11px] text-white focus:border-indigo-500/50 outline-none"
+                        />
+                        {authError && <p className="text-[9px] text-red-500/80 uppercase font-bold">{authError}</p>}
+                        
+                        <button 
+                          onClick={handleEmailAuth}
+                          className="w-full py-3 bg-indigo-600 text-white text-[10px] font-black uppercase tracking-widest hover:bg-indigo-500 transition-all"
+                        >
+                          {isSignUp ? "Create Account" : "Sign In"}
+                        </button>
+
+                        <button 
+                          onClick={() => setIsSignUp(!isSignUp)}
+                          className="text-[9px] text-white/30 hover:text-white/60 uppercase tracking-widest font-bold underline underline-offset-4"
+                        >
+                          {isSignUp ? "Already have a soul?" : "Register your soul"}
+                        </button>
+                      </div>
+
+                      <div className="relative py-4">
+                        <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-white/5"></div></div>
+                        <div className="relative flex justify-center"><span className="bg-[#0a0a1e] px-4 text-[9px] text-white/20 uppercase tracking-widest font-bold">Or use Core Identity</span></div>
+                      </div>
+
                       <button 
                         onClick={() => supabase?.auth.signInWithOAuth({ provider: 'google' })}
-                        className="px-6 py-3 bg-white text-black text-[10px] font-black uppercase tracking-widest hover:bg-indigo-500 hover:text-white transition-all"
+                        className="w-full px-6 py-3 bg-white text-black text-[10px] font-black uppercase tracking-widest hover:bg-indigo-300 transition-all flex items-center justify-center gap-2"
                       >
                         Sign in with Google
                       </button>
