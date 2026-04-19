@@ -268,7 +268,7 @@ function ModulePlayer({ code, onClose }: { code: string, onClose: () => void }) 
         <div className="p-4 border-b border-white/5 flex justify-between items-center bg-white/5">
           <div className="flex items-center gap-2">
             <Sparkles className="w-4 h-4 text-indigo-400" />
-            <span className="text-xs uppercase tracking-widest font-bold">Manifested Module</span>
+            <span className="text-xs uppercase tracking-widest font-bold">Generated App</span>
           </div>
           <button onClick={onClose} className="p-1 hover:bg-white/10 rounded-full transition-colors">
             <X className="w-5 h-5" />
@@ -484,11 +484,11 @@ export default function App() {
     try {
       const prompt = `
         System: You are the Evolutive Cloud Refinement Engine.
-        Original Intent: "${suggestion.content}"
+        Original Request: "${suggestion.content}"
         Refinement Request: "${refinementPrompt}"
         Original Code: ${suggestion.manifested_code}
         
-        Task: Modify the original code based on the refinement request.
+        Task: Modify the original code based on the new feedback.
         Constraints:
         - Output ONLY the modified component code.
         - The component must be named "App".
@@ -505,11 +505,11 @@ export default function App() {
       const generatedCode = result.text.replace(/```jsx|```tsx|```javascript|```/g, '').trim();
 
       if (supabase) {
-        // Create a new version of the manifestation
+        // Create a new version of the app
         await supabase
           .from('suggestions')
           .insert([{ 
-            content: `Evolution of: ${suggestion.content} (${refinementPrompt})`,
+            content: `Improved version of: ${suggestion.content} (${refinementPrompt})`,
             status: 'manifested',
             votes: 0,
             energy: 100,
@@ -724,9 +724,9 @@ export default function App() {
       
       const prompt = `
         System: You are the Evolutive Cloud Manifestation Engine. 
-        Context: This manifested through collective effort. ${suggestion.pledged_by?.length || 0} souls contributed their API energy to this intent.
+        Context: This app was requested by the community. ${suggestion.pledged_by?.length || 0} users supported this idea.
         
-        Task: Create a beautiful, minimalist React component for the following user intent: "${suggestion.content}"
+        Task: Create a beautiful, minimalist React component for the following request: "${suggestion.content}"
         
         Constraints:
         - Output ONLY the component code.
@@ -760,8 +760,8 @@ export default function App() {
       setActiveModule(generatedCode);
 
     } catch (err: any) {
-      console.error("Manifestation failure:", err);
-      alert("The Mind failed to manifest. Intent is complex or void is unstable.");
+      console.error("Generation failure:", err);
+      alert("Generation failed. The request may be too complex or the server is busy.");
     } finally {
       setIsManifesting(null);
     }
@@ -821,22 +821,22 @@ export default function App() {
         <h1 className="text-[64px] font-[900] tracking-[-2px] leading-[0.9] text-white/15 uppercase">
           EVOLUTIVE<br />CLOUD
         </h1>
-        <div className="mt-2 flex flex-col gap-2">
+            <div className="mt-2 flex flex-col gap-2">
           <div className="text-[11px] tracking-[4px] text-indigo-400 uppercase font-bold">
-            Evolutionary Archive . Active
+            Evolutive Cloud . Online
           </div>
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-1 text-[9px] text-white/40 uppercase tracking-widest font-mono">
               <Activity className="w-3 h-3" />
-              <span>{isOpen ? "Mind Expanded" : "Mind Focused"}</span>
+              <span>{isOpen ? "Menu Open" : "Menu Closed"}</span>
             </div>
             <div className="flex items-center gap-1 text-[9px] text-green-500/60 uppercase tracking-widest font-mono">
               <Database className="w-3 h-3" />
-              <span>Cloud Status: Sync</span>
+              <span>Cloud: Syncing</span>
             </div>
             <div className="flex items-center gap-1 text-[9px] text-indigo-400/80 uppercase tracking-widest font-mono ml-2">
               <Users className="w-3 h-3" />
-              <span>Souls: {activeUsersCount}</span>
+              <span>Active Users: {activeUsersCount}</span>
             </div>
           </div>
         </div>
@@ -907,14 +907,14 @@ export default function App() {
             {/* Mind Panel is a Cubic Structure (Cubic/Sharp) */}
             <div className="flex border-b border-white/10 p-6 shrink-0 bg-white/5 items-center justify-between">
               <div className="flex items-center gap-10">
-                <div className="flex gap-12">
+                    <div className="flex gap-12">
                   {['mind', 'identity'].map((tab) => (
                     <button 
                       key={tab}
                       onClick={() => setActiveTab(tab as any)}
                       className={`text-[12px] font-black uppercase tracking-[6px] transition-all relative ${activeTab === tab ? 'text-white' : 'text-white/20'}`}
                     >
-                      {tab === 'mind' ? 'Collective consciousness' : 'Soul Identity'}
+                      {tab === 'mind' ? 'Shared Ideas' : 'Account'}
                       {activeTab === tab && <motion.div layoutId="tab" className="absolute -bottom-2 left-0 w-full h-[3px] bg-gradient-to-r from-indigo-500 via-pink-500 to-yellow-500" />}
                     </button>
                   ))}
@@ -924,7 +924,7 @@ export default function App() {
                 <div className="flex items-center gap-3 px-4 py-2 bg-white/5 rounded-full border border-white/10">
                   <div className={`w-2 h-2 rounded-full ${isFinalized ? 'bg-green-500 animate-pulse shadow-[0_0_10px_green]' : 'bg-yellow-500 shadow-[0_0_10px_yellow]'}`} />
                   <span className="text-[10px] font-black text-white/60 tracking-widest uppercase">
-                    {isFinalized ? 'Post-Creation Sync' : 'Primordial Shaping'}
+                    {isFinalized ? 'Community Mode' : 'Creator Mode'}
                   </span>
                 </div>
               </div>
@@ -983,7 +983,7 @@ export default function App() {
                                 <div className="flex flex-col gap-2 mt-2">
                                   <div className="bg-white/5 rounded-2xl p-4 max-h-[100px] overflow-y-auto thin-scrollbar">
                                     <p className="text-[10px] uppercase tracking-widest text-indigo-400 font-black mb-2 flex items-center gap-2">
-                                      <MessageCircle className="w-3 h-3" /> Collective Advice
+                                      <MessageCircle className="w-3 h-3" /> Community Feedback
                                     </p>
                                     {advice.filter(a => a.suggestion_id === s.id).map((a, i) => (
                                       <div key={i} className="text-[9px] text-white/40 mb-1 leading-tight border-l border-white/10 pl-2">
@@ -991,17 +991,17 @@ export default function App() {
                                       </div>
                                     ))}
                                     {advice.filter(a => a.suggestion_id === s.id).length === 0 && (
-                                      <p className="text-[9px] text-white/10 italic">No advice yet...</p>
+                                      <p className="text-[9px] text-white/10 italic">No feedback yet...</p>
                                     )}
                                   </div>
                                   <button 
                                     onClick={() => {
-                                      const msg = window.prompt("Leave advice for this manifestation:");
+                                      const msg = window.prompt("Type your feedback to improve this app:");
                                       if (msg) postAdvice(s.id, msg);
                                     }}
                                     className="text-[9px] font-black uppercase tracking-widest text-white/30 hover:text-white transition-colors py-2 border border-white/5 rounded-full"
                                   >
-                                    Give Advice
+                                    Add Feedback
                                   </button>
                                 </div>
                               </div>
@@ -1060,9 +1060,9 @@ export default function App() {
                         <UserIcon className="w-10 h-10 text-white" />
                       </div>
                       <div className="space-y-4">
-                        <h3 className="text-2xl font-black uppercase tracking-[10px] text-white">Identity</h3>
+                        <h3 className="text-2xl font-black uppercase tracking-[10px] text-white">Account</h3>
                         <p className="text-[11px] text-white/40 leading-relaxed uppercase tracking-widest px-10">
-                          Connect your soul to the evolutive cloud.
+                          Sign in to save and share your ideas.
                         </p>
                       </div>
 
@@ -1071,20 +1071,20 @@ export default function App() {
                         {!supabase && (
                           <div className="p-4 bg-pink-500/10 border border-pink-500/30 rounded-2xl mb-4">
                             <p className="text-[10px] text-pink-400 uppercase font-black tracking-widest leading-relaxed">
-                              Cloud Connection Offline.<br/>Please add Supabase credentials in settings.
+                              Database Disconnected.<br/>Check your setup.
                             </p>
                           </div>
                         )}
                         <input 
                           type="email"
-                          placeholder="Soul Identifier (Email)"
+                          placeholder="Email Address"
                           value={authEmail}
                           onChange={(e) => setAuthEmail(e.target.value)}
                           className="w-full bg-white/5 border border-white/10 p-5 rounded-full text-[11px] text-white focus:border-indigo-500/50 outline-none text-center"
                         />
                         <input 
                           type="password"
-                          placeholder="Spirit Key (Password)"
+                          placeholder="Password"
                           value={authPassword}
                           onChange={(e) => setAuthPassword(e.target.value)}
                           className="w-full bg-white/5 border border-white/10 p-5 rounded-full text-[11px] text-white focus:border-indigo-500/50 outline-none text-center"
@@ -1095,46 +1095,45 @@ export default function App() {
                           onClick={handleEmailAuth}
                           className="w-full py-5 bg-white text-black text-[11px] font-black uppercase tracking-[4px] rounded-full hover:bg-indigo-300 transition-all shadow-xl"
                         >
-                          {isSignUp ? "Manifest Soul" : "Resume Connection"}
+                          {isSignUp ? "Create Account" : "Log In"}
                         </button>
 
                         <button 
                           onClick={() => setIsSignUp(!isSignUp)}
                           className="text-[10px] text-white/30 hover:text-indigo-400 uppercase tracking-widest font-black transition-colors"
                         >
-                          {isSignUp ? "Already part of the cloud?" : "Begin new manifestation"}
+                          {isSignUp ? "Already have an account?" : "Need an account?"}
                         </button>
                       </div>
 
                       <div className="relative py-4">
                         <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-white/5"></div></div>
-                        <div className="relative flex justify-center"><span className="bg-[#050510] px-4 text-[10px] text-white/20 uppercase tracking-[4px] font-black">Or use Core Identity</span></div>
+                        <div className="relative flex justify-center"><span className="bg-[#050510] px-4 text-[10px] text-white/20 uppercase tracking-[4px] font-black">Social Login</span></div>
                       </div>
 
-                      <button 
-                        onClick={() => {
-                          if (!supabase) return;
-                          supabase.auth.signInWithOAuth({ 
-                            provider: 'google',
-                            options: { 
-                              redirectTo: window.location.origin,
-                              skipBrowserRedirect: true, // Use popup if possible
-                            }
-                          }).then(({ data, error }) => {
-                            if (error) setAuthError(error.message);
-                            if (data?.url) {
-                              const authWindow = window.open(data.url, 'google_auth', 'width=600,height=700');
-                              if (!authWindow) {
-                                setAuthError("Please allow popups to sync with Google.");
-                              }
-                            }
-                          });
-                        }}
-                        disabled={!supabase}
-                        className="w-full px-6 py-5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-[11px] font-black uppercase tracking-[4px] rounded-full hover:rotate-1 transition-all flex items-center justify-center gap-3 disabled:opacity-30"
-                      >
-                        Google Sync
-                      </button>
+                          <button 
+                            onClick={() => {
+                              supabase.auth.signInWithOAuth({ 
+                                provider: 'google',
+                                options: { 
+                                  redirectTo: window.location.origin,
+                                  skipBrowserRedirect: true, 
+                                }
+                              }).then(({ data, error }) => {
+                                if (error) setAuthError(error.message);
+                                if (data?.url) {
+                                  const authWindow = window.open(data.url, 'google_auth', 'width=600,height=700');
+                                  if (!authWindow) {
+                                    setAuthError("Please allow popups to sign in with Google.");
+                                  }
+                                }
+                              });
+                            }}
+                            disabled={!supabase}
+                            className="w-full px-6 py-5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-[11px] font-black uppercase tracking-[4px] rounded-full hover:rotate-1 transition-all flex items-center justify-center gap-3 disabled:opacity-30"
+                          >
+                            Sign in with Google
+                          </button>
                     </div>
                   ) : (
                     <div className="text-center space-y-10">
@@ -1149,22 +1148,30 @@ export default function App() {
                       
                       <div className="space-y-2">
                         <h3 className="text-sm font-black uppercase tracking-[8px] text-indigo-400">{session.user.email}</h3>
-                        <p className="text-[10px] text-white/30 uppercase tracking-widest">Active Soul in the Void</p>
+                        <p className="text-[10px] text-white/30 uppercase tracking-widest">Connected Member</p>
                       </div>
 
-                      <div className="bg-white/[0.03] p-10 rounded-full border border-white/5 space-y-6">
-                        <div className="space-y-2">
-                          <label className="text-[10px] font-black uppercase tracking-[3px] text-white/40 block">Gemini Energy Source</label>
-                          <input 
-                            type="password"
-                            value={userApiKey}
-                            onChange={(e) => {
-                              setUserApiKey(e.target.value);
-                              localStorage.setItem('evolutive_energy_key', e.target.value);
-                            }}
-                            placeholder="PASTE YOUR API ENERGY KEY"
-                            className="bg-transparent border-b border-white/10 w-full p-2 text-center text-xs text-indigo-300 focus:border-indigo-500 outline-none"
-                          />
+                      <div className="bg-white/[0.03] p-10 rounded-3xl border border-white/5 space-y-6">
+                        <div className="space-y-4">
+                          <label className="text-[10px] font-black uppercase tracking-[3px] text-white/40 block">Gemini API Key</label>
+                          <div className="flex flex-col gap-4">
+                            <input 
+                              type="password"
+                              value={userApiKey}
+                              onChange={(e) => setUserApiKey(e.target.value)}
+                              placeholder="Enter your Gemini API Key"
+                              className="bg-white/10 border border-white/20 w-full p-4 rounded-xl text-center text-sm text-indigo-300 focus:border-indigo-500 outline-none"
+                            />
+                            <button 
+                              onClick={() => {
+                                localStorage.setItem('evolutive_energy_key', userApiKey);
+                                alert("API Key saved. You can now manifest apps!");
+                              }}
+                              className="py-4 px-6 bg-white text-black text-[11px] font-black uppercase tracking-widest rounded-full hover:bg-indigo-400 hover:text-white transition-all shadow-lg"
+                            >
+                              Save API Key
+                            </button>
+                          </div>
                         </div>
                       </div>
 
@@ -1172,7 +1179,7 @@ export default function App() {
                         onClick={() => supabase?.auth.signOut()}
                         className="px-10 py-4 border-2 border-pink-500/30 text-pink-500/60 text-[10px] font-black uppercase tracking-[4px] rounded-full hover:bg-pink-500 hover:text-white transition-all"
                       >
-                        Sever Connection
+                        Sign Out
                       </button>
                     </div>
                   )}
@@ -1197,7 +1204,7 @@ export default function App() {
                       value={input}
                       onChange={(e) => setInput(e.target.value)}
                       onKeyDown={(e) => e.key === 'Enter' && canSuggest && handleSuggest()}
-                      placeholder="WAKE A NEW INTENT..."
+                      placeholder="Type your app idea..."
                       className="flex-1 bg-white/5 border-2 border-white/10 px-8 py-6 rounded-full text-sm text-white focus:outline-none focus:border-indigo-500 placeholder:text-white/20 font-black uppercase tracking-[4px] text-center"
                     />
                     {/* Suggestion button is circular */}
@@ -1212,7 +1219,7 @@ export default function App() {
                 </div>
               ) : (
                 <div className="flex justify-center flex-col items-center gap-2">
-                  <span className="text-[11px] uppercase tracking-[10px] text-white/20 font-black">Inner Core Maintenance</span>
+                  <span className="text-[11px] uppercase tracking-[10px] text-white/20 font-black">Profile Settings</span>
                   <div className="w-32 h-1 bg-gradient-to-r from-transparent via-white/10 to-transparent" />
                 </div>
               )}
