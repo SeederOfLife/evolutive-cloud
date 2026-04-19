@@ -95,9 +95,9 @@ function EvolutiveSeed({ onClick, isOpen }: { onClick: () => void, isOpen: boole
   const meshRef = useRef<THREE.Mesh>(null!);
 
   useFrame((state) => {
-    const t = state.clock.getElapsedTime();
-    meshRef.current.rotation.y = t * 0.15;
-    const pulse = 1 + Math.sin(t * (isOpen ? 2 : 0.5)) * (isOpen ? 0.1 : 0.05);
+    const time = state.clock?.elapsedTime || 0;
+    meshRef.current.rotation.y = time * 0.15;
+    const pulse = 1 + Math.sin(time * (isOpen ? 2 : 0.5)) * (isOpen ? 0.1 : 0.05);
     meshRef.current.scale.set(pulse, pulse, pulse);
   });
 
@@ -137,7 +137,7 @@ function ModuleNode({ suggestion, onRun }: { suggestion: Suggestion, onRun: (cod
   }, []);
 
   useFrame((state) => {
-    const time = state.clock?.elapsedTime || state.performance?.elapsed * 0.001 || 0;
+    const time = state.clock?.elapsedTime || 0;
     const t = time * speed + offset;
     meshRef.current.position.x = Math.cos(t) * radius;
     meshRef.current.position.z = Math.sin(t) * radius;
@@ -197,8 +197,8 @@ function Nebula({ count = 3000 }) {
 
   const matRef = useRef<THREE.PointsMaterial>(null!);
   useFrame((state) => {
-    const t = state.clock.getElapsedTime();
-    matRef.current.size = 0.1 + Math.sin(t * 0.5) * 0.05;
+    const time = state.clock?.elapsedTime || 0;
+    matRef.current.size = 0.1 + Math.sin(time * 0.5) * 0.05;
   });
 
   return (
@@ -296,6 +296,12 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'mind' | 'identity'>('mind');
   const [input, setInput] = useState("");
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [dbFeatures, setDbFeatures] = useState<{ 
+    pledged_by: boolean, 
+    manifested_code: boolean,
+    energy: boolean,
+    parent_id: boolean
+  }>({ pledged_by: true, manifested_code: true, energy: true, parent_id: true });
   const [isLoading, setIsLoading] = useState(false);
   const [isManifesting, setIsManifesting] = useState<number | null>(null);
   const [activeModule, setActiveModule] = useState<string | null>(null);
@@ -643,9 +649,13 @@ export default function App() {
         setSuggestions(data);
         if (data.length > 0) {
           const columns = Object.keys(data[0]);
-          console.log("Database Schema Check - Available Columns:", columns);
-          if (!columns.includes('pledged_by')) console.warn("CRITICAL: 'pledged_by' column missing!");
-          if (!columns.includes('manifested_code')) console.warn("CRITICAL: 'manifested_code' column missing!");
+          setDbFeatures({
+            pledged_by: columns.includes('pledged_by'),
+            manifested_code: columns.includes('manifested_code'),
+            energy: columns.includes('energy'),
+            parent_id: columns.includes('parent_id')
+          });
+          console.log("Database Schema:", columns);
         }
       }
     } catch (err: any) {
@@ -722,21 +732,39 @@ export default function App() {
   const handlePledge = async (s: Suggestion) => {
     if (!session || !userApiKey || !supabase) return;
     
-    const hasPledged = s.pledged_by?.includes(session.user.id);
-    if (hasPledged) return;
+    // Schema-aware data extraction
+    let pledgedBy = s.pledged_by || [];
+    let currentEnergy = s.energy || 0;
+
+    if (s.content.startsWith('JSON:')) {
+      try {
+        const meta = JSON.parse(s.content.substring(5));
+        pledgedBy = meta.pledged_by || pledgedBy;
+        currentEnergy = meta.energy || currentEnergy;
+      } catch(e) {}
+    }
+
+    if (pledgedBy.includes(session.user.id)) return;
 
     try {
-      const newPledgedBy = [...(s.pledged_by || []), session.user.id];
-      const newEnergy = Math.min(100, (s.energy || 0) + 25); // Each pledge adds 25% energy
+      const newPledgedBy = [...pledgedBy, session.user.id];
+      const newEnergy = Math.min(100, currentEnergy + 25);
       
-      const { error } = await supabase
-        .from('suggestions')
-        .update({ 
-          pledged_by: newPledgedBy,
-          energy: newEnergy
-        })
-        .eq('id', s.id);
+      const updateData: any = {};
+      
+      // Only include fields that exist in DB
+      if (dbFeatures.energy) updateData.energy = newEnergy;
+      if (dbFeatures.pledged_by) updateData.pledged_by = newPledgedBy;
 
+      // Wrap missing fields into content
+      if (!dbFeatures.energy || !dbFeatures.pledged_by) {
+        const meta = s.content.startsWith('JSON:') ? JSON.parse(s.content.substring(5)) : { text: s.content };
+        if (!dbFeatures.energy) meta.energy = newEnergy;
+        if (!dbFeatures.pledged_by) meta.pledged_by = newPledgedBy;
+        updateData.content = 'JSON:' + JSON.stringify(meta);
+      }
+      
+      const { error } = await supabase.from('suggestions').update(updateData).eq('id', s.id);
       if (error) throw error;
     } catch (err: any) {
       console.error("Error pledging energy:", err);
@@ -808,16 +836,26 @@ export default function App() {
         contents: prompt
       });
 
-      const generatedCode = result.text.replace(/```jsx|```tsx|```javascript|```/g, '').trim();
+      let generatedCode = result.text.replace(/```jsx|```tsx|```javascript|```/g, '').trim();
 
       if (supabase) {
-        await supabase
+        const updateData: any = { status: 'manifested' };
+        
+        if (dbFeatures.manifested_code) {
+          updateData.manifested_code = generatedCode;
+        } else {
+          const meta = suggestion.content.startsWith('JSON:') ? JSON.parse(suggestion.content.substring(5)) : { text: suggestion.content };
+          meta.manifested_code = generatedCode;
+          meta.status = 'manifested';
+          updateData.content = 'JSON:' + JSON.stringify(meta);
+        }
+
+        const { error } = await supabase
           .from('suggestions')
-          .update({ 
-            status: 'manifested', 
-            manifested_code: generatedCode 
-          })
+          .update(updateData)
           .eq('id', suggestion.id);
+        
+        if (error) throw error;
       }
 
       setSuggestions(suggestions.map(s => s.id === suggestion.id ? { ...s, status: 'manifested', manifested_code: generatedCode } : s));
@@ -999,65 +1037,79 @@ export default function App() {
             <div className="flex-1 overflow-y-auto p-10 bg-[radial-gradient(circle_at_50%_50%,rgba(99,102,241,0.05)_0%,transparent_70%)] custom-scrollbar">
               {activeTab === 'mind' ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
-                  {displaySuggestions.map((s, idx) => (
-                    <motion.div 
-                      key={s.id}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: idx * 0.03 }}
-                      className="group"
-                    >
-                      {/* Suggestions are Circles */}
-                      <div className="aspect-square rounded-full p-10 bg-white/[0.03] border-2 border-white/5 hover:border-indigo-500/50 transition-all flex flex-col items-center justify-center text-center relative overflow-hidden group-hover:shadow-[0_0_40px_rgba(99,102,241,0.1)]">
-                        <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 via-pink-500/10 to-yellow-500/10 opacity-0 group-hover:opacity-100 transition-opacity" />
-                        
-                        <div className="relative z-10 w-full flex flex-col h-full justify-between items-center py-4">
-                          <div className="flex justify-center">
-                            <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest px-4 py-1.5 bg-indigo-500/10 rounded-full border border-indigo-500/30">
-                              #{s.id} . {s.status}
-                            </span>
-                          </div>
+                  {displaySuggestions.map((s, idx) => {
+                    let processedS = { ...s };
+                    let displayContent = s.content;
 
-                          <p className="text-[14px] text-white leading-relaxed font-bold line-clamp-4 px-4 italic drop-shadow-lg scale-90 group-hover:scale-100 transition-transform">
-                            <span className="text-indigo-400 text-lg">“</span>
-                            {s.content}
-                            <span className="text-indigo-400 text-lg">”</span>
-                          </p>
+                    if (s.content.startsWith('JSON:')) {
+                      try {
+                        const meta = JSON.parse(s.content.substring(5));
+                        displayContent = meta.text || "Untitled Idea";
+                        processedS = { ...s, ...meta };
+                      } catch(e) {}
+                    }
+
+                    return (
+                      <motion.div 
+                        key={s.id}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: idx * 0.03 }}
+                        className="group"
+                      >
+                        {/* Suggestions are Circles */}
+                        <div className="aspect-square rounded-full p-10 bg-white/[0.03] border-2 border-white/5 hover:border-indigo-500/50 transition-all flex flex-col items-center justify-center text-center relative overflow-hidden group-hover:shadow-[0_0_40px_rgba(99,102,241,0.1)]">
+                          <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 via-pink-500/10 to-yellow-500/10 opacity-0 group-hover:opacity-100 transition-opacity" />
                           
-                          <div className="flex flex-col gap-4 items-center w-full">
-                            {s.manifested_code ? (
-                              <div className="flex flex-col gap-4 w-full px-6">
-                                <div className="flex justify-center gap-4">
-                                  <button onClick={() => setActiveModule(s.manifested_code!)} className="w-14 h-14 rounded-full bg-white text-black flex items-center justify-center hover:scale-110 transition-all active:scale-95 shadow-[0_0_20px_white]">
-                                    <Play className="w-6 h-6 fill-current" />
-                                  </button>
-                                  {(isFinalized || session?.user.id === creatorId) && (
-                                    <>
-                                      <button 
-                                        onClick={() => {
-                                          const prompt = window.prompt("Suggest an evolution for this manifestation:");
-                                          if (prompt) handleRefine(s, prompt);
-                                        }}
-                                        disabled={!!isRefining}
-                                        className="w-14 h-14 rounded-full border-2 border-indigo-500/50 flex items-center justify-center text-indigo-400 hover:bg-indigo-500 hover:text-white transition-all disabled:opacity-20"
-                                      >
-                                        {isRefining === s.id ? <Loader2 className="w-6 h-6 animate-spin" /> : <RefreshCw className="w-6 h-6" />}
-                                      </button>
-                                      {session?.user.id === creatorId && (
+                          <div className="relative z-10 w-full flex flex-col h-full justify-between items-center py-4">
+                            <div className="flex justify-center">
+                              <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest px-4 py-1.5 bg-indigo-500/10 rounded-full border border-indigo-500/30">
+                                #{s.id} . {processedS.status}
+                              </span>
+                            </div>
+
+                            <p className="text-[14px] text-white leading-relaxed font-bold line-clamp-4 px-4 italic drop-shadow-lg scale-90 group-hover:scale-100 transition-transform">
+                              <span className="text-indigo-400 text-lg">“</span>
+                              {displayContent}
+                              <span className="text-indigo-400 text-lg">”</span>
+                            </p>
+                            
+                            <div className="flex flex-col gap-4 items-center w-full">
+                              {processedS.manifested_code ? (
+                                <div className="flex flex-col gap-4 w-full px-6">
+                                  <div className="flex justify-center gap-4">
+                                    <button onClick={() => setActiveModule(processedS.manifested_code!)} className="w-14 h-14 rounded-full bg-white text-black flex items-center justify-center hover:scale-110 transition-all active:scale-95 shadow-[0_0_20px_white]" title="Launch">
+                                      <Play className="w-6 h-6 fill-current" />
+                                    </button>
+                                    {(isFinalized || session?.user.id === creatorId) && (
+                                      <>
                                         <button 
                                           onClick={() => {
-                                            if (window.confirm("Are you sure you want to delete this manifestation?")) {
-                                              handleDeleteSuggestion(s.id);
-                                            }
+                                            const prompt = window.prompt("Suggest a change for this app:");
+                                            if (prompt) handleRefine(processedS, prompt);
                                           }}
-                                          className="w-14 h-14 rounded-full border-2 border-pink-500/30 flex items-center justify-center text-pink-500/60 hover:bg-pink-500 hover:text-white transition-all shadow-lg"
+                                          disabled={!!isRefining}
+                                          className="w-14 h-14 rounded-full border-2 border-indigo-500/50 flex items-center justify-center text-indigo-400 hover:bg-indigo-500 hover:text-white transition-all disabled:opacity-20"
+                                          title="Refine App"
                                         >
-                                          <Trash2 className="w-5 h-5" />
+                                          {isRefining === s.id ? <Loader2 className="w-6 h-6 animate-spin" /> : <RefreshCw className="w-6 h-6" />}
                                         </button>
-                                      )}
-                                    </>
-                                  )}
-                                </div>
+                                        {session?.user.id === creatorId && (
+                                          <button 
+                                            onClick={() => {
+                                              if (window.confirm("Delete this generated app?")) {
+                                                handleDeleteSuggestion(s.id);
+                                              }
+                                            }}
+                                            className="w-14 h-14 rounded-full border-2 border-pink-500/30 flex items-center justify-center text-pink-500/60 hover:bg-pink-500 hover:text-white transition-all shadow-lg"
+                                            title="Delete"
+                                          >
+                                            <Trash2 className="w-5 h-5" />
+                                          </button>
+                                        )}
+                                      </>
+                                    )}
+                                  </div>
                                 <div className="flex flex-col gap-2 mt-2">
                                   <div className="bg-white/5 rounded-2xl p-4 max-h-[100px] overflow-y-auto thin-scrollbar">
                                     <p className="text-[10px] uppercase tracking-widest text-indigo-400 font-black mb-2 flex items-center gap-2">
@@ -1086,9 +1138,9 @@ export default function App() {
                             ) : (
                               s.status === 'pending' && (
                                 <div className="flex flex-col gap-3 w-full px-6">
-                                  <div className="flex justify-center gap-5">
-                                    {/* Delete Button - If owned by user or creator */}
-                                    {(session?.user.id === creatorId || s.pledged_by?.includes(session?.user.id || '')) && (
+                                    <div className="flex justify-center gap-5">
+                                      {/* Delete Button */}
+                                      {(isCreator || (processedS.pledged_by || []).includes(session?.user?.id || '')) && (
                                       <button 
                                         onClick={() => {
                                           if (window.confirm("Are you sure you want to delete this idea?")) {
@@ -1101,49 +1153,53 @@ export default function App() {
                                       </button>
                                     )}
 
-                                    {/* Vote Button - Circular */}
-                                    <button 
-                                      onClick={() => handleVote(s.id, s.votes)}
-                                      className="w-12 h-12 rounded-full border-2 border-white/10 flex items-center justify-center text-white/40 hover:border-white hover:text-white transition-all group-hover:scale-110"
-                                    >
+                                      {/* Vote Button */}
+                                      <button 
+                                        onClick={() => handleVote(s.id, processedS.votes)}
+                                        className="w-12 h-12 rounded-full border-2 border-white/10 flex items-center justify-center text-white/40 hover:border-white hover:text-white transition-all group-hover:scale-110"
+                                        title="Upvote"
+                                      >
                                       <ChevronUp className="w-6 h-6" />
                                     </button>
 
-                                    {/* Pledge Button - Circular */}
-                                    <button 
-                                      onClick={() => handlePledge(s)}
-                                      disabled={!session || !userApiKey || s.pledged_by?.includes(session?.user.id || '')}
-                                      className={`w-12 h-12 rounded-full border-2 flex items-center justify-center transition-all ${
-                                        s.pledged_by?.includes(session?.user.id || '') 
-                                          ? 'border-yellow-400 text-yellow-400 bg-yellow-400/10' 
-                                          : 'border-white/10 text-white/40 hover:border-white hover:text-white'
-                                      } disabled:opacity-20`}
-                                    >
-                                      <Zap className={`w-5 h-5 ${s.pledged_by?.includes(session?.user.id || '') ? 'fill-yellow-400' : ''}`} />
-                                    </button>
+                                      {/* Support Button */}
+                                      <button 
+                                        onClick={() => handlePledge(processedS)}
+                                        disabled={!session || !userApiKey || (processedS.pledged_by || []).includes(session?.user?.id || '')}
+                                        className={`w-12 h-12 rounded-full border-2 flex items-center justify-center transition-all ${
+                                          (processedS.pledged_by || []).includes(session?.user?.id || '') 
+                                            ? 'border-yellow-400 text-yellow-400 bg-yellow-400/10' 
+                                            : 'border-white/10 text-white/40 hover:border-white hover:text-white'
+                                        } disabled:opacity-20`}
+                                        title="Support Idea"
+                                      >
+                                        <Zap className={`w-5 h-5 ${(processedS.pledged_by || []).includes(session?.user?.id || '') ? 'fill-yellow-400' : ''}`} />
+                                      </button>
                                     
-                                    {/* Manifest Button - Circular */}
-                                    <button 
-                                      onClick={() => manifestEvolution(s)} 
-                                      disabled={!!isManifesting || (!((s.energy || 0) >= 100 || session?.user.id === creatorId))}
-                                      title={((s.energy || 0) >= 100 || session?.user.id === creatorId) ? "Generate App" : "Needs 100% Energy to Generate"}
-                                      className="w-12 h-12 rounded-full border-2 border-indigo-500 flex items-center justify-center text-indigo-400 hover:bg-indigo-500 hover:text-white transition-all disabled:opacity-10"
-                                    >
-                                      {isManifesting === s.id ? <Loader2 className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
-                                    </button>
-                                  </div>
-                                  
-                                  <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
-                                    <motion.div animate={{ width: `${s.energy || 0}%` }} className="h-full bg-gradient-to-r from-indigo-500 via-pink-500 via-yellow-400 to-green-400 shadow-[0_0_10px_white]" />
-                                  </div>
+                                      {/* Generate Button */}
+                                      <button 
+                                        onClick={() => manifestEvolution(processedS)} 
+                                        disabled={!!isManifesting || (!((processedS.energy || 0) >= 100 || isCreator))}
+                                        title={((processedS.energy || 0) >= 100 || isCreator) ? "Generate App" : "Needs 100% Energy to Generate"}
+                                        className="w-12 h-12 rounded-full border-2 border-indigo-500 flex items-center justify-center text-indigo-400 hover:bg-indigo-500 hover:text-white transition-all disabled:opacity-10"
+                                      >
+                                        {isManifesting === s.id ? <Loader2 className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
+                                      </button>
+                                    </div>
+                                    
+                                    <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
+                                      <motion.div animate={{ width: `${processedS.energy || 0}%` }} className="h-full bg-gradient-to-r from-indigo-500 via-pink-500 via-yellow-400 to-green-400 shadow-[0_0_10px_white]" />
+                                    </div>
+                                    <p className="text-[8px] font-black uppercase tracking-[3px] text-white/20">Energy: {processedS.energy || 0}%</p>
                                 </div>
                               )
                             )}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </motion.div>
-                  ))}
+                      </motion.div>
+                    );
+                  })}
                 </div>
               ) : (
                 <div className="max-w-md mx-auto space-y-12 py-10">
