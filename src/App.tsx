@@ -47,6 +47,15 @@ interface UserProfile {
   personal_api_key?: string;
 }
 
+interface VoidEcho {
+  id: string;
+  userId: string;
+  text: string;
+  x: number;
+  y: number;
+  createdAt: number;
+}
+
 // --- 3D COMPONENTS ---
 
 function EvolutiveSeed({ onClick, isOpen }: { onClick: () => void, isOpen: boolean }) {
@@ -123,6 +132,46 @@ function ModuleNode({ suggestion, onRun }: { suggestion: Suggestion, onRun: (cod
   );
 }
 
+function Nebula({ count = 2000 }) {
+  const points = useMemo(() => {
+    const p = new Float32Array(count * 3);
+    for (let i = 0; i < count; i++) {
+      p[i * 3] = (Math.random() - 0.5) * 50;
+      p[i * 3 + 1] = (Math.random() - 0.5) * 50;
+      p[i * 3 + 2] = (Math.random() - 0.5) * 50;
+    }
+    return p;
+  }, [count]);
+
+  const matRef = useRef<THREE.PointsMaterial>(null!);
+  useFrame((state) => {
+    const t = state.clock.getElapsedTime();
+    matRef.current.size = 0.1 + Math.sin(t * 0.5) * 0.05;
+  });
+
+  return (
+    <points>
+      <bufferGeometry>
+        <bufferAttribute
+          attach="attributes-position"
+          count={points.length / 3}
+          array={points}
+          itemSize={3}
+        />
+      </bufferGeometry>
+      <pointsMaterial
+        ref={matRef}
+        size={0.15}
+        color="#6366f1"
+        transparent
+        opacity={0.4}
+        sizeAttenuation
+        blending={THREE.AdditiveBlending}
+      />
+    </points>
+  );
+}
+
 // --- MODULE PLAYER (SANDBOX) ---
 
 function ModulePlayer({ code, onClose }: { code: string, onClose: () => void }) {
@@ -193,6 +242,10 @@ export default function App() {
   const [isManifesting, setIsManifesting] = useState<number | null>(null);
   const [activeModule, setActiveModule] = useState<string | null>(null);
   const [activeUsersCount, setActiveUsersCount] = useState(1);
+  const [presenceData, setPresenceData] = useState<Record<string, any>>({});
+  const [echoes, setEchoes] = useState<VoidEcho[]>([]);
+  const [echoInput, setEchoInput] = useState("");
+  const echoTimeoutRef = useRef<any>(null);
 
   // Identity State
   const [session, setSession] = useState<Session | null>(null);
@@ -228,7 +281,7 @@ export default function App() {
         }
       });
 
-      // Real-time listener for suggestions and presence
+      // Real-time listener for suggestions and presence and echoes
       const channel = supabase.channel('void-sync');
 
       channel
@@ -245,20 +298,45 @@ export default function App() {
         )
         .on('presence', { event: 'sync' }, () => {
           const state = channel.presenceState();
+          setPresenceData(state);
           setActiveUsersCount(Object.keys(state).length);
+        })
+        .on('broadcast', { event: 'echo' }, ({ payload }) => {
+          setEchoes(prev => [...prev, payload].slice(-10));
         })
         .subscribe(async (status) => {
           if (status === 'SUBSCRIBED') {
-            await channel.track({ online_at: new Date().toISOString() });
+            await channel.track({ 
+              online_at: new Date().toISOString(),
+              userId: session?.user.id || 'anonymous'
+            });
           }
         });
+
+      // Clear old echoes
+      const interval = setInterval(() => {
+        setEchoes(prev => prev.filter(e => Date.now() - e.createdAt < 5000));
+      }, 1000);
+
+      const handleMouseMove = (e: MouseEvent) => {
+        channel.track({
+          online_at: new Date().toISOString(),
+          userId: session?.user.id || 'anonymous',
+          x: e.clientX,
+          y: e.clientY
+        });
+      };
+
+      window.addEventListener('mousemove', handleMouseMove);
 
       return () => {
         subscription.unsubscribe();
         supabase.removeChannel(channel);
+        clearInterval(interval);
+        window.removeEventListener('mousemove', handleMouseMove);
       };
     }
-  }, []);
+  }, [session]);
 
   const fetchSuggestions = async () => {
     if (!supabase) {
@@ -381,6 +459,29 @@ export default function App() {
     }
   };
 
+  const sendEcho = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!echoInput.trim() || !supabase) return;
+    
+    const channel = supabase.channel('void-sync');
+    const newEcho: VoidEcho = {
+      id: Math.random().toString(36),
+      userId: session?.user.id || 'anonymous',
+      text: echoInput.trim(),
+      x: Math.random() * window.innerWidth,
+      y: Math.random() * window.innerHeight,
+      createdAt: Date.now()
+    };
+
+    channel.send({
+      type: 'broadcast',
+      event: 'echo',
+      payload: newEcho
+    });
+
+    setEchoInput("");
+  };
+
   const manifestEvolution = async (suggestion: Suggestion) => {
     if (isManifesting) return;
     
@@ -440,6 +541,46 @@ export default function App() {
       <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-indigo-900/10 rounded-full blur-[120px] pointer-events-none -z-10 animate-pulse" />
       
       {/* --- HUD LAYER --- */}
+      {/* --- VOID ECHOES LAYER --- */}
+      <AnimatePresence>
+        {echoes.map((echo) => (
+          <motion.div
+            key={echo.id}
+            initial={{ opacity: 0, scale: 0.5, y: 0 }}
+            animate={{ opacity: 1, scale: 1, y: -50 }}
+            exit={{ opacity: 0, scale: 1.5, y: -100 }}
+            className="fixed z-50 pointer-events-none"
+            style={{ left: echo.x, top: echo.y }}
+          >
+            <div className="bg-indigo-500/10 border border-indigo-500/30 backdrop-blur-md px-4 py-2 rounded-full">
+              <span className="text-[11px] font-bold text-white tracking-widest uppercase">{echo.text}</span>
+              <div className="text-[8px] text-white/30 uppercase mt-1">Echoed from the void</div>
+            </div>
+          </motion.div>
+        ))}
+      </AnimatePresence>
+
+      {/* --- SPIRIT TRAILS LAYER --- */}
+      <div className="fixed inset-0 pointer-events-none z-40">
+        {Object.entries(presenceData).map(([key, presences]) => {
+          const presence = (presences as any)[0];
+          if (!presence?.x || presence.userId === session?.user.id) return null;
+          return (
+            <motion.div
+              key={key}
+              animate={{ x: presence.x, y: presence.y }}
+              transition={{ type: "spring", damping: 20, stiffness: 100 }}
+              className="absolute w-4 h-4"
+            >
+              <div className="w-full h-full bg-indigo-500 rounded-full blur-[8px] opacity-30 animate-pulse" />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="w-1 h-1 bg-white rounded-full shadow-[0_0_10px_white]" />
+              </div>
+            </motion.div>
+          );
+        })}
+      </div>
+
       <header className="absolute top-10 left-10 z-10 pointer-events-none">
         <h1 className="text-[64px] font-[900] tracking-[-2px] leading-[0.9] text-white/15 uppercase">
           EVOLUTIVE<br />CLOUD
@@ -498,6 +639,7 @@ export default function App() {
         <pointLight position={[10, 10, 10]} intensity={1.5} color="#ffffff" />
         <pointLight position={[-10, -10, -10]} intensity={1} color="#6366f1" />
         <EvolutiveSeed onClick={() => setIsOpen(true)} isOpen={isOpen} />
+        <Nebula />
         
         {/* Manifested App Nodes */}
         {suggestions
@@ -513,6 +655,20 @@ export default function App() {
 
         <OrbitControls enableZoom={false} enablePan={false} maxPolarAngle={Math.PI / 1.5} minPolarAngle={Math.PI / 3} />
       </Canvas>
+
+      {/* --- HUD: ECHO INPUT --- */}
+      <div className="absolute bottom-10 left-1/2 -translate-x-1/2 z-20 w-[300px]">
+        <form onSubmit={sendEcho} className="relative">
+          <input 
+            type="text"
+            placeholder="Whisper to the void..."
+            value={echoInput}
+            onChange={(e) => setEchoInput(e.target.value)}
+            className="w-full bg-white/5 border border-white/10 p-4 rounded-full text-[11px] text-white focus:border-indigo-500/50 outline-none text-center backdrop-blur-sm"
+          />
+          <button type="submit" className="hidden" />
+        </form>
+      </div>
 
       {/* --- CUBE INTERFACE (THE MIND) --- */}
       <AnimatePresence>
