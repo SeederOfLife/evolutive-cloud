@@ -93,9 +93,11 @@ interface ProjectConfig {
 
 function EvolutiveSeed({ onClick, isOpen }: { onClick: () => void, isOpen: boolean }) {
   const meshRef = useRef<THREE.Mesh>(null!);
+  const timeRef = useRef(0);
 
-  useFrame((state) => {
-    const time = state.clock?.elapsedTime || 0;
+  useFrame((state, delta) => {
+    timeRef.current += delta;
+    const time = timeRef.current;
     meshRef.current.rotation.y = time * 0.15;
     const pulse = 1 + Math.sin(time * (isOpen ? 2 : 0.5)) * (isOpen ? 0.1 : 0.05);
     meshRef.current.scale.set(pulse, pulse, pulse);
@@ -122,6 +124,7 @@ function EvolutiveSeed({ onClick, isOpen }: { onClick: () => void, isOpen: boole
 
 function ModuleNode({ suggestion, onRun }: { suggestion: Suggestion, onRun: (code: string) => void }) {
   const meshRef = useRef<THREE.Mesh>(null!);
+  const timeRef = useRef(0);
   const [hovered, setHovered] = useState(false);
   
   // Create a unique orbit for each node based on its ID
@@ -136,8 +139,9 @@ function ModuleNode({ suggestion, onRun }: { suggestion: Suggestion, onRun: (cod
     };
   }, []);
 
-  useFrame((state) => {
-    const time = state.clock?.elapsedTime || 0;
+  useFrame((state, delta) => {
+    timeRef.current += delta;
+    const time = timeRef.current;
     const t = time * speed + offset;
     meshRef.current.position.x = Math.cos(t) * radius;
     meshRef.current.position.z = Math.sin(t) * radius;
@@ -171,6 +175,7 @@ function ModuleNode({ suggestion, onRun }: { suggestion: Suggestion, onRun: (cod
 }
 
 function Nebula({ count = 3000 }) {
+  const timeRef = useRef(0);
   const { points, colors } = useMemo(() => {
     const p = new Float32Array(count * 3);
     const c = new Float32Array(count * 3);
@@ -196,8 +201,9 @@ function Nebula({ count = 3000 }) {
   }, [count]);
 
   const matRef = useRef<THREE.PointsMaterial>(null!);
-  useFrame((state) => {
-    const time = state.clock?.elapsedTime || 0;
+  useFrame((state, delta) => {
+    timeRef.current += delta;
+    const time = timeRef.current;
     matRef.current.size = 0.1 + Math.sin(time * 0.5) * 0.05;
   });
 
@@ -309,7 +315,7 @@ export default function App() {
   const [presenceData, setPresenceData] = useState<Record<string, any>>({});
   const [echoes, setEchoes] = useState<VoidEcho[]>([]);
   const [echoInput, setEchoInput] = useState("");
-  const echoTimeoutRef = useRef<any>(null);
+  const channelRef = useRef<any>(null);
   const isSyncing = useRef(false);
 
   // Identity State
@@ -432,50 +438,56 @@ export default function App() {
       syncProject();
 
       // Real-time listener for suggestions and presence and echoes
-      const channel = supabase.channel('void-sync');
+      if (!channelRef.current) {
+        channelRef.current = supabase.channel('void-sync');
 
-      channel
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table: 'suggestions' },
-          (payload) => {
-            if (payload.eventType === 'INSERT') {
-              if (payload.new.status === 'system_config') {
-                const config = JSON.parse(payload.new.content) as ProjectConfig;
-                setIsFinalized(config.is_finalized);
-                setCreatorId(config.creator_id);
-              } else {
-                setSuggestions(current => [...current, payload.new as Suggestion].sort((a,b) => b.votes - a.votes));
-              }
-            } else if (payload.eventType === 'UPDATE') {
-              if (payload.new.status === 'system_config') {
-                const config = JSON.parse(payload.new.content) as ProjectConfig;
-                setIsFinalized(config.is_finalized);
-              } else {
-                setSuggestions(current => current.map(s => s.id === payload.new.id ? { ...s, ...payload.new } : s).sort((a,b) => b.votes - a.votes));
+        channelRef.current
+          .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'suggestions' },
+            (payload: any) => {
+              if (payload.eventType === 'INSERT') {
+                if (payload.new.status === 'system_config') {
+                  try {
+                    const config = JSON.parse(payload.new.content) as ProjectConfig;
+                    setIsFinalized(config.is_finalized);
+                    setCreatorId(config.creator_id);
+                  } catch(e) {}
+                } else {
+                  setSuggestions(current => [...current, payload.new as Suggestion].sort((a,b) => (b.votes || 0) - (a.votes || 0)));
+                }
+              } else if (payload.eventType === 'UPDATE') {
+                if (payload.new.status === 'system_config') {
+                  try {
+                    const config = JSON.parse(payload.new.content) as ProjectConfig;
+                    setIsFinalized(config.is_finalized);
+                  } catch(e) {}
+                } else {
+                  setSuggestions(current => current.map(s => s.id === payload.new.id ? { ...s, ...payload.new } : s).sort((a,b) => (b.votes || 0) - (a.votes || 0)));
+                }
               }
             }
-          }
-        )
-        .on('presence', { event: 'sync' }, () => {
-          const state = channel.presenceState();
-          setPresenceData(state);
-          setActiveUsersCount(Object.keys(state).length);
-        })
-        .on('broadcast', { event: 'echo' }, ({ payload }) => {
-          setEchoes(prev => [...prev, payload].slice(-10));
-        })
-        .on('broadcast', { event: 'advice' }, ({ payload }) => {
-          setAdvice(prev => [...prev, payload]);
-        })
-        .subscribe(async (status) => {
-          if (status === 'SUBSCRIBED') {
-            await channel.track({ 
-              online_at: new Date().toISOString(),
-              userId: session?.user.id || 'anonymous'
-            });
-          }
-        });
+          )
+          .on('presence', { event: 'sync' }, () => {
+            const state = channelRef.current.presenceState();
+            setPresenceData(state);
+            setActiveUsersCount(Object.keys(state).length);
+          })
+          .on('broadcast', { event: 'echo' }, ({ payload }: any) => {
+            setEchoes(prev => [...prev, payload].slice(-10));
+          })
+          .on('broadcast', { event: 'advice' }, ({ payload }: any) => {
+            setAdvice(prev => [...prev, payload]);
+          })
+          .subscribe(async (status: string) => {
+            if (status === 'SUBSCRIBED') {
+              await channelRef.current.track({ 
+                online_at: new Date().toISOString(),
+                userId: session?.user.id || 'anonymous'
+              });
+            }
+          });
+      }
 
       // Clear old echoes
       const interval = setInterval(() => {
@@ -483,18 +495,23 @@ export default function App() {
       }, 1000);
 
       const handleMouseMove = (e: MouseEvent) => {
-        channel.track({
-          online_at: new Date().toISOString(),
-          userId: session?.user.id || 'anonymous',
-          x: e.clientX,
-          y: e.clientY
-        });
+        if (channelRef.current) {
+          channelRef.current.track({
+            online_at: new Date().toISOString(),
+            userId: session?.user.id || 'anonymous',
+            x: e.clientX,
+            y: e.clientY
+          });
+        }
       };
 
       window.addEventListener('mousemove', handleMouseMove);
 
       return () => {
-        supabase.removeChannel(channel);
+        if (channelRef.current) {
+          supabase.removeChannel(channelRef.current);
+          channelRef.current = null;
+        }
         clearInterval(interval);
         window.removeEventListener('mousemove', handleMouseMove);
       };
@@ -537,12 +554,12 @@ export default function App() {
       `;
 
       const ai = getAI();
-      const result = await ai.models.generateContent({
-        model: "gemini-3.1-pro-preview",
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
         contents: prompt
       });
 
-      const generatedCode = result.text.replace(/```jsx|```tsx|```javascript|```/g, '').trim();
+      const generatedCode = response.text.replace(/```jsx|```tsx|```javascript|```/g, '').trim();
 
       if (supabase) {
         // Create a new version of the app
@@ -582,11 +599,13 @@ export default function App() {
       // For this demo, we'll store it as a broadcast echo if table isn't ready,
       // or just simulate local state update for others.
       // But let's try to use a broadcast event specifically for advice.
-      const channel = supabase?.channel('void-sync');
-      channel?.send({
-        type: 'broadcast',
-        event: 'advice',
-        payload: {
+    const channel = channelRef.current;
+    if (!channel) return;
+    
+    channel.send({
+      type: 'broadcast',
+      event: 'advice',
+      payload: {
           suggestion_id: suggestionId,
           user_email: session.user.email,
           content: content,
@@ -712,6 +731,9 @@ export default function App() {
       }
     } catch (err: any) {
       console.error("Error planting intent:", err);
+      // Improve visibility of Supabase errors
+      const errorMsg = err.message || (typeof err === 'object' ? JSON.stringify(err) : String(err));
+      alert(`Supabase Error: ${errorMsg}`);
     }
   };
 
@@ -787,9 +809,8 @@ export default function App() {
 
   const sendEcho = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!echoInput.trim() || !supabase) return;
+    if (!echoInput.trim() || !supabase || !channelRef.current) return;
     
-    const channel = supabase.channel('void-sync');
     const newEcho: VoidEcho = {
       id: Math.random().toString(36),
       userId: session?.user.id || 'anonymous',
@@ -799,7 +820,7 @@ export default function App() {
       createdAt: Date.now()
     };
 
-    channel.send({
+    channelRef.current.send({
       type: 'broadcast',
       event: 'echo',
       payload: newEcho
@@ -831,12 +852,12 @@ export default function App() {
       `;
 
       const ai = getAI();
-      const result = await ai.models.generateContent({
-        model: "gemini-3.1-pro-preview",
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
         contents: prompt
       });
 
-      let generatedCode = result.text.replace(/```jsx|```tsx|```javascript|```/g, '').trim();
+      const generatedCode = response.text.replace(/```jsx|```tsx|```javascript|```/g, '').trim();
 
       if (supabase) {
         const updateData: any = { status: 'manifested' };
@@ -1081,7 +1102,7 @@ export default function App() {
                                     <button onClick={() => setActiveModule(processedS.manifested_code!)} className="w-14 h-14 rounded-full bg-white text-black flex items-center justify-center hover:scale-110 transition-all active:scale-95 shadow-[0_0_20px_white]" title="Launch">
                                       <Play className="w-6 h-6 fill-current" />
                                     </button>
-                                    {(isFinalized || session?.user.id === creatorId) && (
+                                    {(isFinalized || isCreator) && (
                                       <>
                                         <button 
                                           onClick={() => {
@@ -1094,7 +1115,7 @@ export default function App() {
                                         >
                                           {isRefining === s.id ? <Loader2 className="w-6 h-6 animate-spin" /> : <RefreshCw className="w-6 h-6" />}
                                         </button>
-                                        {session?.user.id === creatorId && (
+                                        {isCreator && (
                                           <button 
                                             onClick={() => {
                                               if (window.confirm("Delete this generated app?")) {
