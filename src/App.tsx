@@ -321,7 +321,7 @@ export default function App() {
   // Derive ghosts from presence
   const ghosts = useMemo(() => {
     return Object.entries(presenceData)
-      .filter(([id]) => id !== session?.user.id)
+      .filter(([id]) => id !== session?.user?.id)
       .flatMap(([_, instances]) => Object.values(instances))
       .filter((p: any) => p.x !== undefined && p.y !== undefined);
   }, [presenceData, session]);
@@ -338,27 +338,40 @@ export default function App() {
     fetchSuggestions();
     
     const syncProject = async () => {
-      if (!supabase) return;
-      
-      const { data } = await supabase.from('suggestions').select('*').eq('status', 'system_config').maybeSingle();
-      
-      if (data) {
-        const config = JSON.parse(data.content || "{}") as ProjectConfig;
-        setIsFinalized(config.is_finalized);
-        setCreatorId(config.creator_id);
-      } else if (session?.user?.id) {
-        const config: ProjectConfig = {
-          creator_id: session.user.id,
-          is_finalized: false,
-          epoch_name: "The Genesis"
-        };
-        await supabase.from('suggestions').insert([{
-          content: JSON.stringify(config),
-          status: 'system_config',
-          votes: 0,
-          energy: 0
-        }]);
-        setCreatorId(session.user.id);
+      try {
+        if (!supabase) {
+          console.warn("Supabase client not initialized.");
+          return;
+        }
+        
+        const { data, error } = await supabase.from('suggestions').select('*').eq('status', 'system_config').maybeSingle();
+        
+        if (error) {
+          console.error("SyncProject Error:", error);
+          return;
+        }
+
+        if (data) {
+          const config = JSON.parse(data.content || "{}") as ProjectConfig;
+          setIsFinalized(config.is_finalized);
+          setCreatorId(config.creator_id);
+          console.log("System Config Loaded:", config);
+        } else if (session?.user?.id) {
+          const config: ProjectConfig = {
+            creator_id: session.user.id,
+            is_finalized: false,
+            epoch_name: "The Genesis"
+          };
+          await supabase.from('suggestions').insert([{
+            content: JSON.stringify(config),
+            status: 'system_config',
+            votes: 0,
+            energy: 0
+          }]);
+          setCreatorId(session.user.id);
+        }
+      } catch (err) {
+        console.error("SyncProject Exception:", err);
       }
     };
     syncProject();
@@ -595,16 +608,25 @@ export default function App() {
   const handleEmailAuth = async () => {
     if (!supabase) return;
     setAuthError(null);
+    setIsLoading(true);
     try {
       const { error } = isSignUp 
         ? await supabase.auth.signUp({ email: authEmail, password: authPassword })
         : await supabase.auth.signInWithPassword({ email: authEmail, password: authPassword });
       
-      if (error) throw error;
-      setAuthEmail("");
-      setAuthPassword("");
+      if (error) {
+        console.error("Auth Error:", error);
+        setAuthError(error.message);
+      } else {
+        console.log("Auth Success!");
+        setAuthEmail("");
+        setAuthPassword("");
+      }
     } catch (err: any) {
+      console.error("Auth Exception:", err);
       setAuthError(err.message);
+    } finally {
+      setIsLoading(false);
     }
   };
 
