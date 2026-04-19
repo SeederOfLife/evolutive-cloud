@@ -8,6 +8,7 @@ import { Canvas, useFrame } from "@react-three/fiber";
 import { OrbitControls, Float, MeshDistortMaterial } from "@react-three/drei";
 import * as THREE from "three";
 import { motion, AnimatePresence } from "motion/react";
+import * as Tone from "tone";
 import { 
   ChevronUp, 
   MessageSquare, 
@@ -21,7 +22,13 @@ import {
   Code,
   Sparkles,
   Loader2,
-  Users
+  Users,
+  Timer,
+  Volume2,
+  VolumeX,
+  Lock,
+  Unlock,
+  History as HistoryIcon
 } from "lucide-react";
 import { supabase } from "./lib/supabase";
 import { GoogleGenAI } from "@google/genai";
@@ -55,6 +62,67 @@ interface VoidEcho {
   y: number;
   createdAt: number;
 }
+
+interface EvolutionSnapshot {
+  id: string;
+  manifested_at: string;
+  count: number;
+}
+
+interface ProjectConfig {
+  creator_id: string;
+  is_finalized: boolean;
+  epoch_name: string;
+}
+
+// --- SOUND ENGINE ---
+class HarmonicVoid {
+  private drone: Tone.Oscillator | null = null;
+  private lfo: Tone.LFO | null = null;
+  private filter: Tone.Filter | null = null;
+  private started = false;
+
+  async start() {
+    if (this.started) return;
+    await Tone.start();
+    
+    this.filter = new Tone.Filter(200, "lowpass").toDestination();
+    this.drone = new Tone.Oscillator("A1", "sawtooth").connect(this.filter);
+    this.lfo = new Tone.LFO(0.1, 100, 500).connect(this.filter.frequency);
+    
+    this.drone.volume.value = -20;
+    this.drone.start();
+    this.lfo.start();
+    this.started = true;
+  }
+
+  updatePitch(userCount: number) {
+    if (!this.drone) return;
+    // Pitch rises with more users
+    const freq = 55 + (userCount * 5); // A1 is 55Hz
+    this.drone.frequency.rampTo(freq, 2);
+  }
+
+  playBlip() {
+    const synth = new Tone.MonoSynth({
+      oscillator: { type: "square" },
+      envelope: { attack: 0.001, decay: 0.1, sustain: 0, release: 0.1 }
+    }).toDestination();
+    synth.triggerAttackRelease("C5", "16n");
+  }
+
+  playManifest() {
+    const synth = new Tone.PolySynth().toDestination();
+    synth.triggerAttackRelease(["C4", "E4", "G4", "B4"], "4n");
+  }
+
+  stop() {
+    this.drone?.stop();
+    this.lfo?.stop();
+  }
+}
+
+const sound = new HarmonicVoid();
 
 // --- 3D COMPONENTS ---
 
@@ -280,6 +348,20 @@ export default function App() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [isSignUp, setIsSignUp] = useState(false);
 
+  // New Evolutionary States
+  const [isFinalized, setIsFinalized] = useState(false);
+  const [creatorId, setCreatorId] = useState<string | null>(null);
+  const [historyIndex, setHistoryIndex] = useState(100); 
+  const [isMuted, setIsMuted] = useState(true);
+
+  // Derive ghosts from presence
+  const ghosts = useMemo(() => {
+    return Object.entries(presenceData)
+      .filter(([id]) => id !== session?.user.id)
+      .flatMap(([_, instances]) => Object.values(instances))
+      .filter((p: any) => p.x !== undefined && p.y !== undefined);
+  }, [presenceData, session]);
+
   // Gemini AI Provider
   const getAI = (customKey?: string) => {
     const key = customKey || userApiKey || process.env.GEMINI_API_KEY;
@@ -287,10 +369,36 @@ export default function App() {
     return new GoogleGenAI({ apiKey: key });
   };
 
-  // Initial fetch and Auth listener
+  // Initial fetch and Project setup
   useEffect(() => {
     fetchSuggestions();
     
+    const syncProject = async () => {
+      if (!supabase) return;
+      
+      const { data } = await supabase.from('suggestions').select('*').eq('status', 'system_config').maybeSingle();
+      
+      if (data) {
+        const config = JSON.parse(data.content || "{}") as ProjectConfig;
+        setIsFinalized(config.is_finalized);
+        setCreatorId(config.creator_id);
+      } else if (session?.user.id) {
+        const config: ProjectConfig = {
+          creator_id: session.user.id,
+          is_finalized: false,
+          epoch_name: "The Genesis"
+        };
+        await supabase.from('suggestions').insert([{
+          content: JSON.stringify(config),
+          status: 'system_config',
+          votes: 0,
+          energy: 0
+        }]);
+        setCreatorId(session.user.id);
+      }
+    };
+    syncProject();
+
     if (supabase) {
       // Auth
       supabase.auth.getSession().then(({ data: { session } }) => {
@@ -314,9 +422,20 @@ export default function App() {
           { event: '*', schema: 'public', table: 'suggestions' },
           (payload) => {
             if (payload.eventType === 'INSERT') {
-              setSuggestions(current => [...current, payload.new as Suggestion].sort((a,b) => b.votes - a.votes));
+              if (payload.new.status === 'system_config') {
+                const config = JSON.parse(payload.new.content) as ProjectConfig;
+                setIsFinalized(config.is_finalized);
+                setCreatorId(config.creator_id);
+              } else {
+                setSuggestions(current => [...current, payload.new as Suggestion].sort((a,b) => b.votes - a.votes));
+              }
             } else if (payload.eventType === 'UPDATE') {
-              setSuggestions(current => current.map(s => s.id === payload.new.id ? { ...s, ...payload.new } : s).sort((a,b) => b.votes - a.votes));
+              if (payload.new.status === 'system_config') {
+                const config = JSON.parse(payload.new.content) as ProjectConfig;
+                setIsFinalized(config.is_finalized);
+              } else {
+                setSuggestions(current => current.map(s => s.id === payload.new.id ? { ...s, ...payload.new } : s).sort((a,b) => b.votes - a.votes));
+              }
             }
           }
         )
@@ -362,10 +481,63 @@ export default function App() {
     }
   }, [session]);
 
+  const handleToggleFinalize = async () => {
+    if (!supabase || session?.user.id !== creatorId) return;
+    const newFinalized = !isFinalized;
+    
+    const { data: configRecord } = await supabase.from('suggestions').select('*').eq('status', 'system_config').single();
+    if (configRecord) {
+      const config = JSON.parse(configRecord.content) as ProjectConfig;
+      config.is_finalized = newFinalized;
+      await supabase.from('suggestions').update({ content: JSON.stringify(config) }).eq('id', configRecord.id);
+    }
+  };
+
+  const handleMuteToggle = () => {
+    if (isMuted) {
+      sound.start();
+    } else {
+      sound.stop();
+    }
+    setIsMuted(!isMuted);
+  };
+
+  // Filter manifestations by history slider
+  const visibleManifestations = useMemo(() => {
+    const manifested = suggestions.filter(s => s.status === 'manifested').sort((a, b) => 
+      new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime()
+    );
+    const limit = Math.ceil((historyIndex / 100) * manifested.length);
+    return manifested.slice(0, limit);
+  }, [suggestions, historyIndex]);
+
+  const displaySuggestions = useMemo(() => {
+    // Current valid suggestions (system config filtered)
+    const valid = suggestions.filter(s => s.status !== 'system_config');
+    
+    // Manifested ones filtered by time
+    const manifestedIds = visibleManifestations.map(m => m.id);
+    
+    return valid.filter(s => {
+      if (s.status === 'manifested') return manifestedIds.includes(s.id);
+      return true; // Pending ones always shown (they are the "future")
+    });
+  }, [suggestions, visibleManifestations]);
+
+  const canSuggest = !isFinalized ? session?.user.id === creatorId : true;
+  const canInteract = isFinalized || session?.user.id === creatorId;
+  
+  // Sound pitch update
+  useEffect(() => {
+    if (!isMuted) {
+      sound.updatePitch(activeUsersCount);
+    }
+  }, [activeUsersCount, isMuted]);
+
   const fetchSuggestions = async () => {
     if (!supabase) {
       setSuggestions([
-        { id: 1, content: "Add a floating neon digital clock in the void", votes: 45, status: "pending", manifested_code: `
+        { id: 1, content: "Add a floating neon digital clock in the void", votes: 45, energy: 100, status: "pending", manifested_code: `
           function App() {
             const [time, setTime] = React.useState(new Date());
             React.useEffect(() => {
@@ -384,8 +556,8 @@ export default function App() {
             );
           }
         ` },
-        { id: 2, content: "Create a simple atmospheric ambient sound controller", votes: 8, status: "pending" },
-        { id: 3, content: "Grid map showing the total energy of all suggestions", votes: 24, status: "pending" },
+        { id: 2, content: "Create a simple atmospheric ambient sound controller", votes: 8, energy: 20, status: "pending" },
+        { id: 3, content: "Grid map showing the total energy of all suggestions", votes: 24, energy: 60, status: "pending" },
       ]);
       return;
     }
@@ -428,7 +600,7 @@ export default function App() {
     setInput("");
 
     if (!supabase) {
-      setSuggestions([{ id: Date.now(), content, votes: 0, status: "pending" }, ...suggestions]);
+      setSuggestions([{ id: Date.now(), content, votes: 0, energy: 0, status: "pending" }, ...suggestions]);
       return;
     }
 
@@ -439,7 +611,10 @@ export default function App() {
         .select();
 
       if (error) throw error;
-      if (data) setSuggestions([data[0], ...suggestions]);
+      if (data) {
+        if (!isMuted) sound.playBlip();
+        setSuggestions([data[0], ...suggestions]);
+      }
     } catch (err: any) {
       console.error("Error planting intent:", err);
     }
@@ -655,10 +830,57 @@ export default function App() {
             transition={{ duration: 4, repeat: Infinity }}
             className="text-indigo-300/40 text-[10px] font-bold tracking-[6px] uppercase"
           >
-            Touch the Origin
+            {isFinalized ? "Collective Awareness Active" : "Creator Shaping Reality"}
           </motion.p>
         </div>
       )}
+
+      <div className="absolute top-10 left-10 z-20 flex flex-col gap-4">
+        <button 
+          onClick={handleMuteToggle}
+          className="w-12 h-12 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-white hover:bg-white/10 transition-all shadow-xl backdrop-blur-md"
+        >
+          {isMuted ? <VolumeX className="w-5 h-5 text-pink-500" /> : <Volume2 className="w-5 h-5 text-green-500 animate-pulse" />}
+        </button>
+        
+        {session?.user.id === creatorId && (
+          <button 
+            onClick={handleToggleFinalize}
+            className={`w-12 h-12 rounded-full border flex items-center justify-center transition-all shadow-xl backdrop-blur-md ${
+              isFinalized ? 'bg-green-500/20 border-green-500 text-green-500' : 'bg-yellow-500/20 border-yellow-500 text-yellow-500'
+            }`}
+            title={isFinalized ? "Collective Mode: EVERYONE CAN CREATE" : "Creator Mode: ONLY YOU CAN CREATE"}
+          >
+            {isFinalized ? <Unlock className="w-5 h-5" /> : <Lock className="w-5 h-5" />}
+          </button>
+        )}
+      </div>
+
+      {/* --- CHRONOS SLIDER --- */}
+      <div className="absolute right-10 top-1/2 -translate-y-1/2 flex flex-col items-center gap-6 z-20">
+        <div className="h-64 w-1 bg-white/5 rounded-full relative flex flex-col items-center py-2">
+          <input 
+            type="range"
+            min="0"
+            max="100"
+            value={historyIndex}
+            onChange={(e) => {
+              setHistoryIndex(parseInt(e.target.value));
+              if (!isMuted) sound.playBlip();
+            }}
+            className="absolute inset-0 w-64 -rotate-90 origin-center cursor-pointer opacity-0"
+            style={{ left: '-128px', top: '128px' }}
+          />
+          <motion.div 
+            animate={{ height: `${historyIndex}%` }}
+            className="w-full bg-gradient-to-t from-indigo-500 via-pink-500 to-yellow-500 rounded-full shadow-[0_0_15px_rgba(99,102,241,0.5)]"
+          />
+        </div>
+        <div className="flex flex-col items-center gap-1">
+          <HistoryIcon className="w-5 h-5 text-white/40" />
+          <span className="text-[9px] font-black text-white/40 uppercase tracking-widest whitespace-nowrap">Chronos</span>
+        </div>
+      </div>
 
       <Canvas shadows camera={{ position: [0, 0, 8], fov: 75 }} className="cursor-grab active:cursor-grabbing">
         <ambientLight intensity={0.2} />
@@ -667,9 +889,9 @@ export default function App() {
         <EvolutiveSeed onClick={() => setIsOpen(true)} isOpen={isOpen} />
         <Nebula />
         
-        {/* Manifested App Nodes */}
-        {suggestions
-          .filter(s => s.status === 'manifested' && s.manifested_code)
+        {/* Manifested App Nodes - Filtered by History */}
+        {visibleManifestations
+          .filter(s => s.manifested_code)
           .map(s => (
             <ModuleNode 
               key={s.id} 
@@ -709,17 +931,27 @@ export default function App() {
           >
             {/* Mind Panel is a Cubic Structure (Cubic/Sharp) */}
             <div className="flex border-b border-white/10 p-6 shrink-0 bg-white/5 items-center justify-between">
-              <div className="flex gap-12">
-                {['mind', 'identity'].map((tab) => (
-                  <button 
-                    key={tab}
-                    onClick={() => setActiveTab(tab as any)}
-                    className={`text-[12px] font-black uppercase tracking-[6px] transition-all relative ${activeTab === tab ? 'text-white' : 'text-white/20'}`}
-                  >
-                    {tab === 'mind' ? 'Collective consciousness' : 'Soul Identity'}
-                    {activeTab === tab && <motion.div layoutId="tab" className="absolute -bottom-2 left-0 w-full h-[3px] bg-gradient-to-r from-indigo-500 via-pink-500 to-yellow-500" />}
-                  </button>
-                ))}
+              <div className="flex items-center gap-10">
+                <div className="flex gap-12">
+                  {['mind', 'identity'].map((tab) => (
+                    <button 
+                      key={tab}
+                      onClick={() => setActiveTab(tab as any)}
+                      className={`text-[12px] font-black uppercase tracking-[6px] transition-all relative ${activeTab === tab ? 'text-white' : 'text-white/20'}`}
+                    >
+                      {tab === 'mind' ? 'Collective consciousness' : 'Soul Identity'}
+                      {activeTab === tab && <motion.div layoutId="tab" className="absolute -bottom-2 left-0 w-full h-[3px] bg-gradient-to-r from-indigo-500 via-pink-500 to-yellow-500" />}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Status Indicator */}
+                <div className="flex items-center gap-3 px-4 py-2 bg-white/5 rounded-full border border-white/10">
+                  <div className={`w-2 h-2 rounded-full ${isFinalized ? 'bg-green-500 animate-pulse shadow-[0_0_10px_green]' : 'bg-yellow-500 shadow-[0_0_10px_yellow]'}`} />
+                  <span className="text-[10px] font-black text-white/60 tracking-widest uppercase">
+                    {isFinalized ? 'Post-Creation Sync' : 'Primordial Shaping'}
+                  </span>
+                </div>
               </div>
               <button onClick={() => setIsOpen(false)} className="hover:rotate-90 transition-transform p-2"><X className="w-6 h-6 text-white/40" /></button>
             </div>
@@ -728,7 +960,7 @@ export default function App() {
             <div className="flex-1 overflow-y-auto p-10 bg-[radial-gradient(circle_at_50%_50%,rgba(99,102,241,0.05)_0%,transparent_70%)] custom-scrollbar">
               {activeTab === 'mind' ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
-                  {suggestions.map((s, idx) => (
+                  {displaySuggestions.map((s, idx) => (
                     <motion.div 
                       key={s.id}
                       initial={{ opacity: 0, y: 20 }}
@@ -911,22 +1143,32 @@ export default function App() {
             {/* Intent Input area (Cubic Structure) */}
             <div className="p-10 border-t border-white/10 shrink-0 bg-white/10">
               {activeTab === 'mind' ? (
-                <div className="flex gap-6 max-w-4xl mx-auto">
-                  {/* Suggestion input is circular */}
-                  <input 
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleSuggest()}
-                    placeholder="WAKE A NEW INTENT..."
-                    className="flex-1 bg-white/5 border-2 border-white/10 px-8 py-6 rounded-full text-sm text-white focus:outline-none focus:border-indigo-500 placeholder:text-white/20 font-black uppercase tracking-[4px] text-center"
-                  />
-                  {/* Suggestion button is circular */}
-                  <button 
-                    onClick={handleSuggest}
-                    className="w-20 h-20 rounded-full bg-white text-black flex items-center justify-center transition-all hover:scale-110 shadow-2xl hover:bg-gradient-to-br hover:from-indigo-500 hover:to-pink-500 hover:text-white"
-                  >
-                    <Plus className="w-10 h-10 font-bold" />
-                  </button>
+                <div className="flex flex-col gap-6 max-w-4xl mx-auto">
+                  {!canSuggest && (
+                    <div className="text-center">
+                      <p className="text-[10px] font-black text-yellow-500 uppercase tracking-widest bg-yellow-500/10 py-2 border border-yellow-500/30 rounded-full">
+                        Lock engaged: Waiting for Creator to switch to Collective Mode
+                      </p>
+                    </div>
+                  )}
+                  <div className={`flex gap-6 w-full transition-opacity ${!canSuggest ? 'opacity-30 pointer-events-none' : ''}`}>
+                    {/* Suggestion input is circular */}
+                    <input 
+                      value={input}
+                      onChange={(e) => setInput(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && canSuggest && handleSuggest()}
+                      placeholder="WAKE A NEW INTENT..."
+                      className="flex-1 bg-white/5 border-2 border-white/10 px-8 py-6 rounded-full text-sm text-white focus:outline-none focus:border-indigo-500 placeholder:text-white/20 font-black uppercase tracking-[4px] text-center"
+                    />
+                    {/* Suggestion button is circular */}
+                    <button 
+                      onClick={handleSuggest}
+                      disabled={!canSuggest}
+                      className="w-20 h-20 rounded-full bg-white text-black flex items-center justify-center transition-all hover:scale-110 shadow-2xl hover:bg-gradient-to-br hover:from-indigo-500 hover:to-pink-500 hover:text-white disabled:opacity-50"
+                    >
+                      <Plus className="w-10 h-10 font-bold" />
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <div className="flex justify-center flex-col items-center gap-2">
