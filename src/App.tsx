@@ -137,7 +137,8 @@ function ModuleNode({ suggestion, onRun }: { suggestion: Suggestion, onRun: (cod
   }, []);
 
   useFrame((state) => {
-    const t = state.clock.getElapsedTime() * speed + offset;
+    const time = state.clock?.elapsedTime || state.performance?.elapsed * 0.001 || 0;
+    const t = time * speed + offset;
     meshRef.current.position.x = Math.cos(t) * radius;
     meshRef.current.position.z = Math.sin(t) * radius;
     meshRef.current.position.y = yOffset + Math.sin(t * 2) * 0.5;
@@ -383,8 +384,16 @@ export default function App() {
           try {
             const config = JSON.parse(data.content || "{}") as ProjectConfig;
             setIsFinalized(!!config.is_finalized);
+            
+            // Re-identify creator if missing
+            if (!config.creator_id && session?.user?.id) {
+              console.log("Identifying new creator...");
+              config.creator_id = session.user.id;
+              await supabase.from('suggestions').update({ content: JSON.stringify(config) }).eq('id', data.id);
+            }
+            
             setCreatorId(config.creator_id || "");
-            console.log("System Config Loaded:", config);
+            console.log("System Config Loaded. Creator ID:", config.creator_id);
           } catch (e) {
             console.error("Config Parse Error:", e);
           }
@@ -583,8 +592,16 @@ export default function App() {
     }
   };
 
-  const canSuggest = !isFinalized ? session?.user.id === creatorId : true;
-  const canInteract = isFinalized || session?.user.id === creatorId;
+  const isCreator = !!session?.user?.id && (session.user.id === creatorId || !creatorId);
+  const canSuggest = isFinalized || isCreator;
+  const canInteract = isFinalized || isCreator;
+  
+  // Debug logging for permissions
+  useEffect(() => {
+    if (session?.user?.id) {
+      console.log("Current Identity:", session.user.id, "Creator Identity:", creatorId, "isCreator:", isCreator);
+    }
+  }, [session, creatorId, isCreator]);
   
   const fetchSuggestions = async () => {
     if (!supabase) {
@@ -625,7 +642,10 @@ export default function App() {
       if (data) {
         setSuggestions(data);
         if (data.length > 0) {
-          console.log("Database Schema Check - Available Columns:", Object.keys(data[0]));
+          const columns = Object.keys(data[0]);
+          console.log("Database Schema Check - Available Columns:", columns);
+          if (!columns.includes('pledged_by')) console.warn("CRITICAL: 'pledged_by' column missing!");
+          if (!columns.includes('manifested_code')) console.warn("CRITICAL: 'manifested_code' column missing!");
         }
       }
     } catch (err: any) {
