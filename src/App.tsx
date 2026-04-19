@@ -346,7 +346,7 @@ export default function App() {
         const config = JSON.parse(data.content || "{}") as ProjectConfig;
         setIsFinalized(config.is_finalized);
         setCreatorId(config.creator_id);
-      } else if (session?.user.id) {
+      } else if (session?.user?.id) {
         const config: ProjectConfig = {
           creator_id: session.user.id,
           is_finalized: false,
@@ -1046,6 +1046,13 @@ export default function App() {
 
                       {/* Email Auth Form - Circular Buttons/Inputs */}
                       <div className="space-y-4 px-2">
+                        {!supabase && (
+                          <div className="p-4 bg-pink-500/10 border border-pink-500/30 rounded-2xl mb-4">
+                            <p className="text-[10px] text-pink-400 uppercase font-black tracking-widest leading-relaxed">
+                              Cloud Connection Offline.<br/>Please add Supabase credentials in settings.
+                            </p>
+                          </div>
+                        )}
                         <input 
                           type="email"
                           placeholder="Soul Identifier (Email)"
@@ -1083,8 +1090,15 @@ export default function App() {
                       </div>
 
                       <button 
-                        onClick={() => supabase?.auth.signInWithOAuth({ provider: 'google' })}
-                        className="w-full px-6 py-5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-[11px] font-black uppercase tracking-[4px] rounded-full hover:rotate-1 transition-all flex items-center justify-center gap-3"
+                        onClick={() => {
+                          if (!supabase) return;
+                          supabase.auth.signInWithOAuth({ 
+                            provider: 'google',
+                            options: { redirectTo: window.location.origin }
+                          });
+                        }}
+                        disabled={!supabase}
+                        className="w-full px-6 py-5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-[11px] font-black uppercase tracking-[4px] rounded-full hover:rotate-1 transition-all flex items-center justify-center gap-3 disabled:opacity-30"
                       >
                         Google Sync
                       </button>
