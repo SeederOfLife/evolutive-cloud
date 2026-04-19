@@ -4,8 +4,8 @@ const getEnv = (key: string) => {
   return (import.meta as any).env?.[key] || (process.env as any)?.[key] || '';
 };
 
-const supabaseUrl = getEnv('VITE_SUPABASE_URL') || getEnv('SUPABASE_URL') || getEnv('NEXT_PUBLIC_SUPABASE_URL');
-const supabaseAnonKey = getEnv('VITE_SUPABASE_ANON_KEY') || getEnv('SUPABASE_ANON_KEY') || getEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY');
+const supabaseUrl = (getEnv('VITE_SUPABASE_URL') || getEnv('SUPABASE_URL') || getEnv('NEXT_PUBLIC_SUPABASE_URL')).trim();
+const supabaseAnonKey = (getEnv('VITE_SUPABASE_ANON_KEY') || getEnv('SUPABASE_ANON_KEY') || getEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY')).trim();
 
 const logStatus = (key: string, val: string) => {
   console.log(`Checking ${key}: ${val ? 'Present (length ' + val.length + ')' : 'Missing'}`);
