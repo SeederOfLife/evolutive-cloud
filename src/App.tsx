@@ -8,7 +8,7 @@ import { Canvas, useFrame } from "@react-three/fiber";
 import { OrbitControls, Float, MeshDistortMaterial } from "@react-three/drei";
 import * as THREE from "three";
 import { motion, AnimatePresence } from "motion/react";
-import * as Tone from "tone";
+// Removal of Tone.js for simplified access as requested
 import { 
   ChevronUp, 
   MessageSquare, 
@@ -23,12 +23,12 @@ import {
   Sparkles,
   Loader2,
   Users,
-  Timer,
-  Volume2,
-  VolumeX,
   Lock,
   Unlock,
-  History as HistoryIcon
+  History,
+  MessageCircle,
+  RefreshCw,
+  Info
 } from "lucide-react";
 import { supabase } from "./lib/supabase";
 import { GoogleGenAI } from "@google/genai";
@@ -45,6 +45,17 @@ interface Suggestion {
   manifested_code?: string;
   created_at?: string;
   pledged_by?: string[]; // user ids
+  parent_id?: number | null; // For refinement iterations
+  version?: number;
+}
+
+interface Advice {
+  id: number;
+  suggestion_id: number;
+  user_id: string;
+  user_email: string;
+  content: string;
+  created_at: string;
 }
 
 interface UserProfile {
@@ -75,54 +86,7 @@ interface ProjectConfig {
   epoch_name: string;
 }
 
-// --- SOUND ENGINE ---
-class HarmonicVoid {
-  private drone: Tone.Oscillator | null = null;
-  private lfo: Tone.LFO | null = null;
-  private filter: Tone.Filter | null = null;
-  private started = false;
-
-  async start() {
-    if (this.started) return;
-    await Tone.start();
-    
-    this.filter = new Tone.Filter(200, "lowpass").toDestination();
-    this.drone = new Tone.Oscillator("A1", "sawtooth").connect(this.filter);
-    this.lfo = new Tone.LFO(0.1, 100, 500).connect(this.filter.frequency);
-    
-    this.drone.volume.value = -20;
-    this.drone.start();
-    this.lfo.start();
-    this.started = true;
-  }
-
-  updatePitch(userCount: number) {
-    if (!this.drone) return;
-    // Pitch rises with more users
-    const freq = 55 + (userCount * 5); // A1 is 55Hz
-    this.drone.frequency.rampTo(freq, 2);
-  }
-
-  playBlip() {
-    const synth = new Tone.MonoSynth({
-      oscillator: { type: "square" },
-      envelope: { attack: 0.001, decay: 0.1, sustain: 0, release: 0.1 }
-    }).toDestination();
-    synth.triggerAttackRelease("C5", "16n");
-  }
-
-  playManifest() {
-    const synth = new Tone.PolySynth().toDestination();
-    synth.triggerAttackRelease(["C4", "E4", "G4", "B4"], "4n");
-  }
-
-  stop() {
-    this.drone?.stop();
-    this.lfo?.stop();
-  }
-}
-
-const sound = new HarmonicVoid();
+// --- SOUND ENGINE REMOVED FOR SIMPLICITY ---
 
 // --- 3D COMPONENTS ---
 
@@ -351,8 +315,8 @@ export default function App() {
   // New Evolutionary States
   const [isFinalized, setIsFinalized] = useState(false);
   const [creatorId, setCreatorId] = useState<string | null>(null);
-  const [historyIndex, setHistoryIndex] = useState(100); 
-  const [isMuted, setIsMuted] = useState(true);
+  const [advice, setAdvice] = useState<Advice[]>([]);
+  const [isRefining, setIsRefining] = useState<number | null>(null);
 
   // Derive ghosts from presence
   const ghosts = useMemo(() => {
@@ -447,6 +411,9 @@ export default function App() {
         .on('broadcast', { event: 'echo' }, ({ payload }) => {
           setEchoes(prev => [...prev, payload].slice(-10));
         })
+        .on('broadcast', { event: 'advice' }, ({ payload }) => {
+          setAdvice(prev => [...prev, payload]);
+        })
         .subscribe(async (status) => {
           if (status === 'SUBSCRIBED') {
             await channel.track({ 
@@ -493,47 +460,94 @@ export default function App() {
     }
   };
 
-  const handleMuteToggle = () => {
-    if (isMuted) {
-      sound.start();
-    } else {
-      sound.stop();
+  const displaySuggestions = useMemo(() => {
+    return suggestions.filter(s => s.status !== 'system_config');
+  }, [suggestions]);
+
+  const handleRefine = async (suggestion: Suggestion, refinementPrompt: string) => {
+    if (!refinementPrompt.trim() || isRefining) return;
+    setIsRefining(suggestion.id);
+    
+    try {
+      const prompt = `
+        System: You are the Evolutive Cloud Refinement Engine.
+        Original Intent: "${suggestion.content}"
+        Refinement Request: "${refinementPrompt}"
+        Original Code: ${suggestion.manifested_code}
+        
+        Task: Modify the original code based on the refinement request.
+        Constraints:
+        - Output ONLY the modified component code.
+        - The component must be named "App".
+        - Use Tailwind CSS.
+        - Return ONLY the code block, no markdown formatting.
+      `;
+
+      const ai = getAI();
+      const result = await ai.models.generateContent({
+        model: "gemini-3.1-pro-preview",
+        contents: prompt
+      });
+
+      const generatedCode = result.text.replace(/```jsx|```tsx|```javascript|```/g, '').trim();
+
+      if (supabase) {
+        // Create a new version of the manifestation
+        await supabase
+          .from('suggestions')
+          .insert([{ 
+            content: `Evolution of: ${suggestion.content} (${refinementPrompt})`,
+            status: 'manifested',
+            votes: 0,
+            energy: 100,
+            manifested_code: generatedCode,
+            parent_id: suggestion.id,
+            version: (suggestion.version || 1) + 1
+          }]);
+      } else {
+        setSuggestions([{ 
+          id: Date.now(), 
+          content: `Refinement of ${suggestion.id}`, 
+          votes: 0, 
+          energy: 100, 
+          status: 'manifested', 
+          manifested_code: generatedCode,
+          parent_id: suggestion.id 
+        }, ...suggestions]);
+      }
+    } catch (err) {
+      console.error("Refinement failed:", err);
+    } finally {
+      setIsRefining(null);
     }
-    setIsMuted(!isMuted);
   };
 
-  // Filter manifestations by history slider
-  const visibleManifestations = useMemo(() => {
-    const manifested = suggestions.filter(s => s.status === 'manifested').sort((a, b) => 
-      new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime()
-    );
-    const limit = Math.ceil((historyIndex / 100) * manifested.length);
-    return manifested.slice(0, limit);
-  }, [suggestions, historyIndex]);
-
-  const displaySuggestions = useMemo(() => {
-    // Current valid suggestions (system config filtered)
-    const valid = suggestions.filter(s => s.status !== 'system_config');
-    
-    // Manifested ones filtered by time
-    const manifestedIds = visibleManifestations.map(m => m.id);
-    
-    return valid.filter(s => {
-      if (s.status === 'manifested') return manifestedIds.includes(s.id);
-      return true; // Pending ones always shown (they are the "future")
-    });
-  }, [suggestions, visibleManifestations]);
+  const postAdvice = async (suggestionId: number, content: string) => {
+    if (!content.trim() || !session) return;
+    try {
+      // In a real app we might have an 'advice' table. 
+      // For this demo, we'll store it as a broadcast echo if table isn't ready,
+      // or just simulate local state update for others.
+      // But let's try to use a broadcast event specifically for advice.
+      const channel = supabase?.channel('void-sync');
+      channel?.send({
+        type: 'broadcast',
+        event: 'advice',
+        payload: {
+          suggestion_id: suggestionId,
+          user_email: session.user.email,
+          content: content,
+          created_at: new Date().toISOString()
+        }
+      });
+    } catch (err) {
+      console.error("Advice failed:", err);
+    }
+  };
 
   const canSuggest = !isFinalized ? session?.user.id === creatorId : true;
   const canInteract = isFinalized || session?.user.id === creatorId;
   
-  // Sound pitch update
-  useEffect(() => {
-    if (!isMuted) {
-      sound.updatePitch(activeUsersCount);
-    }
-  }, [activeUsersCount, isMuted]);
-
   const fetchSuggestions = async () => {
     if (!supabase) {
       setSuggestions([
@@ -612,7 +626,6 @@ export default function App() {
 
       if (error) throw error;
       if (data) {
-        if (!isMuted) sound.playBlip();
         setSuggestions([data[0], ...suggestions]);
       }
     } catch (err: any) {
@@ -788,16 +801,16 @@ export default function App() {
         </h1>
         <div className="mt-2 flex flex-col gap-2">
           <div className="text-[11px] tracking-[4px] text-indigo-400 uppercase font-bold">
-            Phase: Manifestation . 04
+            Evolutionary Archive . Active
           </div>
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-1 text-[9px] text-white/40 uppercase tracking-widest font-mono">
               <Activity className="w-3 h-3" />
-              <span>Seed: {isOpen ? "Expanding" : "Dormant"}</span>
+              <span>{isOpen ? "Mind Expanded" : "Mind Focused"}</span>
             </div>
             <div className="flex items-center gap-1 text-[9px] text-green-500/60 uppercase tracking-widest font-mono">
               <Database className="w-3 h-3" />
-              <span>Root: {supabase ? "Connected" : "Simulated"}</span>
+              <span>Cloud Status: Sync</span>
             </div>
             <div className="flex items-center gap-1 text-[9px] text-indigo-400/80 uppercase tracking-widest font-mono ml-2">
               <Users className="w-3 h-3" />
@@ -807,79 +820,19 @@ export default function App() {
         </div>
       </header>
 
-      {/* --- ENERGY METER --- */}
-      <div className="absolute bottom-10 left-10 z-10 w-[200px] pointer-events-none">
-        <div className="flex justify-between items-end mb-2">
-          <span className="text-[9px] uppercase tracking-wider text-white/40">Energy Usage</span>
-          <span className="text-[9px] text-white/20">238,217 / 262,144</span>
-        </div>
-        <div className="w-full h-[2px] bg-white/10">
-          <motion.div 
-            initial={{ width: 0 }}
-            animate={{ width: "91%" }}
-            className="h-full bg-indigo-500 shadow-[0_0_10px_#6366f1]" 
-          />
-        </div>
-      </div>
-
-      {/* --- 3D INTERACTION --- */}
-      {!isOpen && (
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-0 pointer-events-none">
-          <motion.p 
-            animate={{ opacity: [0.1, 0.4, 0.1] }}
-            transition={{ duration: 4, repeat: Infinity }}
-            className="text-indigo-300/40 text-[10px] font-bold tracking-[6px] uppercase"
-          >
-            {isFinalized ? "Collective Awareness Active" : "Creator Shaping Reality"}
-          </motion.p>
-        </div>
-      )}
-
+      {/* --- HUD LAYER --- */}
       <div className="absolute top-10 left-10 z-20 flex flex-col gap-4">
-        <button 
-          onClick={handleMuteToggle}
-          className="w-12 h-12 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-white hover:bg-white/10 transition-all shadow-xl backdrop-blur-md"
-        >
-          {isMuted ? <VolumeX className="w-5 h-5 text-pink-500" /> : <Volume2 className="w-5 h-5 text-green-500 animate-pulse" />}
-        </button>
-        
         {session?.user.id === creatorId && (
           <button 
             onClick={handleToggleFinalize}
-            className={`w-12 h-12 rounded-full border flex items-center justify-center transition-all shadow-xl backdrop-blur-md ${
+            className={`w-12 h-12 rounded-full border flex items-center justify-center transition-all shadow-xl backdrop-blur-md pointer-events-auto ${
               isFinalized ? 'bg-green-500/20 border-green-500 text-green-500' : 'bg-yellow-500/20 border-yellow-500 text-yellow-500'
             }`}
-            title={isFinalized ? "Collective Mode: EVERYONE CAN CREATE" : "Creator Mode: ONLY YOU CAN CREATE"}
+            title={isFinalized ? "Collective Mode Active" : "Creator Mode Active"}
           >
             {isFinalized ? <Unlock className="w-5 h-5" /> : <Lock className="w-5 h-5" />}
           </button>
         )}
-      </div>
-
-      {/* --- CHRONOS SLIDER --- */}
-      <div className="absolute right-10 top-1/2 -translate-y-1/2 flex flex-col items-center gap-6 z-20">
-        <div className="h-64 w-1 bg-white/5 rounded-full relative flex flex-col items-center py-2">
-          <input 
-            type="range"
-            min="0"
-            max="100"
-            value={historyIndex}
-            onChange={(e) => {
-              setHistoryIndex(parseInt(e.target.value));
-              if (!isMuted) sound.playBlip();
-            }}
-            className="absolute inset-0 w-64 -rotate-90 origin-center cursor-pointer opacity-0"
-            style={{ left: '-128px', top: '128px' }}
-          />
-          <motion.div 
-            animate={{ height: `${historyIndex}%` }}
-            className="w-full bg-gradient-to-t from-indigo-500 via-pink-500 to-yellow-500 rounded-full shadow-[0_0_15px_rgba(99,102,241,0.5)]"
-          />
-        </div>
-        <div className="flex flex-col items-center gap-1">
-          <HistoryIcon className="w-5 h-5 text-white/40" />
-          <span className="text-[9px] font-black text-white/40 uppercase tracking-widest whitespace-nowrap">Chronos</span>
-        </div>
       </div>
 
       <Canvas shadows camera={{ position: [0, 0, 8], fov: 75 }} className="cursor-grab active:cursor-grabbing">
@@ -889,9 +842,9 @@ export default function App() {
         <EvolutiveSeed onClick={() => setIsOpen(true)} isOpen={isOpen} />
         <Nebula />
         
-        {/* Manifested App Nodes - Filtered by History */}
-        {visibleManifestations
-          .filter(s => s.manifested_code)
+        {/* Manifested App Nodes */}
+        {suggestions
+          .filter(s => s.status === 'manifested' && s.manifested_code)
           .map(s => (
             <ModuleNode 
               key={s.id} 
@@ -986,50 +939,90 @@ export default function App() {
                           </p>
                           
                           <div className="flex flex-col gap-4 items-center w-full">
-                            {s.manifested_code && (
-                              <button onClick={() => setActiveModule(s.manifested_code!)} className="w-14 h-14 rounded-full bg-white text-black flex items-center justify-center hover:scale-110 transition-all active:scale-95 shadow-[0_0_20px_white]">
-                                <Play className="w-6 h-6 fill-current" />
-                              </button>
-                            )}
-                            
-                            {s.status === 'pending' && (
-                              <div className="flex flex-col gap-3 w-full px-6">
-                                <div className="flex justify-center gap-5">
-                                  {/* Vote Button - Circular */}
-                                  <button 
-                                    onClick={() => handleVote(s.id, s.votes)}
-                                    className="w-12 h-12 rounded-full border-2 border-white/10 flex items-center justify-center text-white/40 hover:border-white hover:text-white transition-all group-hover:scale-110"
-                                  >
-                                    <ChevronUp className="w-6 h-6" />
+                            {s.manifested_code ? (
+                              <div className="flex flex-col gap-4 w-full px-6">
+                                <div className="flex justify-center gap-4">
+                                  <button onClick={() => setActiveModule(s.manifested_code!)} className="w-14 h-14 rounded-full bg-white text-black flex items-center justify-center hover:scale-110 transition-all active:scale-95 shadow-[0_0_20px_white]">
+                                    <Play className="w-6 h-6 fill-current" />
                                   </button>
-
-                                  {/* Pledge Button - Circular */}
-                                  <button 
-                                    onClick={() => handlePledge(s)}
-                                    disabled={!session || !userApiKey || s.pledged_by?.includes(session?.user.id || '')}
-                                    className={`w-12 h-12 rounded-full border-2 flex items-center justify-center transition-all ${
-                                      s.pledged_by?.includes(session?.user.id || '') 
-                                        ? 'border-yellow-400 text-yellow-400 bg-yellow-400/10' 
-                                        : 'border-white/10 text-white/40 hover:border-white hover:text-white'
-                                    } disabled:opacity-20`}
-                                  >
-                                    <Zap className={`w-5 h-5 ${s.pledged_by?.includes(session?.user.id || '') ? 'fill-yellow-400' : ''}`} />
-                                  </button>
-                                  
-                                  {/* Manifest Button - Circular */}
-                                  <button 
-                                    onClick={() => manifestEvolution(s)} 
-                                    disabled={!!isManifesting || (s.energy || 0) < 100}
-                                    className="w-12 h-12 rounded-full border-2 border-indigo-500 flex items-center justify-center text-indigo-400 hover:bg-indigo-500 hover:text-white transition-all disabled:opacity-10"
-                                  >
-                                    {isManifesting === s.id ? <Loader2 className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
-                                  </button>
+                                  {(isFinalized || session?.user.id === creatorId) && (
+                                    <button 
+                                      onClick={() => {
+                                        const prompt = window.prompt("Suggest an evolution for this manifestation:");
+                                        if (prompt) handleRefine(s, prompt);
+                                      }}
+                                      disabled={!!isRefining}
+                                      className="w-14 h-14 rounded-full border-2 border-indigo-500/50 flex items-center justify-center text-indigo-400 hover:bg-indigo-500 hover:text-white transition-all disabled:opacity-20"
+                                    >
+                                      {isRefining === s.id ? <Loader2 className="w-6 h-6 animate-spin" /> : <RefreshCw className="w-6 h-6" />}
+                                    </button>
+                                  )}
                                 </div>
-                                
-                                <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
-                                  <motion.div animate={{ width: `${s.energy || 0}%` }} className="h-full bg-gradient-to-r from-indigo-500 via-pink-500 via-yellow-400 to-green-400 shadow-[0_0_10px_white]" />
+                                <div className="flex flex-col gap-2 mt-2">
+                                  <div className="bg-white/5 rounded-2xl p-4 max-h-[100px] overflow-y-auto thin-scrollbar">
+                                    <p className="text-[10px] uppercase tracking-widest text-indigo-400 font-black mb-2 flex items-center gap-2">
+                                      <MessageCircle className="w-3 h-3" /> Collective Advice
+                                    </p>
+                                    {advice.filter(a => a.suggestion_id === s.id).map((a, i) => (
+                                      <div key={i} className="text-[9px] text-white/40 mb-1 leading-tight border-l border-white/10 pl-2">
+                                        <span className="text-white/60 lowercase">{a.user_email}:</span> {a.content}
+                                      </div>
+                                    ))}
+                                    {advice.filter(a => a.suggestion_id === s.id).length === 0 && (
+                                      <p className="text-[9px] text-white/10 italic">No advice yet...</p>
+                                    )}
+                                  </div>
+                                  <button 
+                                    onClick={() => {
+                                      const msg = window.prompt("Leave advice for this manifestation:");
+                                      if (msg) postAdvice(s.id, msg);
+                                    }}
+                                    className="text-[9px] font-black uppercase tracking-widest text-white/30 hover:text-white transition-colors py-2 border border-white/5 rounded-full"
+                                  >
+                                    Give Advice
+                                  </button>
                                 </div>
                               </div>
+                            ) : (
+                              s.status === 'pending' && (
+                                <div className="flex flex-col gap-3 w-full px-6">
+                                  <div className="flex justify-center gap-5">
+                                    {/* Vote Button - Circular */}
+                                    <button 
+                                      onClick={() => handleVote(s.id, s.votes)}
+                                      className="w-12 h-12 rounded-full border-2 border-white/10 flex items-center justify-center text-white/40 hover:border-white hover:text-white transition-all group-hover:scale-110"
+                                    >
+                                      <ChevronUp className="w-6 h-6" />
+                                    </button>
+
+                                    {/* Pledge Button - Circular */}
+                                    <button 
+                                      onClick={() => handlePledge(s)}
+                                      disabled={!session || !userApiKey || s.pledged_by?.includes(session?.user.id || '')}
+                                      className={`w-12 h-12 rounded-full border-2 flex items-center justify-center transition-all ${
+                                        s.pledged_by?.includes(session?.user.id || '') 
+                                          ? 'border-yellow-400 text-yellow-400 bg-yellow-400/10' 
+                                          : 'border-white/10 text-white/40 hover:border-white hover:text-white'
+                                      } disabled:opacity-20`}
+                                    >
+                                      <Zap className={`w-5 h-5 ${s.pledged_by?.includes(session?.user.id || '') ? 'fill-yellow-400' : ''}`} />
+                                    </button>
+                                    
+                                    {/* Manifest Button - Circular */}
+                                    <button 
+                                      onClick={() => manifestEvolution(s)} 
+                                      disabled={!!isManifesting || (s.energy || 0) < 100}
+                                      className="w-12 h-12 rounded-full border-2 border-indigo-500 flex items-center justify-center text-indigo-400 hover:bg-indigo-500 hover:text-white transition-all disabled:opacity-10"
+                                    >
+                                      {isManifesting === s.id ? <Loader2 className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
+                                    </button>
+                                  </div>
+                                  
+                                  <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
+                                    <motion.div animate={{ width: `${s.energy || 0}%` }} className="h-full bg-gradient-to-r from-indigo-500 via-pink-500 via-yellow-400 to-green-400 shadow-[0_0_10px_white]" />
+                                  </div>
+                                </div>
+                              )
                             )}
                           </div>
                         </div>
