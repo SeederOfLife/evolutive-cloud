@@ -20,7 +20,8 @@ import {
   Eye, 
   Code,
   Sparkles,
-  Loader2
+  Loader2,
+  Users
 } from "lucide-react";
 import { supabase } from "./lib/supabase";
 import { GoogleGenAI } from "@google/genai";
@@ -191,6 +192,7 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [isManifesting, setIsManifesting] = useState<number | null>(null);
   const [activeModule, setActiveModule] = useState<string | null>(null);
+  const [activeUsersCount, setActiveUsersCount] = useState(1);
 
   // Identity State
   const [session, setSession] = useState<Session | null>(null);
@@ -226,9 +228,10 @@ export default function App() {
         }
       });
 
-      // Real-time listener for suggestions
-      const channel = supabase
-        .channel('schema-db-changes')
+      // Real-time listener for suggestions and presence
+      const channel = supabase.channel('void-sync');
+
+      channel
         .on(
           'postgres_changes',
           { event: '*', schema: 'public', table: 'suggestions' },
@@ -240,7 +243,15 @@ export default function App() {
             }
           }
         )
-        .subscribe();
+        .on('presence', { event: 'sync' }, () => {
+          const state = channel.presenceState();
+          setActiveUsersCount(Object.keys(state).length);
+        })
+        .subscribe(async (status) => {
+          if (status === 'SUBSCRIBED') {
+            await channel.track({ online_at: new Date().toISOString() });
+          }
+        });
 
       return () => {
         subscription.unsubscribe();
@@ -445,6 +456,10 @@ export default function App() {
             <div className="flex items-center gap-1 text-[9px] text-green-500/60 uppercase tracking-widest font-mono">
               <Database className="w-3 h-3" />
               <span>Root: {supabase ? "Connected" : "Simulated"}</span>
+            </div>
+            <div className="flex items-center gap-1 text-[9px] text-indigo-400/80 uppercase tracking-widest font-mono ml-2">
+              <Users className="w-3 h-3" />
+              <span>Souls: {activeUsersCount}</span>
             </div>
           </div>
         </div>
