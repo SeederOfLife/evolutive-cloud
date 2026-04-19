@@ -92,12 +92,16 @@ function ModuleNode({ suggestion, onRun }: { suggestion: Suggestion, onRun: (cod
   const [hovered, setHovered] = useState(false);
   
   // Create a unique orbit for each node based on its ID
-  const { radius, speed, offset, yOffset } = useMemo(() => ({
-    radius: 3.5 + Math.random() * 2,
-    speed: 0.1 + Math.random() * 0.2,
-    offset: Math.random() * Math.PI * 2,
-    yOffset: (Math.random() - 0.5) * 2
-  }), []);
+  const { radius, speed, offset, yOffset, color } = useMemo(() => {
+    const colors = ["#ff006e", "#3a86ff", "#fb5607", "#ffbe0b", "#8338ec", "#00f5d4"];
+    return {
+      radius: 3.5 + Math.random() * 2,
+      speed: 0.1 + Math.random() * 0.2,
+      offset: Math.random() * Math.PI * 2,
+      yOffset: (Math.random() - 0.5) * 2,
+      color: colors[Math.floor(Math.random() * colors.length)]
+    };
+  }, []);
 
   useFrame((state) => {
     const t = state.clock.getElapsedTime() * speed + offset;
@@ -118,29 +122,43 @@ function ModuleNode({ suggestion, onRun }: { suggestion: Suggestion, onRun: (cod
       onPointerOver={() => setHovered(true)}
       onPointerOut={() => setHovered(false)}
     >
-      <octahedronGeometry args={[0.3, 0]} />
+      <boxGeometry args={[0.3, 0.3, 0.3]} />
       <meshStandardMaterial 
-        color={hovered ? "#fff" : "#6366f1"} 
-        emissive={hovered ? "#fff" : "#4f46e5"}
-        emissiveIntensity={hovered ? 2 : 0.5}
+        color={hovered ? "#fff" : color} 
+        emissive={hovered ? "#fff" : color}
+        emissiveIntensity={hovered ? 2 : 1.5}
         metalness={0.9}
         roughness={0.1}
         transparent
-        opacity={0.8}
+        opacity={0.9}
       />
     </mesh>
   );
 }
 
-function Nebula({ count = 2000 }) {
-  const points = useMemo(() => {
+function Nebula({ count = 3000 }) {
+  const { points, colors } = useMemo(() => {
     const p = new Float32Array(count * 3);
+    const c = new Float32Array(count * 3);
+    const palette = [
+      new THREE.Color("#ff006e"),
+      new THREE.Color("#3a86ff"),
+      new THREE.Color("#fb5607"),
+      new THREE.Color("#ffbe0b"),
+      new THREE.Color("#8338ec"),
+    ];
+
     for (let i = 0; i < count; i++) {
       p[i * 3] = (Math.random() - 0.5) * 50;
       p[i * 3 + 1] = (Math.random() - 0.5) * 50;
       p[i * 3 + 2] = (Math.random() - 0.5) * 50;
+      
+      const col = palette[Math.floor(Math.random() * palette.length)];
+      c[i * 3] = col.r;
+      c[i * 3 + 1] = col.g;
+      c[i * 3 + 2] = col.b;
     }
-    return p;
+    return { points: p, colors: c };
   }, [count]);
 
   const matRef = useRef<THREE.PointsMaterial>(null!);
@@ -158,13 +176,19 @@ function Nebula({ count = 2000 }) {
           array={points}
           itemSize={3}
         />
+        <bufferAttribute
+          attach="attributes-color"
+          count={colors.length / 3}
+          array={colors}
+          itemSize={3}
+        />
       </bufferGeometry>
       <pointsMaterial
         ref={matRef}
         size={0.15}
-        color="#6366f1"
+        vertexColors
         transparent
-        opacity={0.4}
+        opacity={0.6}
         sizeAttenuation
         blending={THREE.AdditiveBlending}
       />
@@ -539,6 +563,8 @@ export default function App() {
       {/* --- BACKGROUND BLOBS & GLOW --- */}
       <div className="void-glow" />
       <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-indigo-900/10 rounded-full blur-[120px] pointer-events-none -z-10 animate-pulse" />
+      <div className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] bg-pink-900/5 rounded-full blur-[150px] pointer-events-none -z-10" />
+      <div className="absolute top-1/2 right-0 w-[400px] h-[400px] bg-blue-900/5 rounded-full blur-[150px] pointer-events-none -z-10" />
       
       {/* --- HUD LAYER --- */}
       {/* --- VOID ECHOES LAYER --- */}
@@ -552,9 +578,9 @@ export default function App() {
             className="fixed z-50 pointer-events-none"
             style={{ left: echo.x, top: echo.y }}
           >
-            <div className="bg-indigo-500/10 border border-indigo-500/30 backdrop-blur-md px-4 py-2 rounded-full">
-              <span className="text-[11px] font-bold text-white tracking-widest uppercase">{echo.text}</span>
-              <div className="text-[8px] text-white/30 uppercase mt-1">Echoed from the void</div>
+            <div className="bg-indigo-900/40 border-2 border-indigo-400 backdrop-blur-md px-5 py-3 rounded-none shadow-[4px_4px_0px_#818cf8]">
+              <span className="text-[12px] font-black text-white tracking-[2px] uppercase">{echo.text}</span>
+              <div className="text-[9px] text-indigo-300 font-bold uppercase mt-1 border-t border-indigo-500/30 pt-1">Echo Confirmed</div>
             </div>
           </motion.div>
         ))}
@@ -657,15 +683,17 @@ export default function App() {
       </Canvas>
 
       {/* --- HUD: ECHO INPUT --- */}
-      <div className="absolute bottom-10 left-1/2 -translate-x-1/2 z-20 w-[300px]">
-        <form onSubmit={sendEcho} className="relative">
+      <div className="absolute bottom-10 left-1/2 -translate-x-1/2 z-20 w-[400px]">
+        <form onSubmit={sendEcho} className="relative group">
+          {/* Input is circular */}
           <input 
             type="text"
-            placeholder="Whisper to the void..."
+            placeholder="Broadcast to the void..."
             value={echoInput}
             onChange={(e) => setEchoInput(e.target.value)}
-            className="w-full bg-white/5 border border-white/10 p-4 rounded-full text-[11px] text-white focus:border-indigo-500/50 outline-none text-center backdrop-blur-sm"
+            className="w-full bg-white/5 border-2 border-white/10 px-8 py-5 rounded-full text-[12px] text-white focus:border-indigo-500 focus:bg-white/10 outline-none text-center backdrop-blur-md transition-all placeholder:text-white/20 font-black uppercase tracking-widest"
           />
+          <div className="absolute -inset-1 bg-gradient-to-r from-indigo-500 via-pink-500 to-yellow-500 rounded-full blur opacity-20 group-hover:opacity-40 transition-opacity -z-10" />
           <button type="submit" className="hidden" />
         </form>
       </div>
@@ -677,239 +705,233 @@ export default function App() {
             initial={{ opacity: 0, y: 40 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 40 }}
-            className="absolute bottom-10 right-10 z-20 w-[380px] h-[520px] flex flex-col bg-[#0a0a1e]/80 backdrop-blur-[25px] border border-indigo-500/30 shadow-[0_40px_100px_rgba(0,0,0,0.6)] overflow-hidden"
+            className="fixed inset-0 m-auto w-[90vw] h-[85vh] bg-[#050510]/95 backdrop-blur-2xl border-2 border-white/10 flex flex-col z-50 shadow-[0_0_100px_rgba(0,0,0,0.8)] overflow-hidden rounded-none"
           >
-            {/* Mind Header */}
-            <div className="p-6 border-b border-indigo-500/30 flex justify-between items-start">
-              <div>
-                <h2 className="text-[10px] uppercase tracking-[2px] text-white/40 mb-1">Structure 4.0</h2>
-                <div className="flex gap-4">
+            {/* Mind Panel is a Cubic Structure (Cubic/Sharp) */}
+            <div className="flex border-b border-white/10 p-6 shrink-0 bg-white/5 items-center justify-between">
+              <div className="flex gap-12">
+                {['mind', 'identity'].map((tab) => (
                   <button 
-                    onClick={() => setActiveTab('mind')} 
-                    className={`text-[18px] font-medium transition-colors ${activeTab === 'mind' ? 'text-white' : 'text-white/20 hover:text-white/40'}`}
+                    key={tab}
+                    onClick={() => setActiveTab(tab as any)}
+                    className={`text-[12px] font-black uppercase tracking-[6px] transition-all relative ${activeTab === tab ? 'text-white' : 'text-white/20'}`}
                   >
-                    The Mind
+                    {tab === 'mind' ? 'Collective consciousness' : 'Soul Identity'}
+                    {activeTab === tab && <motion.div layoutId="tab" className="absolute -bottom-2 left-0 w-full h-[3px] bg-gradient-to-r from-indigo-500 via-pink-500 to-yellow-500" />}
                   </button>
-                  <button 
-                    onClick={() => setActiveTab('identity')} 
-                    className={`text-[18px] font-medium transition-colors ${activeTab === 'identity' ? 'text-white' : 'text-white/20 hover:text-white/40'}`}
-                  >
-                    Identity
-                  </button>
-                </div>
+                ))}
               </div>
-              <button 
-                onClick={() => setIsOpen(false)}
-                className="p-1 hover:bg-white/5 rounded-full transition-colors group"
-              >
-                <X className="w-5 h-5 text-white/30 group-hover:text-indigo-400" />
-              </button>
+              <button onClick={() => setIsOpen(false)} className="hover:rotate-90 transition-transform p-2"><X className="w-6 h-6 text-white/40" /></button>
             </div>
 
             {/* Suggestions Root - Scrollable */}
-            <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
+            <div className="flex-1 overflow-y-auto p-10 bg-[radial-gradient(circle_at_50%_50%,rgba(99,102,241,0.05)_0%,transparent_70%)] custom-scrollbar">
               {activeTab === 'mind' ? (
-                <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
                   {suggestions.map((s, idx) => (
                     <motion.div 
-                      initial={{ opacity: 0, x: 20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: idx * 0.05 }}
                       key={s.id}
-                      className="group relative p-4 bg-white/[0.03] border border-indigo-500/20 hover:border-indigo-500/40 transition-all rounded-xl"
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: idx * 0.03 }}
+                      className="group"
                     >
-                      <div className="flex items-start gap-4">
-                        <div className="flex flex-col items-center gap-1">
-                          <button onClick={() => handleVote(s.id, s.votes)} className="text-indigo-400/60 hover:text-indigo-400 active:scale-90 transition-all">
-                            <ChevronUp className="w-5 h-5" />
-                          </button>
-                          <span className="text-xs font-mono font-bold text-white/40">{s.votes}</span>
-                        </div>
+                      {/* Suggestions are Circles */}
+                      <div className="aspect-square rounded-full p-10 bg-white/[0.03] border-2 border-white/5 hover:border-indigo-500/50 transition-all flex flex-col items-center justify-center text-center relative overflow-hidden group-hover:shadow-[0_0_40px_rgba(99,102,241,0.1)]">
+                        <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 via-pink-500/10 to-yellow-500/10 opacity-0 group-hover:opacity-100 transition-opacity" />
                         
-                        <div className="flex-1 min-w-0">
-                          <div className="flex justify-between items-center mb-1">
-                            <span className="text-[9px] uppercase font-bold text-indigo-400 tracking-wider">
-                              {s.status === 'manifested' ? 'App Manifested' : 'Suggestion Pending'}
+                        <div className="relative z-10 w-full flex flex-col h-full justify-between items-center py-4">
+                          <div className="flex justify-center">
+                            <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest px-4 py-1.5 bg-indigo-500/10 rounded-full border border-indigo-500/30">
+                              #{s.id} . {s.status}
                             </span>
+                          </div>
+
+                          <p className="text-[14px] text-white leading-relaxed font-bold line-clamp-4 px-4 italic drop-shadow-lg scale-90 group-hover:scale-100 transition-transform">
+                            <span className="text-indigo-400 text-lg">“</span>
+                            {s.content}
+                            <span className="text-indigo-400 text-lg">”</span>
+                          </p>
+                          
+                          <div className="flex flex-col gap-4 items-center w-full">
+                            {s.manifested_code && (
+                              <button onClick={() => setActiveModule(s.manifested_code!)} className="w-14 h-14 rounded-full bg-white text-black flex items-center justify-center hover:scale-110 transition-all active:scale-95 shadow-[0_0_20px_white]">
+                                <Play className="w-6 h-6 fill-current" />
+                              </button>
+                            )}
                             
-                            <div className="flex gap-2">
-                              {s.manifested_code && (
-                                <button onClick={() => setActiveModule(s.manifested_code!)} className="text-[9px] text-indigo-300 hover:text-white uppercase font-bold transition-colors">
-                                  Run
-                                </button>
-                              )}
-                              
-                              {s.status === 'pending' && (
-                                <div className="flex gap-2 items-center">
-                                  {/* Pledge Button */}
+                            {s.status === 'pending' && (
+                              <div className="flex flex-col gap-3 w-full px-6">
+                                <div className="flex justify-center gap-5">
+                                  {/* Vote Button - Circular */}
+                                  <button 
+                                    onClick={() => handleVote(s.id, s.votes)}
+                                    className="w-12 h-12 rounded-full border-2 border-white/10 flex items-center justify-center text-white/40 hover:border-white hover:text-white transition-all group-hover:scale-110"
+                                  >
+                                    <ChevronUp className="w-6 h-6" />
+                                  </button>
+
+                                  {/* Pledge Button - Circular */}
                                   <button 
                                     onClick={() => handlePledge(s)}
                                     disabled={!session || !userApiKey || s.pledged_by?.includes(session?.user.id || '')}
-                                    className={`text-[9px] uppercase font-bold tracking-widest transition-all px-2 py-1 border rounded-sm ${
+                                    className={`w-12 h-12 rounded-full border-2 flex items-center justify-center transition-all ${
                                       s.pledged_by?.includes(session?.user.id || '') 
-                                        ? 'border-indigo-500/50 text-indigo-400 bg-indigo-500/10' 
-                                        : 'border-white/20 text-white/40 hover:text-white hover:border-white/40'
-                                    } disabled:opacity-30`}
-                                    title={!session ? "Connect Identity to Pledge" : !userApiKey ? "Provide Energy Key to Pledge" : "Pledge Energy"}
+                                        ? 'border-yellow-400 text-yellow-400 bg-yellow-400/10' 
+                                        : 'border-white/10 text-white/40 hover:border-white hover:text-white'
+                                    } disabled:opacity-20`}
                                   >
-                                    {s.pledged_by?.includes(session?.user.id || '') ? 'Pledged' : '+ Energy'}
+                                    <Zap className={`w-5 h-5 ${s.pledged_by?.includes(session?.user.id || '') ? 'fill-yellow-400' : ''}`} />
                                   </button>
-
-                                  {/* Manifest Button */}
+                                  
+                                  {/* Manifest Button - Circular */}
                                   <button 
                                     onClick={() => manifestEvolution(s)} 
                                     disabled={!!isManifesting || (s.energy || 0) < 100}
-                                    className="text-[10px] text-indigo-400 hover:text-white uppercase font-bold transition-all disabled:opacity-30 disabled:text-white/10"
+                                    className="w-12 h-12 rounded-full border-2 border-indigo-500 flex items-center justify-center text-indigo-400 hover:bg-indigo-500 hover:text-white transition-all disabled:opacity-10"
                                   >
-                                    {(s.energy || 0) < 100 ? `${s.energy || 0}% Charged` : (isManifesting === s.id ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Manifest')}
+                                    {isManifesting === s.id ? <Loader2 className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
                                   </button>
                                 </div>
-                              )}
-                            </div>
+                                
+                                <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
+                                  <motion.div animate={{ width: `${s.energy || 0}%` }} className="h-full bg-gradient-to-r from-indigo-500 via-pink-500 via-yellow-400 to-green-400 shadow-[0_0_10px_white]" />
+                                </div>
+                              </div>
+                            )}
                           </div>
-                          
-                          <p className="text-[12px] text-white/80 leading-snug font-light line-clamp-2 mb-3">{s.content}</p>
-
-                          {/* Energy Bar */}
-                          {s.status === 'pending' && (
-                            <div className="h-1 w-full bg-white/5 rounded-full overflow-hidden">
-                              <motion.div 
-                                initial={{ width: 0 }}
-                                animate={{ width: `${s.energy || 0}%` }}
-                                className="h-full bg-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.5)]"
-                              />
-                            </div>
-                          )}
                         </div>
                       </div>
                     </motion.div>
                   ))}
                 </div>
               ) : (
-                <div className="space-y-8 py-4">
+                <div className="max-w-md mx-auto space-y-12 py-10">
                   {!session ? (
-                    <div className="text-center space-y-6 pt-5">
-                      <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mx-auto border border-white/10">
-                        <UserIcon className="w-8 h-8 text-white/20" />
+                    <div className="text-center space-y-10">
+                      <div className="w-24 h-24 bg-gradient-to-tr from-indigo-500 to-pink-500 rounded-full flex items-center justify-center mx-auto shadow-[0_0_50px_rgba(99,102,241,0.3)]">
+                        <UserIcon className="w-10 h-10 text-white" />
                       </div>
-                      <div className="space-y-1">
-                        <h3 className="text-sm font-bold uppercase tracking-widest text-indigo-400">Anchor Your Soul</h3>
-                        <p className="text-[10px] text-white/40 leading-relaxed px-10">
-                          Connecting identity allows you to commit Energy (API Keys).
+                      <div className="space-y-4">
+                        <h3 className="text-2xl font-black uppercase tracking-[10px] text-white">Identity</h3>
+                        <p className="text-[11px] text-white/40 leading-relaxed uppercase tracking-widest px-10">
+                          Connect your soul to the evolutive cloud.
                         </p>
                       </div>
 
-                      {/* Email Auth Form */}
-                      <div className="space-y-3 px-2">
+                      {/* Email Auth Form - Circular Buttons/Inputs */}
+                      <div className="space-y-4 px-2">
                         <input 
                           type="email"
-                          placeholder="Temporal Email"
+                          placeholder="Soul Identifier (Email)"
                           value={authEmail}
                           onChange={(e) => setAuthEmail(e.target.value)}
-                          className="w-full bg-white/5 border border-white/10 p-3 text-[11px] text-white focus:border-indigo-500/50 outline-none"
+                          className="w-full bg-white/5 border border-white/10 p-5 rounded-full text-[11px] text-white focus:border-indigo-500/50 outline-none text-center"
                         />
                         <input 
                           type="password"
-                          placeholder="Soul Secret"
+                          placeholder="Spirit Key (Password)"
                           value={authPassword}
                           onChange={(e) => setAuthPassword(e.target.value)}
-                          className="w-full bg-white/5 border border-white/10 p-3 text-[11px] text-white focus:border-indigo-500/50 outline-none"
+                          className="w-full bg-white/5 border border-white/10 p-5 rounded-full text-[11px] text-white focus:border-indigo-500/50 outline-none text-center"
                         />
-                        {authError && <p className="text-[9px] text-red-500/80 uppercase font-bold">{authError}</p>}
+                        {authError && <p className="text-[9px] text-pink-500 uppercase font-black tracking-widest">{authError}</p>}
                         
                         <button 
                           onClick={handleEmailAuth}
-                          className="w-full py-3 bg-indigo-600 text-white text-[10px] font-black uppercase tracking-widest hover:bg-indigo-500 transition-all"
+                          className="w-full py-5 bg-white text-black text-[11px] font-black uppercase tracking-[4px] rounded-full hover:bg-indigo-300 transition-all shadow-xl"
                         >
-                          {isSignUp ? "Create Account" : "Sign In"}
+                          {isSignUp ? "Manifest Soul" : "Resume Connection"}
                         </button>
 
                         <button 
                           onClick={() => setIsSignUp(!isSignUp)}
-                          className="text-[9px] text-white/30 hover:text-white/60 uppercase tracking-widest font-bold underline underline-offset-4"
+                          className="text-[10px] text-white/30 hover:text-indigo-400 uppercase tracking-widest font-black transition-colors"
                         >
-                          {isSignUp ? "Already have a soul?" : "Register your soul"}
+                          {isSignUp ? "Already part of the cloud?" : "Begin new manifestation"}
                         </button>
                       </div>
 
                       <div className="relative py-4">
                         <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-white/5"></div></div>
-                        <div className="relative flex justify-center"><span className="bg-[#0a0a1e] px-4 text-[9px] text-white/20 uppercase tracking-widest font-bold">Or use Core Identity</span></div>
+                        <div className="relative flex justify-center"><span className="bg-[#050510] px-4 text-[10px] text-white/20 uppercase tracking-[4px] font-black">Or use Core Identity</span></div>
                       </div>
 
                       <button 
                         onClick={() => supabase?.auth.signInWithOAuth({ provider: 'google' })}
-                        className="w-full px-6 py-3 bg-white text-black text-[10px] font-black uppercase tracking-widest hover:bg-indigo-300 transition-all flex items-center justify-center gap-2"
+                        className="w-full px-6 py-5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-[11px] font-black uppercase tracking-[4px] rounded-full hover:rotate-1 transition-all flex items-center justify-center gap-3"
                       >
-                        Sign in with Google
+                        Google Sync
                       </button>
                     </div>
                   ) : (
-                    <div className="space-y-6">
-                      <div className="flex items-center gap-4 p-4 bg-white/5 border border-white/10 rounded-xl">
-                        <img src={session.user.user_metadata.avatar_url} className="w-12 h-12 rounded-full border border-indigo-500/30" referrerPolicy="no-referrer" />
-                        <div className="flex-1">
-                          <h3 className="text-xs font-bold text-white">{session.user.user_metadata.full_name}</h3>
-                          <p className="text-[10px] text-white/40 font-mono">Linked Soul: {session.user.id.slice(0, 8)}...</p>
-                        </div>
-                        <button onClick={() => supabase?.auth.signOut()} className="p-2 hover:bg-red-500/20 text-red-500/60 hover:text-red-500 rounded-lg transition-colors">
-                          <LogOut className="w-4 h-4" />
-                        </button>
+                    <div className="text-center space-y-10">
+                      <div className="w-24 h-24 rounded-full overflow-hidden mx-auto border-4 border-indigo-500/50 shadow-[0_0_30px_rgba(99,102,241,0.3)]">
+                        <img 
+                          src={session.user.user_metadata.avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${session.user.email}`} 
+                          alt="Soul Avatar"
+                          className="w-full h-full object-cover"
+                          referrerPolicy="no-referrer"
+                        />
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <h3 className="text-sm font-black uppercase tracking-[8px] text-indigo-400">{session.user.email}</h3>
+                        <p className="text-[10px] text-white/30 uppercase tracking-widest">Active Soul in the Void</p>
                       </div>
 
-                      <div className="space-y-4">
-                        <div className="flex items-center gap-2 text-indigo-400">
-                          <ShieldCheck className="w-4 h-4" />
-                          <span className="text-[10px] uppercase font-bold tracking-widest">Energy Configuration</span>
-                        </div>
-                        
+                      <div className="bg-white/[0.03] p-10 rounded-full border border-white/5 space-y-6">
                         <div className="space-y-2">
-                          <label className="text-[9px] uppercase text-white/40 ml-1">Gemini Energy Source (API Key)</label>
-                          <div className="relative">
-                            <input 
-                              type="password"
-                              value={userApiKey}
-                              onChange={(e) => {
-                                setUserApiKey(e.target.value);
-                                localStorage.setItem('evolutive_energy_key', e.target.value);
-                              }}
-                              placeholder="Paste Key to Empower the Cloud..."
-                              className="w-full bg-white/5 border border-white/10 p-3 text-[11px] text-white focus:outline-none focus:border-indigo-500/50"
-                            />
-                            <Key className="absolute right-3 top-3 w-4 h-4 text-white/10" />
-                          </div>
-                          <p className="text-[9px] text-white/20 italic p-1">
-                            Your key is stored locally and used only for your manifest actions.
-                          </p>
+                          <label className="text-[10px] font-black uppercase tracking-[3px] text-white/40 block">Gemini Energy Source</label>
+                          <input 
+                            type="password"
+                            value={userApiKey}
+                            onChange={(e) => {
+                              setUserApiKey(e.target.value);
+                              localStorage.setItem('evolutive_energy_key', e.target.value);
+                            }}
+                            placeholder="PASTE YOUR API ENERGY KEY"
+                            className="bg-transparent border-b border-white/10 w-full p-2 text-center text-xs text-indigo-300 focus:border-indigo-500 outline-none"
+                          />
                         </div>
                       </div>
+
+                      <button 
+                        onClick={() => supabase?.auth.signOut()}
+                        className="px-10 py-4 border-2 border-pink-500/30 text-pink-500/60 text-[10px] font-black uppercase tracking-[4px] rounded-full hover:bg-pink-500 hover:text-white transition-all"
+                      >
+                        Sever Connection
+                      </button>
                     </div>
                   )}
                 </div>
               )}
             </div>
 
-            {/* Intent Input area */}
-            <div className="p-6 border-t border-indigo-500/30">
+            {/* Intent Input area (Cubic Structure) */}
+            <div className="p-10 border-t border-white/10 shrink-0 bg-white/10">
               {activeTab === 'mind' ? (
-                <div className="flex gap-3">
+                <div className="flex gap-6 max-w-4xl mx-auto">
+                  {/* Suggestion input is circular */}
                   <input 
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleSuggest()}
-                    placeholder="Describe an evolution..."
-                    className="flex-1 bg-white/[0.05] border border-white/10 p-3 text-xs text-white focus:outline-none focus:border-indigo-500/50 placeholder:text-white/20"
+                    placeholder="WAKE A NEW INTENT..."
+                    className="flex-1 bg-white/5 border-2 border-white/10 px-8 py-6 rounded-full text-sm text-white focus:outline-none focus:border-indigo-500 placeholder:text-white/20 font-black uppercase tracking-[4px] text-center"
                   />
+                  {/* Suggestion button is circular */}
                   <button 
                     onClick={handleSuggest}
-                    className="w-11 h-11 bg-indigo-500 flex items-center justify-center transition-all active:scale-95"
+                    className="w-20 h-20 rounded-full bg-white text-black flex items-center justify-center transition-all hover:scale-110 shadow-2xl hover:bg-gradient-to-br hover:from-indigo-500 hover:to-pink-500 hover:text-white"
                   >
-                    <Plus className="w-5 h-5 text-white" />
+                    <Plus className="w-10 h-10 font-bold" />
                   </button>
                 </div>
               ) : (
-                <div className="flex justify-center">
-                  <span className="text-[10px] uppercase tracking-widest text-white/20 font-bold">Identity Management Layer</span>
+                <div className="flex justify-center flex-col items-center gap-2">
+                  <span className="text-[11px] uppercase tracking-[10px] text-white/20 font-black">Inner Core Maintenance</span>
+                  <div className="w-32 h-1 bg-gradient-to-r from-transparent via-white/10 to-transparent" />
                 </div>
               )}
             </div>
