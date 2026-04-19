@@ -303,6 +303,7 @@ export default function App() {
   const [echoes, setEchoes] = useState<VoidEcho[]>([]);
   const [echoInput, setEchoInput] = useState("");
   const echoTimeoutRef = useRef<any>(null);
+  const isSyncing = useRef(false);
 
   // Identity State
   const [session, setSession] = useState<Session | null>(null);
@@ -334,62 +335,86 @@ export default function App() {
     return new GoogleGenAI({ apiKey: key });
   };
 
+  // Auth Session Listener
+  useEffect(() => {
+    if (!supabase) return;
+
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      if (!session) {
+        setUserApiKey("");
+        localStorage.removeItem('evolutive_energy_key');
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
   // Initial fetch and Project setup
   useEffect(() => {
     fetchSuggestions();
     
     const syncProject = async () => {
+      if (isSyncing.current) return;
+      isSyncing.current = true;
+
       try {
-        if (!supabase) {
-          console.warn("Supabase client not initialized.");
-          return;
-        }
+        if (!supabase) return;
         
+        console.log("Checking Project Config...");
         const { data, error } = await supabase.from('suggestions').select('*').eq('status', 'system_config').maybeSingle();
         
         if (error) {
-          console.error("SyncProject Error:", error);
+          console.error("SyncProject Query Error (Status 400/406?):", error);
+          if (error.code === 'PGRST116') {
+             console.warn("Multiple system_config records found. This project might be in an inconsistent state.");
+          }
           return;
         }
 
         if (data) {
-          const config = JSON.parse(data.content || "{}") as ProjectConfig;
-          setIsFinalized(config.is_finalized);
-          setCreatorId(config.creator_id);
-          console.log("System Config Loaded:", config);
+          try {
+            const config = JSON.parse(data.content || "{}") as ProjectConfig;
+            setIsFinalized(!!config.is_finalized);
+            setCreatorId(config.creator_id || "");
+            console.log("System Config Loaded:", config);
+          } catch (e) {
+            console.error("Config Parse Error:", e);
+          }
         } else if (session?.user?.id) {
+          // Only create if we are the session user and it doesn't exist
           const config: ProjectConfig = {
             creator_id: session.user.id,
             is_finalized: false,
             epoch_name: "The Genesis"
           };
-          await supabase.from('suggestions').insert([{
+          
+          // Try a minimalist insert first to avoid schema errors
+          const { error: insertError } = await supabase.from('suggestions').insert([{
             content: JSON.stringify(config),
-            status: 'system_config',
-            votes: 0,
-            energy: 0
+            status: 'system_config'
           }]);
-          setCreatorId(session.user.id);
+          
+          if (insertError) {
+            console.error("SyncProject Insert Error (Schema mismatch?):", insertError);
+          } else {
+            setCreatorId(session.user.id);
+          }
         }
       } catch (err) {
-        console.error("SyncProject Exception:", err);
+        console.error("SyncProject Global Exception:", err);
       }
     };
-    syncProject();
 
     if (supabase) {
-      // Auth
-      supabase.auth.getSession().then(({ data: { session } }) => {
-        setSession(session);
-      });
-
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-        setSession(session);
-        if (!session) {
-          setUserApiKey("");
-          localStorage.removeItem('evolutive_energy_key');
-        }
-      });
+      syncProject();
 
       // Real-time listener for suggestions and presence and echoes
       const channel = supabase.channel('void-sync');
@@ -454,13 +479,12 @@ export default function App() {
       window.addEventListener('mousemove', handleMouseMove);
 
       return () => {
-        subscription.unsubscribe();
         supabase.removeChannel(channel);
         clearInterval(interval);
         window.removeEventListener('mousemove', handleMouseMove);
       };
     }
-  }, [session]);
+  }, [session?.user?.id]); // Only reconfirm project sync if user changes
 
   const handleToggleFinalize = async () => {
     if (!supabase || session?.user.id !== creatorId) return;
@@ -598,7 +622,12 @@ export default function App() {
         .order('votes', { ascending: false });
 
       if (error) throw error;
-      setSuggestions(data || []);
+      if (data) {
+        setSuggestions(data);
+        if (data.length > 0) {
+          console.log("Database Schema Check - Available Columns:", Object.keys(data[0]));
+        }
+      }
     } catch (err: any) {
       console.error("Error fetching root memory:", err);
     } finally {
