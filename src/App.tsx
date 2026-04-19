@@ -1116,7 +1116,18 @@ export default function App() {
                           if (!supabase) return;
                           supabase.auth.signInWithOAuth({ 
                             provider: 'google',
-                            options: { redirectTo: window.location.origin }
+                            options: { 
+                              redirectTo: window.location.origin,
+                              skipBrowserRedirect: true, // Use popup if possible
+                            }
+                          }).then(({ data, error }) => {
+                            if (error) setAuthError(error.message);
+                            if (data?.url) {
+                              const authWindow = window.open(data.url, 'google_auth', 'width=600,height=700');
+                              if (!authWindow) {
+                                setAuthError("Please allow popups to sync with Google.");
+                              }
+                            }
                           });
                         }}
                         disabled={!supabase}
