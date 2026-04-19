@@ -32,9 +32,11 @@ interface Suggestion {
   id: number;
   content: string;
   votes: number;
+  energy: number; // 0 to 100
   status: string;
   manifested_code?: string;
   created_at?: string;
+  pledged_by?: string[]; // user ids
 }
 
 interface UserProfile {
@@ -72,6 +74,51 @@ function EvolutiveSeed({ onClick, isOpen }: { onClick: () => void, isOpen: boole
         />
       </mesh>
     </Float>
+  );
+}
+
+function ModuleNode({ suggestion, onRun }: { suggestion: Suggestion, onRun: (code: string) => void }) {
+  const meshRef = useRef<THREE.Mesh>(null!);
+  const [hovered, setHovered] = useState(false);
+  
+  // Create a unique orbit for each node based on its ID
+  const { radius, speed, offset, yOffset } = useMemo(() => ({
+    radius: 3.5 + Math.random() * 2,
+    speed: 0.1 + Math.random() * 0.2,
+    offset: Math.random() * Math.PI * 2,
+    yOffset: (Math.random() - 0.5) * 2
+  }), []);
+
+  useFrame((state) => {
+    const t = state.clock.getElapsedTime() * speed + offset;
+    meshRef.current.position.x = Math.cos(t) * radius;
+    meshRef.current.position.z = Math.sin(t) * radius;
+    meshRef.current.position.y = yOffset + Math.sin(t * 2) * 0.5;
+    meshRef.current.rotation.y += 0.01;
+    meshRef.current.rotation.x += 0.005;
+  });
+
+  return (
+    <mesh 
+      ref={meshRef} 
+      onClick={(e) => {
+        e.stopPropagation();
+        if (suggestion.manifested_code) onRun(suggestion.manifested_code);
+      }}
+      onPointerOver={() => setHovered(true)}
+      onPointerOut={() => setHovered(false)}
+    >
+      <octahedronGeometry args={[0.3, 0]} />
+      <meshStandardMaterial 
+        color={hovered ? "#fff" : "#6366f1"} 
+        emissive={hovered ? "#fff" : "#4f46e5"}
+        emissiveIntensity={hovered ? 2 : 0.5}
+        metalness={0.9}
+        roughness={0.1}
+        transparent
+        opacity={0.8}
+      />
+    </mesh>
   );
 }
 
@@ -166,15 +213,39 @@ export default function App() {
     fetchSuggestions();
     
     if (supabase) {
+      // Auth
       supabase.auth.getSession().then(({ data: { session } }) => {
         setSession(session);
       });
 
       const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
         setSession(session);
+        if (!session) {
+          setUserApiKey("");
+          localStorage.removeItem('evolutive_energy_key');
+        }
       });
 
-      return () => subscription.unsubscribe();
+      // Real-time listener for suggestions
+      const channel = supabase
+        .channel('schema-db-changes')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'suggestions' },
+          (payload) => {
+            if (payload.eventType === 'INSERT') {
+              setSuggestions(current => [...current, payload.new as Suggestion].sort((a,b) => b.votes - a.votes));
+            } else if (payload.eventType === 'UPDATE') {
+              setSuggestions(current => current.map(s => s.id === payload.new.id ? { ...s, ...payload.new } : s).sort((a,b) => b.votes - a.votes));
+            }
+          }
+        )
+        .subscribe();
+
+      return () => {
+        subscription.unsubscribe();
+        supabase.removeChannel(channel);
+      };
     }
   }, []);
 
@@ -269,9 +340,33 @@ export default function App() {
     try {
       const { error } = await supabase.from('suggestions').update({ votes: currentVotes + 1 }).eq('id', id);
       if (error) throw error;
-      setSuggestions(suggestions.map(s => s.id === id ? { ...s, votes: currentVotes + 1 } : s).sort((a,b) => b.votes-a.votes));
+      // Real-time channel will handle the local state update
     } catch (err: any) {
       console.error("Error casting vote:", err);
+    }
+  };
+
+  const handlePledge = async (s: Suggestion) => {
+    if (!session || !userApiKey || !supabase) return;
+    
+    const hasPledged = s.pledged_by?.includes(session.user.id);
+    if (hasPledged) return;
+
+    try {
+      const newPledgedBy = [...(s.pledged_by || []), session.user.id];
+      const newEnergy = Math.min(100, (s.energy || 0) + 25); // Each pledge adds 25% energy
+      
+      const { error } = await supabase
+        .from('suggestions')
+        .update({ 
+          pledged_by: newPledgedBy,
+          energy: newEnergy
+        })
+        .eq('id', s.id);
+
+      if (error) throw error;
+    } catch (err: any) {
+      console.error("Error pledging energy:", err);
     }
   };
 
@@ -283,6 +378,8 @@ export default function App() {
       
       const prompt = `
         System: You are the Evolutive Cloud Manifestation Engine. 
+        Context: This manifested through collective effort. ${suggestion.pledged_by?.length || 0} souls contributed their API energy to this intent.
+        
         Task: Create a beautiful, minimalist React component for the following user intent: "${suggestion.content}"
         
         Constraints:
@@ -381,11 +478,24 @@ export default function App() {
         </div>
       )}
 
-      <Canvas shadows camera={{ position: [0, 0, 5], fov: 75 }} className="cursor-grab active:cursor-grabbing">
+      <Canvas shadows camera={{ position: [0, 0, 8], fov: 75 }} className="cursor-grab active:cursor-grabbing">
         <ambientLight intensity={0.2} />
         <pointLight position={[10, 10, 10]} intensity={1.5} color="#ffffff" />
         <pointLight position={[-10, -10, -10]} intensity={1} color="#6366f1" />
         <EvolutiveSeed onClick={() => setIsOpen(true)} isOpen={isOpen} />
+        
+        {/* Manifested App Nodes */}
+        {suggestions
+          .filter(s => s.status === 'manifested' && s.manifested_code)
+          .map(s => (
+            <ModuleNode 
+              key={s.id} 
+              suggestion={s} 
+              onRun={(code) => setActiveModule(code)} 
+            />
+          ))
+        }
+
         <OrbitControls enableZoom={false} enablePan={false} maxPolarAngle={Math.PI / 1.5} minPolarAngle={Math.PI / 3} />
       </Canvas>
 
@@ -457,18 +567,48 @@ export default function App() {
                                   Run
                                 </button>
                               )}
-                              {s.votes >= 20 && s.status === 'pending' && (
-                                <button 
-                                  onClick={() => manifestEvolution(s)} 
-                                  disabled={!!isManifesting}
-                                  className="text-[10px] text-indigo-400 hover:text-white uppercase font-bold transition-all disabled:opacity-50"
-                                >
-                                  {isManifesting === s.id ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Manifest'}
-                                </button>
+                              
+                              {s.status === 'pending' && (
+                                <div className="flex gap-2 items-center">
+                                  {/* Pledge Button */}
+                                  <button 
+                                    onClick={() => handlePledge(s)}
+                                    disabled={!session || !userApiKey || s.pledged_by?.includes(session?.user.id || '')}
+                                    className={`text-[9px] uppercase font-bold tracking-widest transition-all px-2 py-1 border rounded-sm ${
+                                      s.pledged_by?.includes(session?.user.id || '') 
+                                        ? 'border-indigo-500/50 text-indigo-400 bg-indigo-500/10' 
+                                        : 'border-white/20 text-white/40 hover:text-white hover:border-white/40'
+                                    } disabled:opacity-30`}
+                                    title={!session ? "Connect Identity to Pledge" : !userApiKey ? "Provide Energy Key to Pledge" : "Pledge Energy"}
+                                  >
+                                    {s.pledged_by?.includes(session?.user.id || '') ? 'Pledged' : '+ Energy'}
+                                  </button>
+
+                                  {/* Manifest Button */}
+                                  <button 
+                                    onClick={() => manifestEvolution(s)} 
+                                    disabled={!!isManifesting || (s.energy || 0) < 100}
+                                    className="text-[10px] text-indigo-400 hover:text-white uppercase font-bold transition-all disabled:opacity-30 disabled:text-white/10"
+                                  >
+                                    {(s.energy || 0) < 100 ? `${s.energy || 0}% Charged` : (isManifesting === s.id ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Manifest')}
+                                  </button>
+                                </div>
                               )}
                             </div>
                           </div>
-                          <p className="text-[12px] text-white/80 leading-snug font-light line-clamp-2">{s.content}</p>
+                          
+                          <p className="text-[12px] text-white/80 leading-snug font-light line-clamp-2 mb-3">{s.content}</p>
+
+                          {/* Energy Bar */}
+                          {s.status === 'pending' && (
+                            <div className="h-1 w-full bg-white/5 rounded-full overflow-hidden">
+                              <motion.div 
+                                initial={{ width: 0 }}
+                                animate={{ width: `${s.energy || 0}%` }}
+                                className="h-full bg-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.5)]"
+                              />
+                            </div>
+                          )}
                         </div>
                       </div>
                     </motion.div>
