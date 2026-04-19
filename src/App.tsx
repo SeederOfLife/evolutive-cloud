@@ -28,7 +28,8 @@ import {
   History,
   MessageCircle,
   RefreshCw,
-  Info
+  Info,
+  Trash2
 } from "lucide-react";
 import { supabase } from "./lib/supabase";
 import { GoogleGenAI } from "@google/genai";
@@ -693,6 +694,20 @@ export default function App() {
     }
   };
 
+  const handleDeleteSuggestion = async (id: number) => {
+    if (!supabase) {
+      setSuggestions(suggestions.filter(s => s.id !== id));
+      return;
+    }
+    try {
+      const { error } = await supabase.from('suggestions').delete().eq('id', id);
+      if (error) throw error;
+      setSuggestions(prev => prev.filter(s => s.id !== id));
+    } catch (err: any) {
+      console.error("Error deleting suggestion:", err);
+    }
+  };
+
   const sendEcho = (e: React.FormEvent) => {
     e.preventDefault();
     if (!echoInput.trim() || !supabase) return;
@@ -968,16 +983,30 @@ export default function App() {
                                     <Play className="w-6 h-6 fill-current" />
                                   </button>
                                   {(isFinalized || session?.user.id === creatorId) && (
-                                    <button 
-                                      onClick={() => {
-                                        const prompt = window.prompt("Suggest an evolution for this manifestation:");
-                                        if (prompt) handleRefine(s, prompt);
-                                      }}
-                                      disabled={!!isRefining}
-                                      className="w-14 h-14 rounded-full border-2 border-indigo-500/50 flex items-center justify-center text-indigo-400 hover:bg-indigo-500 hover:text-white transition-all disabled:opacity-20"
-                                    >
-                                      {isRefining === s.id ? <Loader2 className="w-6 h-6 animate-spin" /> : <RefreshCw className="w-6 h-6" />}
-                                    </button>
+                                    <>
+                                      <button 
+                                        onClick={() => {
+                                          const prompt = window.prompt("Suggest an evolution for this manifestation:");
+                                          if (prompt) handleRefine(s, prompt);
+                                        }}
+                                        disabled={!!isRefining}
+                                        className="w-14 h-14 rounded-full border-2 border-indigo-500/50 flex items-center justify-center text-indigo-400 hover:bg-indigo-500 hover:text-white transition-all disabled:opacity-20"
+                                      >
+                                        {isRefining === s.id ? <Loader2 className="w-6 h-6 animate-spin" /> : <RefreshCw className="w-6 h-6" />}
+                                      </button>
+                                      {session?.user.id === creatorId && (
+                                        <button 
+                                          onClick={() => {
+                                            if (window.confirm("Are you sure you want to delete this manifestation?")) {
+                                              handleDeleteSuggestion(s.id);
+                                            }
+                                          }}
+                                          className="w-14 h-14 rounded-full border-2 border-pink-500/30 flex items-center justify-center text-pink-500/60 hover:bg-pink-500 hover:text-white transition-all shadow-lg"
+                                        >
+                                          <Trash2 className="w-5 h-5" />
+                                        </button>
+                                      )}
+                                    </>
                                   )}
                                 </div>
                                 <div className="flex flex-col gap-2 mt-2">
@@ -1009,6 +1038,20 @@ export default function App() {
                               s.status === 'pending' && (
                                 <div className="flex flex-col gap-3 w-full px-6">
                                   <div className="flex justify-center gap-5">
+                                    {/* Delete Button - If owned by user or creator */}
+                                    {(session?.user.id === creatorId || s.pledged_by?.includes(session?.user.id || '')) && (
+                                      <button 
+                                        onClick={() => {
+                                          if (window.confirm("Are you sure you want to delete this idea?")) {
+                                            handleDeleteSuggestion(s.id);
+                                          }
+                                        }}
+                                        className="w-12 h-12 rounded-full border-2 border-pink-500/30 flex items-center justify-center text-pink-500/60 hover:bg-pink-500 hover:text-white transition-all shadow-lg"
+                                      >
+                                        <Trash2 className="w-5 h-5" />
+                                      </button>
+                                    )}
+
                                     {/* Vote Button - Circular */}
                                     <button 
                                       onClick={() => handleVote(s.id, s.votes)}
@@ -1033,7 +1076,8 @@ export default function App() {
                                     {/* Manifest Button - Circular */}
                                     <button 
                                       onClick={() => manifestEvolution(s)} 
-                                      disabled={!!isManifesting || (s.energy || 0) < 100}
+                                      disabled={!!isManifesting || (!((s.energy || 0) >= 100 || session?.user.id === creatorId))}
+                                      title={((s.energy || 0) >= 100 || session?.user.id === creatorId) ? "Generate App" : "Needs 100% Energy to Generate"}
                                       className="w-12 h-12 rounded-full border-2 border-indigo-500 flex items-center justify-center text-indigo-400 hover:bg-indigo-500 hover:text-white transition-all disabled:opacity-10"
                                     >
                                       {isManifesting === s.id ? <Loader2 className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
