@@ -551,6 +551,14 @@ export default function App() {
 
   // New Evolutionary States
   const [isFinalized, setIsFinalized] = useState(false);
+  const [apiQuota, setApiQuota] = useState(() => {
+    const saved = localStorage.getItem('soul_quota');
+    return saved ? parseInt(saved) : 100;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('soul_quota', apiQuota.toString());
+  }, [apiQuota]);
   const [creatorId, setCreatorId] = useState<string | null>(null);
   const [advice, setAdvice] = useState<Advice[]>([]);
   const [isRefining, setIsRefining] = useState<number | null>(null);
@@ -795,8 +803,13 @@ export default function App() {
       `;
 
       const ai = getAI();
+      if (apiQuota < 10) {
+        alert("Soul Capacity too low for refinement. Wait for recharge.");
+        setIsRefining(null);
+        return;
+      }
       const response = await ai.models.generateContent({
-        model: "gemini-1.5-flash",
+        model: "gemini-3-flash-preview",
         contents: prompt
       });
 
@@ -830,6 +843,7 @@ export default function App() {
           parent_id: suggestion.id 
         }, ...suggestions]);
       }
+      setApiQuota(prev => Math.max(0, prev - 10));
     } catch (err) {
       console.error("Refinement failed:", err);
     } finally {
@@ -873,6 +887,17 @@ export default function App() {
     }
   }, [session, creatorId, isCreator]);
   
+  // Passive Quota Recharge
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setApiQuota(prev => {
+        if (prev >= 100) return 100;
+        return Math.min(100, prev + 1);
+      });
+    }, 60000); // 1% per minute
+    return () => clearInterval(timer);
+  }, []);
+
   const fetchSuggestions = async () => {
     if (!supabase) {
       setSuggestions([]);
@@ -936,17 +961,38 @@ export default function App() {
 
   const handleSuggest = async () => {
     if (!input.trim()) return;
-    const content = input.trim();
-    setInput("");
-
-    if (!supabase) {
-      setSuggestions([{ id: Date.now(), content, votes: 0, energy: 0, status: "pending", user_id: session?.user?.id }, ...suggestions]);
+    if (apiQuota < 5) {
+      alert("Soul Capacity depleted. Wait for the consciousness to recharge.");
       return;
     }
 
+    const rawInput = input.trim();
+    setInput("");
+    setIsManifesting(0);
+    
     try {
+      const ai = getAI();
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: `Refine this app idea into a clear, concise one-sentence manifestation prompt. Keep it mystical and technical.
+        Original: "${rawInput}"
+        Manifestation:`,
+        config: {
+          temperature: 0.8,
+          maxOutputTokens: 60,
+        },
+      });
+
+      const content = response.text.trim() || rawInput;
+
+      if (!supabase) {
+        setSuggestions([{ id: Date.now(), content, votes: 0, energy: 0, status: "pending", user_id: session?.user?.id }, ...suggestions]);
+        setApiQuota(prev => Math.max(0, prev - 5));
+        return;
+      }
+
       const suggestData: any = { content };
-      // Wrap in JSON if columns are missing for basic features
+      // Wrap in JSON if columns are missing
       if (session?.user?.id) {
         if (!dbFeatures.user_id || !dbFeatures.energy) {
           suggestData.content = 'JSON:' + JSON.stringify({
@@ -966,14 +1012,16 @@ export default function App() {
         .select();
 
       if (error) throw error;
+      setApiQuota(prev => Math.max(0, prev - 5));
       if (data) {
         setSuggestions([data[0], ...suggestions]);
       }
     } catch (err: any) {
       console.error("Error planting intent:", err);
-      // Improve visibility of Supabase errors
       const errorMsg = err.message || (typeof err === 'object' ? JSON.stringify(err) : String(err));
-      alert(`Supabase Error: ${errorMsg}`);
+      alert(`Manifestation Link Failure: ${errorMsg}`);
+    } finally {
+      setIsManifesting(null);
     }
   };
 
@@ -1126,8 +1174,13 @@ export default function App() {
       `;
 
       const ai = getAI();
+      if (apiQuota < 20) {
+        alert("Soul Capacity too low for manifestation. Wait for recharge.");
+        setIsManifesting(null);
+        return;
+      }
       const response = await ai.models.generateContent({
-        model: "gemini-1.5-flash",
+        model: "gemini-3-flash-preview",
         contents: prompt
       });
 
@@ -1153,6 +1206,7 @@ export default function App() {
         if (error) throw error;
       }
 
+      setApiQuota(prev => Math.max(0, prev - 15));
       setSuggestions(suggestions.map(s => s.id === suggestion.id ? { ...s, status: 'manifested', manifested_code: generatedCode } : s));
       setActiveModule(generatedCode);
 
@@ -1433,6 +1487,26 @@ export default function App() {
                   <span className="text-[10px] font-black text-white/60 tracking-widest uppercase">
                     {isFinalized ? 'Community Mode' : 'Creator Mode'}
                   </span>
+                </div>
+
+                {/* API Quota Tracking */}
+                <div className="flex items-center gap-3 px-4 py-2 bg-white/5 rounded-full border border-white/10 group/quota relative">
+                  <div className="w-2.5 h-2.5 rounded-full overflow-hidden bg-white/10 relative">
+                    <motion.div 
+                      className="absolute bottom-0 left-0 w-full bg-indigo-500" 
+                      initial={{ height: "100%" }}
+                      animate={{ height: `${apiQuota}%` }}
+                    />
+                  </div>
+                  <span className="text-[10px] font-black text-white/40 tracking-widest uppercase">
+                    API <span className="text-white/80">{apiQuota}%</span>
+                  </span>
+                  
+                  {/* Tooltip */}
+                  <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 opacity-0 group-hover/quota:opacity-100 transition-opacity pointer-events-none bg-black border border-white/10 px-3 py-1.5 rounded text-[8px] whitespace-nowrap z-50 text-white/40 uppercase tracking-widest">
+                    Soul Remaining: {apiQuota}/100 <br/>
+                    Recharges 1% per minute
+                  </div>
                 </div>
               </div>
               <button onClick={() => setIsOpen(false)} className="hover:rotate-90 transition-transform p-2"><X className="w-6 h-6 text-white/40" /></button>
