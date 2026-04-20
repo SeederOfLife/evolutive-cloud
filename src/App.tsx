@@ -53,10 +53,16 @@ interface Suggestion {
 }
 
 function EvolutionTree({ suggestions, onSelect }: { suggestions: Suggestion[], onSelect: (s: Suggestion) => void }) {
-  const rootNodes = useMemo(() => suggestions.filter(s => !s.parent_id && s.status !== 'system_config'), [suggestions]);
+  const filteredSuggestions = useMemo(() => 
+    suggestions.filter(s => s.status !== 'deleted' && !s.is_deleted), 
+  [suggestions]);
+
+  const rootNodes = useMemo(() => 
+    filteredSuggestions.filter(s => !s.parent_id && s.status !== 'system_config'), 
+  [filteredSuggestions]);
   
   const buildTree = (s: Suggestion, level: number = 0): any => {
-    const children = suggestions.filter(child => child.parent_id === s.id);
+    const children = filteredSuggestions.filter(child => child.parent_id === s.id);
     return {
       node: s,
       level,
@@ -64,7 +70,7 @@ function EvolutionTree({ suggestions, onSelect }: { suggestions: Suggestion[], o
     };
   };
 
-  const forest = useMemo(() => rootNodes.map(r => buildTree(r)), [rootNodes, suggestions]);
+  const forest = useMemo(() => rootNodes.map(r => buildTree(r)), [rootNodes, filteredSuggestions]);
 
   if (forest.length === 0) {
     return (
@@ -676,6 +682,8 @@ export default function App() {
                 } else {
                   setSuggestions(current => current.map(s => s.id === payload.new.id ? { ...s, ...payload.new } : s).sort((a,b) => (b.votes || 0) - (a.votes || 0)));
                 }
+              } else if (payload.eventType === 'DELETE') {
+                setSuggestions(current => current.filter(s => s.id !== payload.old.id));
               }
             }
           )
@@ -1029,24 +1037,27 @@ export default function App() {
       setSuggestions(suggestions.filter(s => s.id !== id));
       return;
     }
+    
     try {
-      // Soft delete: try updating status or is_deleted flag first
-      const updateData: any = { status: 'deleted' };
-      if (suggestions.some(s => s.id === id && 'is_deleted' in s)) {
-         updateData.is_deleted = true;
-      }
-
-      const { error } = await supabase.from('suggestions').update(updateData).eq('id', id);
+      // Direct Hard Delete - Most reliable to "remember" the deletion
+      const { error } = await supabase.from('suggestions').delete().eq('id', id);
       
       if (error) {
-        // If update fails (maybe schema doesn't support status='deleted'), fallback to hard delete
-        console.warn("Soft delete failed, attempting hard delete:", error);
-        await supabase.from('suggestions').delete().eq('id', id);
+        console.warn("Hard delete failed, attempting soft delete (fallback):", error);
+        // Fallback: try soft delete if delete is prohibited by RLS but update is allowed
+        const updateData: any = { status: 'deleted' };
+        if (suggestions.some(s => s.id === id && 'is_deleted' in s)) {
+           updateData.is_deleted = true;
+        }
+        const { error: updateError } = await supabase.from('suggestions').update(updateData).eq('id', id);
+        if (updateError) throw updateError;
       }
       
+      // Update local state immediately for responsiveness
       setSuggestions(prev => prev.filter(s => s.id !== id));
     } catch (err: any) {
-      console.error("Error deleting suggestion:", err);
+      console.error("Critical Error during deletion:", err);
+      alert("Failed to delete. Please check your connection or permissions.");
     }
   };
 
@@ -1285,13 +1296,13 @@ export default function App() {
               </div>
 
               <div className="flex-1 overflow-y-auto p-4 custom-scrollbar space-y-4">
-                {suggestions.filter(s => s.status === 'manifested').length === 0 && (
+                {displaySuggestions.filter(s => s.status === 'manifested').length === 0 && (
                   <div className="h-40 flex flex-col items-center justify-center text-center opacity-20">
                     <History className="w-10 h-10 mb-4" />
                     <p className="text-[10px] uppercase font-black tracking-widest leading-loose">No manifestations<br/>yet recorded in this epoch.</p>
                   </div>
                 )}
-                {suggestions
+                {displaySuggestions
                   .filter(s => s.status === 'manifested')
                   .sort((a, b) => b.id - a.id)
                   .map((s) => {
