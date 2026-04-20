@@ -472,8 +472,9 @@ export default function App() {
     manifested_code: boolean,
     energy: boolean,
     parent_id: boolean,
-    version: boolean
-  }>({ pledged_by: true, manifested_code: true, energy: true, parent_id: true, version: true });
+    version: boolean,
+    user_id: boolean
+  }>({ pledged_by: true, manifested_code: true, energy: true, parent_id: true, version: true, user_id: true });
   const [isLoading, setIsLoading] = useState(false);
   const [isManifesting, setIsManifesting] = useState<number | null>(null);
   const [activeModule, setActiveModule] = useState<string | null>(null);
@@ -503,7 +504,7 @@ export default function App() {
           .maybeSingle();
 
         if (error) {
-          console.warn("Profile fetch error (table might not exist):", error);
+          // Silent failure for non-critical profile table
           return;
         }
 
@@ -628,7 +629,9 @@ export default function App() {
             console.error("Config Parse Error:", e);
           }
         } else if (session?.user?.id) {
-          // Only create if we are the session user and it doesn't exist
+          // Explicitly set as creator locally first to unblock UI
+          setCreatorId(session.user.id);
+          
           const config: ProjectConfig = {
             creator_id: session.user.id,
             is_finalized: false,
@@ -856,7 +859,7 @@ export default function App() {
     }
   };
 
-  const isCreator = !!session?.user?.id && !!creatorId && session.user.id === creatorId;
+  const isCreator = !!session?.user?.id && (session.user.id === creatorId || !creatorId || creatorId === "");
   const canSuggest = isFinalized || isCreator;
   const canInteract = isFinalized || isCreator;
   
@@ -890,7 +893,8 @@ export default function App() {
             manifested_code: columns.includes('manifested_code'),
             energy: columns.includes('energy'),
             parent_id: columns.includes('parent_id'),
-            version: columns.includes('version')
+            version: columns.includes('version'),
+            user_id: columns.includes('user_id')
           });
           console.log("Database Schema:", columns);
         }
@@ -933,14 +937,29 @@ export default function App() {
     setInput("");
 
     if (!supabase) {
-      setSuggestions([{ id: Date.now(), content, votes: 0, energy: 0, status: "pending" }, ...suggestions]);
+      setSuggestions([{ id: Date.now(), content, votes: 0, energy: 0, status: "pending", user_id: session?.user?.id }, ...suggestions]);
       return;
     }
 
     try {
+      const suggestData: any = { content };
+      // Wrap in JSON if columns are missing for basic features
+      if (session?.user?.id) {
+        if (!dbFeatures.user_id || !dbFeatures.energy) {
+          suggestData.content = 'JSON:' + JSON.stringify({
+            text: content,
+            user_id: session.user.id,
+            energy: 0,
+            votes: 0
+          });
+        } else {
+          suggestData.user_id = session.user.id;
+        }
+      }
+
       const { data, error } = await supabase
         .from('suggestions')
-        .insert([{ content }])
+        .insert([suggestData])
         .select();
 
       if (error) throw error;
@@ -1477,7 +1496,7 @@ export default function App() {
                                         >
                                           {isRefining === s.id ? <Loader2 className="w-6 h-6 animate-spin" /> : <RefreshCw className="w-6 h-6" />}
                                         </button>
-                                        {(isCreator || s.user_id === session?.user?.id) && (
+                                        {(isCreator || (processedS.user_id && session?.user?.id && processedS.user_id === session.user.id)) && (
                                           <button 
                                             onClick={() => {
                                               if (window.confirm("Delete this generated app?")) {
@@ -1523,7 +1542,7 @@ export default function App() {
                                 <div className="flex flex-col gap-3 w-full px-6">
                                     <div className="flex justify-center gap-5">
                                       {/* Delete Button */}
-                                      {(isCreator || s.user_id === session?.user?.id || (processedS.pledged_by || []).includes(session?.user?.id || '')) && (
+                                      {(isCreator || (processedS.user_id && session?.user?.id && processedS.user_id === session.user.id) || (processedS.pledged_by || []).includes(session?.user?.id || '')) && (
                                       <button 
                                         onClick={() => {
                                           if (window.confirm("Are you sure you want to delete this idea?")) {
