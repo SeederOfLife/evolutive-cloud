@@ -30,7 +30,10 @@ import {
   RefreshCw,
   Info,
   Trash2,
-  GitBranch
+  GitBranch,
+  Box,
+  Layout,
+  DraftingCompass
 } from "lucide-react";
 import { supabase } from "./lib/supabase";
 import { GoogleGenAI } from "@google/genai";
@@ -1436,9 +1439,23 @@ export default function App() {
             </div>
 
             {/* Suggestions Root - Scrollable */}
-            <div className="flex-1 overflow-y-auto bg-[radial-gradient(circle_at_50%_50%,rgba(99,102,241,0.05)_0%,transparent_70%)] custom-scrollbar">
+            <div className="flex-1 overflow-y-auto bg-black/40 custom-scrollbar">
               {activeTab === 'mind' ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 p-10">
+                <div className="max-w-6xl mx-auto p-6">
+                  {/* Explorer Header */}
+                  <div className="grid grid-cols-[1fr_120px_100px_160px] gap-4 px-6 py-3 border-b border-white/10 text-[10px] uppercase tracking-[0.2em] font-black text-white/30 mb-4">
+                    <div className="flex items-center gap-2 italic"><Box className="w-3 h-3" /> Idea / Manifestation</div>
+                    <div className="text-center">Complexity</div>
+                    <div className="text-center">Status</div>
+                    <div className="text-right">Operations</div>
+                  </div>
+
+                  <div className="flex flex-col gap-2">
+                  {displaySuggestions.length === 0 && (
+                    <div className="py-20 text-center border-2 border-dashed border-white/5 rounded-[2rem]">
+                      <p className="text-white/20 italic tracking-widest text-xs uppercase">The collective mind is currently silent. Awaiting a spark...</p>
+                    </div>
+                  )}
                   {displaySuggestions.map((s, idx) => {
                     let processedS = { ...s };
                     let displayContent = s.content;
@@ -1451,163 +1468,145 @@ export default function App() {
                       } catch(e) {}
                     }
 
+                    const isApp = !!processedS.manifested_code;
+
                     return (
                       <motion.div 
                         key={s.id}
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
                         transition={{ delay: idx * 0.03 }}
-                        className="group"
+                        className="group relative"
                       >
-                        {/* Suggestions are Circles */}
-                        <div className="aspect-square rounded-full p-10 bg-white/[0.03] border-2 border-white/5 hover:border-indigo-500/50 transition-all flex flex-col items-center justify-center text-center relative overflow-hidden group-hover:shadow-[0_0_40px_rgba(99,102,241,0.1)]">
-                          <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 via-pink-500/10 to-yellow-500/10 opacity-0 group-hover:opacity-100 transition-opacity" />
-                          
-                          <div className="relative z-10 w-full flex flex-col h-full justify-between items-center py-4">
-                            <div className="flex justify-center">
-                              <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest px-4 py-1.5 bg-indigo-500/10 rounded-full border border-indigo-500/30">
-                                #{s.id} . {processedS.status}
-                              </span>
+                        <div className="grid grid-cols-[1fr_120px_100px_160px] gap-4 items-center px-6 py-4 rounded-2xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.05] hover:border-indigo-500/30 transition-all cursor-default">
+                          {/* Main Info */}
+                          <div className="flex items-start gap-4 overflow-hidden">
+                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${isApp ? 'bg-indigo-500/20 text-indigo-400' : 'bg-white/5 text-white/40 shadow-inner'}`}>
+                              {isApp ? <Layout className="w-5 h-5" /> : <DraftingCompass className="w-5 h-5" />}
                             </div>
-
-                            <p className="text-[14px] text-white leading-relaxed font-bold line-clamp-4 px-4 italic drop-shadow-lg scale-90 group-hover:scale-100 transition-transform">
-                              <span className="text-indigo-400 text-lg">“</span>
-                              {displayContent}
-                              <span className="text-indigo-400 text-lg">”</span>
-                            </p>
-                            
-                            <div className="flex flex-col gap-4 items-center w-full">
-                              {processedS.manifested_code ? (
-                                <div className="flex flex-col gap-4 w-full px-6">
-                                  <div className="flex justify-center gap-4">
-                                    <button onClick={() => setActiveModule(processedS.manifested_code!)} className="w-14 h-14 rounded-full bg-white text-black flex items-center justify-center hover:scale-110 transition-all active:scale-95 shadow-[0_0_20px_white]" title="Launch">
-                                      <Play className="w-6 h-6 fill-current" />
-                                    </button>
-                                    {(isFinalized || isCreator) && (
-                                      <>
-                                        <button 
-                                          onClick={() => {
-                                            const prompt = window.prompt("Suggest a change for this app:");
-                                            if (prompt) handleRefine(processedS, prompt);
-                                          }}
-                                          disabled={!!isRefining}
-                                          className="w-14 h-14 rounded-full border-2 border-indigo-500/50 flex items-center justify-center text-indigo-400 hover:bg-indigo-500 hover:text-white transition-all disabled:opacity-20"
-                                          title="Refine App"
-                                        >
-                                          {isRefining === s.id ? <Loader2 className="w-6 h-6 animate-spin" /> : <RefreshCw className="w-6 h-6" />}
-                                        </button>
-                                        {(isCreator || (processedS.user_id && session?.user?.id && processedS.user_id === session.user.id)) && (
-                                          <button 
-                                            onClick={() => {
-                                              if (window.confirm("Delete this generated app?")) {
-                                                handleDeleteSuggestion(s.id);
-                                              }
-                                            }}
-                                            className="w-14 h-14 rounded-full border-2 border-pink-500/30 flex items-center justify-center text-pink-500/60 hover:bg-pink-500 hover:text-white transition-all shadow-lg"
-                                            title="Delete"
-                                          >
-                                            <Trash2 className="w-5 h-5" />
-                                          </button>
-                                        )}
-                                      </>
-                                    )}
-                                  </div>
-                                <div className="flex flex-col gap-2 mt-2">
-                                  <div className="bg-white/5 rounded-2xl p-4 max-h-[100px] overflow-y-auto thin-scrollbar">
-                                    <p className="text-[10px] uppercase tracking-widest text-indigo-400 font-black mb-2 flex items-center gap-2">
-                                      <MessageCircle className="w-3 h-3" /> Community Feedback
-                                    </p>
-                                    {advice.filter(a => a.suggestion_id === s.id).map((a, i) => (
-                                      <div key={i} className="text-[9px] text-white/40 mb-1 leading-tight border-l border-white/10 pl-2">
-                                        <span className="text-white/60 lowercase">{a.user_email}:</span> {a.content}
-                                      </div>
-                                    ))}
-                                    {advice.filter(a => a.suggestion_id === s.id).length === 0 && (
-                                      <p className="text-[9px] text-white/10 italic">No feedback yet...</p>
-                                    )}
-                                  </div>
-                                  <button 
-                                    onClick={() => {
-                                      const msg = window.prompt("Type your feedback to improve this app:");
-                                      if (msg) postAdvice(s.id, msg);
-                                    }}
-                                    className="text-[9px] font-black uppercase tracking-widest text-white/30 hover:text-white transition-colors py-2 border border-white/5 rounded-full"
-                                  >
-                                    Add Feedback
-                                  </button>
-                                </div>
-                              </div>
-                            ) : (
-                              s.status === 'pending' && (
-                                <div className="flex flex-col gap-3 w-full px-6">
-                                    <div className="flex justify-center gap-5">
-                                      {/* Delete Button */}
-                                      {(isCreator || (processedS.user_id && session?.user?.id && processedS.user_id === session.user.id) || (processedS.pledged_by || []).includes(session?.user?.id || '')) && (
-                                      <button 
-                                        onClick={() => {
-                                          if (window.confirm("Are you sure you want to delete this idea?")) {
-                                            handleDeleteSuggestion(s.id);
-                                          }
-                                        }}
-                                        className="w-12 h-12 rounded-full border-2 border-pink-500/30 flex items-center justify-center text-pink-500/60 hover:bg-pink-500 hover:text-white transition-all shadow-lg"
-                                      >
-                                        <Trash2 className="w-5 h-5" />
-                                      </button>
-                                    )}
-
-                                      {/* Vote Button */}
-                                      <button 
-                                        onClick={() => handleVote(s.id, processedS.votes)}
-                                        className="w-12 h-12 rounded-full border-2 border-white/10 flex items-center justify-center text-white/40 hover:border-white hover:text-white transition-all group-hover:scale-110"
-                                        title="Upvote"
-                                      >
-                                      <ChevronUp className="w-6 h-6" />
-                                    </button>
-
-                                      {/* Support Button */}
-                                      <button 
-                                        onClick={() => handlePledge(processedS)}
-                                        disabled={!session || !userApiKey || (processedS.pledged_by || []).includes(session?.user?.id || '')}
-                                        className={`w-12 h-12 rounded-full border-2 flex items-center justify-center transition-all ${
-                                          (processedS.pledged_by || []).includes(session?.user?.id || '') 
-                                            ? 'border-yellow-400 text-yellow-400 bg-yellow-400/10' 
-                                            : 'border-white/10 text-white/40 hover:border-white hover:text-white'
-                                        } disabled:opacity-20`}
-                                        title="Support Idea"
-                                      >
-                                        <Zap className={`w-5 h-5 ${(processedS.pledged_by || []).includes(session?.user?.id || '') ? 'fill-yellow-400' : ''}`} />
-                                      </button>
-                                    
-                                      {/* Generate Button */}
-                                      <button 
-                                        onClick={() => manifestEvolution(processedS)} 
-                                        disabled={!!isManifesting || (!((processedS.energy || 0) >= 100 || isCreator))}
-                                        title={((processedS.energy || 0) >= 100 || isCreator) ? "Generate App" : "Needs 100% Energy to Generate"}
-                                        className="w-12 h-12 rounded-full border-2 border-indigo-500 flex items-center justify-center text-indigo-400 hover:bg-indigo-500 hover:text-white transition-all disabled:opacity-10"
-                                      >
-                                        {isManifesting === s.id ? <Loader2 className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
-                                      </button>
-                                    </div>
-                                    
-                                    <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
-                                      <motion.div animate={{ width: `${processedS.energy || 0}%` }} className="h-full bg-gradient-to-r from-indigo-500 via-pink-500 via-yellow-400 to-green-400 shadow-[0_0_10px_white]" />
-                                    </div>
-                                    <p className="text-[8px] font-black uppercase tracking-[3px] text-white/20">Energy: {processedS.energy || 0}%</p>
-                                </div>
-                              )
-                            )}
+                            <div className="overflow-hidden">
+                              <h3 className="text-white font-bold text-sm truncate group-hover:text-indigo-300 transition-colors">
+                                {displayContent}
+                              </h3>
+                              <p className="text-[10px] text-white/20 uppercase tracking-widest mt-1 flex items-center gap-2">
+                                <span className={isApp ? 'text-indigo-500' : ''}>#{s.id}</span> 
+                                <span className="w-1 h-1 rounded-full bg-white/10" />
+                                {isApp ? `Version v${processedS.version || 1}` : 'Proposal Draft'}
+                                {(processedS.pledged_by || []).length > 0 && (
+                                  <>
+                                    <span className="w-1 h-1 rounded-full bg-white/10" />
+                                    <span className="flex items-center gap-1 text-yellow-500/50"><Zap className="w-2.5 h-2.5 fill-current" /> Supported</span>
+                                  </>
+                                )}
+                              </p>
                             </div>
                           </div>
+
+                          {/* Data Column: Stats */}
+                          <div className="flex flex-col items-center gap-1">
+                             <div className="w-full bg-white/5 h-1 rounded-full overflow-hidden">
+                               <motion.div 
+                                 initial={{ width: 0 }}
+                                 animate={{ width: `${processedS.energy || 0}%` }}
+                                 className="h-full bg-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.5)]"
+                               />
+                             </div>
+                             <span className="text-[9px] font-mono text-white/40 tracking-tighter uppercase whitespace-nowrap">
+                               {processedS.votes || 0} Votes / {processedS.energy || 0}% Energy
+                             </span>
+                          </div>
+
+                          {/* Data Column: Status */}
+                          <div className="flex justify-center">
+                             <div className={`px-2 py-1 rounded text-[8px] font-black uppercase tracking-widest border ${
+                               isApp 
+                               ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' 
+                               : 'bg-white/5 text-white/30 border-white/10'
+                             }`}>
+                               {processedS.status}
+                             </div>
+                          </div>
+
+                          {/* Actions */}
+                          <div className="flex justify-end gap-2 pr-2">
+                            {isApp ? (
+                              <>
+                                <button onClick={() => setActiveModule(processedS.manifested_code!)} className="p-2.5 rounded-lg bg-white text-black hover:scale-110 active:scale-95 transition-all" title="Launch App">
+                                  <Play className="w-4 h-4 fill-current" />
+                                </button>
+                                {(isFinalized || isCreator) && (
+                                  <button 
+                                    onClick={() => {
+                                      const prompt = window.prompt("Suggest an evolution for this app:");
+                                      if (prompt) handleRefine(processedS, prompt);
+                                    }}
+                                    disabled={!!isRefining}
+                                    className="p-2.5 rounded-lg border border-white/10 text-white/60 hover:bg-white hover:text-black transition-all disabled:opacity-20"
+                                    title="Evolve"
+                                  >
+                                    {isRefining === s.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                                  </button>
+                                )}
+                              </>
+                            ) : (
+                              processedS.status === 'pending' && (
+                                <>
+                                  <button 
+                                    onClick={() => handleVote(s.id, processedS.votes)}
+                                    className="p-2.5 rounded-lg border border-white/10 text-white/40 hover:border-white hover:text-white transition-all hover:bg-white/5"
+                                    title="Upvote"
+                                  >
+                                    <ChevronUp className="w-4 h-4" />
+                                  </button>
+                                  <button 
+                                    onClick={() => handlePledge(processedS)}
+                                    disabled={!session || !userApiKey || (processedS.pledged_by || []).includes(session?.user?.id || '')}
+                                    className="p-2.5 rounded-lg bg-white/5 border border-white/10 text-yellow-500/50 hover:bg-yellow-500 hover:text-black hover:border-yellow-500 transition-all disabled:opacity-20"
+                                    title="Manifest with Energy"
+                                  >
+                                    <Sparkles className="w-4 h-4" />
+                                  </button>
+                                </>
+                              )
+                            )}
+
+                            {(isCreator || (processedS.user_id && session?.user?.id && processedS.user_id === session.user.id) || (processedS.pledged_by || []).includes(session?.user?.id || '')) && (
+                              <button 
+                                onClick={() => {
+                                  if (window.confirm("Delete this entry?")) {
+                                    handleDeleteSuggestion(s.id);
+                                  }
+                                }}
+                                className="p-2.5 rounded-lg border border-pink-500/20 text-pink-500/40 hover:bg-pink-500 hover:text-white hover:border-pink-500 transition-all"
+                                title="Delete"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
                         </div>
+
+                        {/* Expandable Feedback / Details */}
+                        {advice.filter(a => a.suggestion_id === s.id).length > 0 && (
+                          <div className="mx-6 mt-1 mb-4 pt-1 flex flex-wrap gap-2">
+                             {advice.filter(a => a.suggestion_id === s.id).map((a, i) => (
+                               <div key={i} className="text-[8px] bg-white/[0.03] text-white/40 px-3 py-1 rounded-full border border-white/5 flex items-center gap-2">
+                                 <MessageCircle className="w-2 h-2 text-indigo-400" />
+                                 <span className="text-white/60 lowercase">{a.user_email.split('@')[0]}:</span>
+                                 <span>{a.content}</span>
+                               </div>
+                             ))}
+                          </div>
+                        )}
                       </motion.div>
                     );
                   })}
+                  </div>
                 </div>
               ) : activeTab === 'evolution' ? (
                 <EvolutionTree 
                   suggestions={suggestions} 
                   onSelect={(s) => {
-                    // Logic to jump to this node or show details
                     console.log("Selected evolution node:", s);
                   }} 
                 />
@@ -1773,12 +1772,7 @@ export default function App() {
                     </button>
                   </div>
                 </div>
-              ) : (
-                <div className="flex justify-center flex-col items-center gap-2">
-                  <span className="text-[11px] uppercase tracking-[10px] text-white/20 font-black">Profile Settings</span>
-                  <div className="w-32 h-1 bg-gradient-to-r from-transparent via-white/10 to-transparent" />
-                </div>
-              )}
+              ) : null}
             </div>
           </motion.div>
         )}
