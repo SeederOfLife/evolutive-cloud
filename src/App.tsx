@@ -44,6 +44,7 @@ interface Suggestion {
   votes: number;
   energy: number; // 0 to 100
   status: string;
+  user_id?: string;
   manifested_code?: string;
   created_at?: string;
   pledged_by?: string[]; // user ids
@@ -855,7 +856,7 @@ export default function App() {
     }
   };
 
-  const isCreator = !!session?.user?.id && (session.user.id === creatorId || !creatorId);
+  const isCreator = !!session?.user?.id && !!creatorId && session.user.id === creatorId;
   const canSuggest = isFinalized || isCreator;
   const canInteract = isFinalized || isCreator;
   
@@ -868,29 +869,7 @@ export default function App() {
   
   const fetchSuggestions = async () => {
     if (!supabase) {
-      setSuggestions([
-        { id: 1, content: "Add a floating neon digital clock in the void", votes: 45, energy: 100, status: "pending", manifested_code: `
-          function App() {
-            const [time, setTime] = React.useState(new Date());
-            React.useEffect(() => {
-              const timer = setInterval(() => setTime(new Date()), 1000);
-              return () => clearInterval(timer);
-            }, []);
-            return (
-              <div className="flex items-center justify-center h-screen">
-                <div className="text-center p-10 border border-indigo-500/30 bg-indigo-500/10 rounded-3xl backdrop-blur-xl">
-                  <h2 className="text-6xl font-mono text-indigo-400 font-bold drop-shadow-[0_0_15px_rgba(129,140,248,0.5)]">
-                    {time.toLocaleTimeString()}
-                  </h2>
-                  <p className="mt-4 text-white/40 uppercase tracking-widest text-xs">Syncing with Temporal Grid</p>
-                </div>
-              </div>
-            );
-          }
-        ` },
-        { id: 2, content: "Create a simple atmospheric ambient sound controller", votes: 8, energy: 20, status: "pending" },
-        { id: 3, content: "Grid map showing the total energy of all suggestions", votes: 24, energy: 60, status: "pending" },
-      ]);
+      setSuggestions([]);
       return;
     }
 
@@ -1498,7 +1477,7 @@ export default function App() {
                                         >
                                           {isRefining === s.id ? <Loader2 className="w-6 h-6 animate-spin" /> : <RefreshCw className="w-6 h-6" />}
                                         </button>
-                                        {isCreator && (
+                                        {(isCreator || s.user_id === session?.user?.id) && (
                                           <button 
                                             onClick={() => {
                                               if (window.confirm("Delete this generated app?")) {
@@ -1544,7 +1523,7 @@ export default function App() {
                                 <div className="flex flex-col gap-3 w-full px-6">
                                     <div className="flex justify-center gap-5">
                                       {/* Delete Button */}
-                                      {(isCreator || (processedS.pledged_by || []).includes(session?.user?.id || '')) && (
+                                      {(isCreator || s.user_id === session?.user?.id || (processedS.pledged_by || []).includes(session?.user?.id || '')) && (
                                       <button 
                                         onClick={() => {
                                           if (window.confirm("Are you sure you want to delete this idea?")) {
