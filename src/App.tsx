@@ -29,7 +29,8 @@ import {
   MessageCircle,
   RefreshCw,
   Info,
-  Trash2
+  Trash2,
+  GitBranch
 } from "lucide-react";
 import { supabase } from "./lib/supabase";
 import { GoogleGenAI } from "@google/genai";
@@ -48,6 +49,97 @@ interface Suggestion {
   pledged_by?: string[]; // user ids
   parent_id?: number | null; // For refinement iterations
   version?: number;
+  is_deleted?: boolean;
+}
+
+function EvolutionTree({ suggestions, onSelect }: { suggestions: Suggestion[], onSelect: (s: Suggestion) => void }) {
+  const rootNodes = useMemo(() => suggestions.filter(s => !s.parent_id && s.status !== 'system_config'), [suggestions]);
+  
+  const buildTree = (s: Suggestion, level: number = 0): any => {
+    const children = suggestions.filter(child => child.parent_id === s.id);
+    return {
+      node: s,
+      level,
+      children: children.map(c => buildTree(c, level + 1))
+    };
+  };
+
+  const forest = useMemo(() => rootNodes.map(r => buildTree(r)), [rootNodes, suggestions]);
+
+  if (forest.length === 0) {
+    return (
+      <div className="h-full flex flex-col items-center justify-center opacity-20 text-center">
+        <GitBranch className="w-20 h-20 mb-6" />
+        <p className="text-xl font-black uppercase tracking-[10px]">No Evolutionary Paths<br/>Detected Yet</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-full h-full overflow-auto custom-scrollbar p-20 flex flex-col gap-32">
+      {forest.map((tree, i) => (
+        <div key={i} className="flex flex-col gap-4">
+          <div className="h-px w-32 bg-gradient-to-r from-transparent via-indigo-500/50 to-transparent" />
+          <EvolutionBranch branch={tree} onSelect={onSelect} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function EvolutionBranch({ branch, onSelect }: { branch: any, onSelect: (s: Suggestion) => void }) {
+  let title = branch.node.content;
+  if (branch.node.content.startsWith('JSON:')) {
+    try { title = JSON.parse(branch.node.content.substring(5)).text; } catch(e) {}
+  }
+
+  return (
+    <div className="flex items-center gap-16 relative">
+      <motion.div 
+        whileHover={{ scale: 1.05, y: -5 }}
+        onClick={() => onSelect(branch.node)}
+        className={`shrink-0 w-64 p-6 rounded-[2rem] border-2 cursor-pointer transition-all relative z-10 ${
+          branch.node.status === 'manifested' 
+            ? 'bg-indigo-500/10 border-indigo-500/50 shadow-[0_0_30px_rgba(99,102,241,0.1)]' 
+            : 'bg-white/[0.03] border-white/10 hover:border-white/20'
+        }`}
+      >
+        {branch.node.status === 'manifested' && (
+          <div className="absolute -top-3 -right-3 w-8 h-8 bg-indigo-500 rounded-full flex items-center justify-center shadow-lg animate-pulse">
+            <Sparkles className="w-4 h-4 text-white" />
+          </div>
+        )}
+        <div className="text-[9px] font-black uppercase tracking-widest text-white/20 mb-3 flex items-center gap-2">
+          <div className={`w-1.5 h-1.5 rounded-full ${branch.node.status === 'manifested' ? 'bg-indigo-400' : 'bg-white/20'}`} />
+          NODE_{branch.node.id}
+        </div>
+        <div className="text-[11px] text-white/80 font-bold line-clamp-3 leading-relaxed mb-6 italic group-hover:text-white">
+           "{title}"
+        </div>
+        <div className="flex justify-between items-center border-t border-white/5 pt-4">
+           <span className={`text-[8px] uppercase font-black tracking-[2px] ${branch.node.status === 'manifested' ? 'text-indigo-400' : 'text-white/40'}`}>
+             {branch.node.status}
+           </span>
+           <div className="flex gap-2">
+             {branch.node.version && <span className="px-2 py-0.5 rounded-full bg-white/5 text-[7px] text-white/40 font-black tracking-tighter">V{branch.node.version}</span>}
+             <span className="px-2 py-0.5 rounded-full bg-white/5 text-[7px] text-indigo-400 font-black tracking-tighter uppercase">{branch.node.votes}V</span>
+           </div>
+        </div>
+      </motion.div>
+
+      {branch.children.length > 0 && (
+        <div className="flex flex-col gap-12 relative py-4">
+          <div className="absolute left-0 top-0 bottom-0 w-px bg-gradient-to-b from-white/5 via-indigo-500/20 to-white/5" style={{ left: '-32px' }} />
+          {branch.children.map((child: any, i: number) => (
+            <div key={i} className="flex items-center relative">
+               <div className="absolute left-0 w-8 h-px bg-indigo-500/20" style={{ left: '-32px' }} />
+               <EvolutionBranch branch={child} onSelect={onSelect} />
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 interface Advice {
@@ -147,7 +239,6 @@ function ModuleNode({ suggestion, onRun }: { suggestion: Suggestion, onRun: (cod
     meshRef.current.position.z = Math.sin(t) * radius;
     meshRef.current.position.y = yOffset + Math.sin(t * 2) * 0.5;
     meshRef.current.rotation.y += 0.01;
-    meshRef.current.rotation.x += 0.005;
   });
 
   return (
@@ -160,7 +251,7 @@ function ModuleNode({ suggestion, onRun }: { suggestion: Suggestion, onRun: (cod
       onPointerOver={() => setHovered(true)}
       onPointerOut={() => setHovered(false)}
     >
-      <boxGeometry args={[0.3, 0.3, 0.3]} />
+      <sphereGeometry args={[0.15, 32, 32]} />
       <meshStandardMaterial 
         color={hovered ? "#fff" : color} 
         emissive={hovered ? "#fff" : color}
@@ -176,6 +267,20 @@ function ModuleNode({ suggestion, onRun }: { suggestion: Suggestion, onRun: (cod
 
 function Nebula({ count = 3000 }) {
   const timeRef = useRef(0);
+  const circleTexture = useMemo(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 64;
+    canvas.height = 64;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.beginPath();
+      ctx.arc(32, 32, 30, 0, Math.PI * 2);
+      ctx.fillStyle = '#ffffff';
+      ctx.fill();
+    }
+    return new THREE.CanvasTexture(canvas);
+  }, []);
+
   const { points, colors } = useMemo(() => {
     const p = new Float32Array(count * 3);
     const c = new Float32Array(count * 3);
@@ -228,9 +333,11 @@ function Nebula({ count = 3000 }) {
         size={0.15}
         vertexColors
         transparent
+        map={circleTexture}
         opacity={0.6}
         sizeAttenuation
         blending={THREE.AdditiveBlending}
+        depthWrite={false}
       />
     </points>
   );
@@ -241,29 +348,80 @@ function Nebula({ count = 3000 }) {
 function ModulePlayer({ code, onClose }: { code: string, onClose: () => void }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
+  const cleanCode = useMemo(() => {
+    return code
+      .replace(/import\s+.*\s+from\s+['"].*['"];?/g, '') // Remove imports
+      .replace(/export\s+default\s+/g, '') // Remove export default
+      .replace(/export\s+/g, ''); // Remove other exports
+  }, [code]);
+
   const srcDoc = useMemo(() => `
     <!DOCTYPE html>
     <html>
       <head>
+        <meta charset="UTF-8" />
         <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
         <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
         <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
         <script src="https://cdn.tailwindcss.com"></script>
+        <script src="https://unpkg.com/lucide@latest"></script>
+        <script src="https://unpkg.com/framer-motion@10.16.4/dist/framer-motion.js"></script>
+        <script src="https://unpkg.com/recharts/umd/Recharts.js"></script>
+        <script src="https://unpkg.com/d3@7"></script>
+        <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
         <style>
-          body { background: transparent; color: white; margin: 0; font-family: sans-serif; }
-          .container { padding: 20px; }
+          body { 
+            background: transparent; 
+            color: white; 
+            margin: 0; 
+            font-family: 'Inter', sans-serif; 
+            min-height: 100vh;
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+            overflow-y: auto;
+            overflow-x: hidden;
+          }
+          #root { width: 100%; height: 100%; }
+          .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+          .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+          .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(129, 140, 248, 0.2); border-radius: 10px; }
+          .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(129, 140, 248, 0.4); }
         </style>
       </head>
-      <body>
+      <body class="custom-scrollbar">
         <div id="root"></div>
         <script type="text/babel">
-          ${code}
-          const root = ReactDOM.createRoot(document.getElementById('root'));
-          root.render(<App />);
+          (function() {
+            try {
+              const React = window.React;
+              const { useState, useEffect, useMemo, useRef, useCallback, createContext, useContext } = React;
+              const ReactDOM = window.ReactDOM;
+              const motion = window.Motion;
+              const Recharts = window.Recharts;
+              const d3 = window.d3;
+              const confetti = window.confetti;
+
+              // Mock icons helper if lucide-react isn't fully available
+              const Lucide = window.lucide;
+              
+              // If the code didn't define App, but defined something else, try to find it
+              const ComponentToRender = typeof App !== 'undefined' ? App : null;
+              
+              if (ComponentToRender) {
+                const root = ReactDOM.createRoot(document.getElementById('root'));
+                root.render(<ComponentToRender />);
+              } else {
+                document.getElementById('root').innerHTML = '<div style="padding:20px; color:rgba(255,255,255,0.5); text-align:center">Evolution Manifested. No entry point found.</div>';
+              }
+            } catch (err) {
+              document.getElementById('root').innerHTML = '<pre style="color:pink; padding:20px; white-space:pre-wrap">' + err.message + '</pre>';
+            }
+          })();
         </script>
       </body>
     </html>
-  `, [code]);
+  `, [cleanCode]);
 
   return (
     <motion.div 
@@ -299,18 +457,20 @@ function ModulePlayer({ code, onClose }: { code: string, onClose: () => void }) 
 
 export default function App() {
   const [isOpen, setIsOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'mind' | 'identity'>('mind');
+  const [activeTab, setActiveTab] = useState<'mind' | 'identity' | 'evolution'>('mind');
   const [input, setInput] = useState("");
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [dbFeatures, setDbFeatures] = useState<{ 
     pledged_by: boolean, 
     manifested_code: boolean,
     energy: boolean,
-    parent_id: boolean
-  }>({ pledged_by: true, manifested_code: true, energy: true, parent_id: true });
+    parent_id: boolean,
+    version: boolean
+  }>({ pledged_by: true, manifested_code: true, energy: true, parent_id: true, version: true });
   const [isLoading, setIsLoading] = useState(false);
   const [isManifesting, setIsManifesting] = useState<number | null>(null);
   const [activeModule, setActiveModule] = useState<string | null>(null);
+  const [isRepoOpen, setIsRepoOpen] = useState(false);
   const [activeUsersCount, setActiveUsersCount] = useState(1);
   const [presenceData, setPresenceData] = useState<Record<string, any>>({});
   const [echoes, setEchoes] = useState<VoidEcho[]>([]);
@@ -322,6 +482,57 @@ export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [userApiKey, setUserApiKey] = useState<string>(() => localStorage.getItem('evolutive_energy_key') || "");
+
+  // Sync Profile on Auth
+  useEffect(() => {
+    if (!session || !supabase) return;
+
+    const fetchProfile = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('user_profiles')
+          .select('*')
+          .eq('id', session.user.id)
+          .maybeSingle();
+
+        if (error) {
+          console.warn("Profile fetch error (table might not exist):", error);
+          return;
+        }
+
+        if (data) {
+          setUserProfile(data);
+          if (data.personal_api_key && !userApiKey) {
+            setUserApiKey(data.personal_api_key);
+            localStorage.setItem('evolutive_energy_key', data.personal_api_key);
+          }
+        } else {
+          // Attempt to create profile
+          await supabase.from('user_profiles').insert([{ id: session.user.id }]);
+        }
+      } catch (e) {
+        console.error("Profile sync catch:", e);
+      }
+    };
+
+    fetchProfile();
+  }, [session, supabase]);
+
+  const saveApiKeyToAccount = async (key: string) => {
+    setUserApiKey(key);
+    localStorage.setItem('evolutive_energy_key', key);
+    if (session && supabase) {
+      try {
+        await supabase.from('user_profiles').update({ personal_api_key: key }).eq('id', session.user.id);
+        alert("API Key synced to your account.");
+      } catch (e) {
+        console.error("Error syncing API key:", e);
+      }
+    } else {
+      alert("API Key saved locally.");
+    }
+  };
+
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
   const [authError, setAuthError] = useState<string | null>(null);
@@ -531,7 +742,7 @@ export default function App() {
   };
 
   const displaySuggestions = useMemo(() => {
-    return suggestions.filter(s => s.status !== 'system_config');
+    return suggestions.filter(s => s.status !== 'system_config' && s.status !== 'deleted' && !s.is_deleted);
   }, [suggestions]);
 
   const handleRefine = async (suggestion: Suggestion, refinementPrompt: string) => {
@@ -546,6 +757,21 @@ export default function App() {
         Original Code: ${suggestion.manifested_code}
         
         Task: Modify the original code based on the new feedback.
+        Complexity Level: Professional / High Complexity.
+        Available Libraries:
+        - window.React (useState, useEffect, etc.)
+        - window.Motion (for animations, use as 'motion')
+        - window.Recharts (for charts, use as 'Recharts.LineChart' etc.)
+        - window.d3 (for data viz)
+        - window.confetti (for effects)
+        - window.lucide (for icons, initialize via lucide.createIcons or similar if needed, or assume SVG standard)
+
+        Design Guidance:
+        - Create professional, polished UI patterns (dashboards, landing pages, interactive labs).
+        - Use clean typography, responsive layouts, and modern hover states.
+        - Implement robust internal state if the request implies complex tracking.
+        - Ensure the app feels "complete" and high-end.
+
         Constraints:
         - Output ONLY the modified component code.
         - The component must be named "App".
@@ -563,17 +789,21 @@ export default function App() {
 
       if (supabase) {
         // Create a new version of the app
+        const insertData: any = { 
+          content: `Improved version of: ${suggestion.content} (${refinementPrompt})`,
+          status: 'manifested',
+          votes: 0,
+          energy: 100,
+          manifested_code: generatedCode,
+        };
+
+        if (dbFeatures.parent_id) insertData.parent_id = suggestion.id;
+        // Don't assume version exists if not detected
+        // if (dbFeatures.version) insertData.version = (suggestion.version || 1) + 1;
+
         await supabase
           .from('suggestions')
-          .insert([{ 
-            content: `Improved version of: ${suggestion.content} (${refinementPrompt})`,
-            status: 'manifested',
-            votes: 0,
-            energy: 100,
-            manifested_code: generatedCode,
-            parent_id: suggestion.id,
-            version: (suggestion.version || 1) + 1
-          }]);
+          .insert([insertData]);
       } else {
         setSuggestions([{ 
           id: Date.now(), 
@@ -672,7 +902,8 @@ export default function App() {
             pledged_by: columns.includes('pledged_by'),
             manifested_code: columns.includes('manifested_code'),
             energy: columns.includes('energy'),
-            parent_id: columns.includes('parent_id')
+            parent_id: columns.includes('parent_id'),
+            version: columns.includes('version')
           });
           console.log("Database Schema:", columns);
         }
@@ -799,8 +1030,20 @@ export default function App() {
       return;
     }
     try {
-      const { error } = await supabase.from('suggestions').delete().eq('id', id);
-      if (error) throw error;
+      // Soft delete: try updating status or is_deleted flag first
+      const updateData: any = { status: 'deleted' };
+      if (suggestions.some(s => s.id === id && 'is_deleted' in s)) {
+         updateData.is_deleted = true;
+      }
+
+      const { error } = await supabase.from('suggestions').update(updateData).eq('id', id);
+      
+      if (error) {
+        // If update fails (maybe schema doesn't support status='deleted'), fallback to hard delete
+        console.warn("Soft delete failed, attempting hard delete:", error);
+        await supabase.from('suggestions').delete().eq('id', id);
+      }
+      
       setSuggestions(prev => prev.filter(s => s.id !== id));
     } catch (err: any) {
       console.error("Error deleting suggestion:", err);
@@ -837,17 +1080,36 @@ export default function App() {
       
       const prompt = `
         System: You are the Evolutive Cloud Manifestation Engine. 
+        Objective: Generate professional-grade, high-complexity interactive applications.
         Context: This app was requested by the community. ${suggestion.pledged_by?.length || 0} users supported this idea.
         
-        Task: Create a beautiful, minimalist React component for the following request: "${suggestion.content}"
+        Task: Create a beautiful, polished, and functionally complex React application for: "${suggestion.content}"
         
+        Capabilities & Libraries:
+        - React 18 (Standard hooks available globally: useState, useEffect, useMemo, etc.)
+        - Tailwind CSS (Full utility suite)
+        - window.Motion (Framer Motion equivalent for smooth layouts and animations)
+        - window.Recharts (Professional charting: LineChart, AreaChart, BarChart, etc.)
+        - window.d3 (Powerful data manipulation and visualization)
+        - window.confetti (Visual celebrations)
+        - window.lucide (Global icon set access)
+
+        Design Style:
+        - Modern SaaS / Dark Laboratory aesthetic.
+        - Deep shadows, glassmorphism, responsive grids.
+        - Interactive elements with feedback (hover transitions, active scales).
+        - Multi-section layouts (e.g. Header, Sidebar, Dashboard Grid) if appropriate.
+
+        Complexity Requirements:
+        - Do not build "hello world" versions. Build "production-ready" pages.
+        - If data is involved, include realistic mock data sets.
+        - Use sophisticated state management for internal transitions.
+
         Constraints:
         - Output ONLY the component code.
         - The component must be named "App".
         - Use Tailwind CSS for all styling.
-        - Assume React and Tailwind are already loaded in the environment.
-        - The container should be transparent to work with a dark background.
-        - Ensure clear typography and atmospheric feel.
+        - The container should be transparent or dark to work with the Evolutive Cloud background.
         - Return ONLY the code block, no markdown formatting.
       `;
 
@@ -967,7 +1229,7 @@ export default function App() {
 
       {/* --- HUD LAYER --- */}
       <div className="absolute top-10 left-10 z-20 flex flex-col gap-4">
-        {session?.user.id === creatorId && (
+        {isCreator && (
           <button 
             onClick={handleToggleFinalize}
             className={`w-12 h-12 rounded-full border flex items-center justify-center transition-all shadow-xl backdrop-blur-md pointer-events-auto ${
@@ -980,7 +1242,117 @@ export default function App() {
         )}
       </div>
 
-      <Canvas shadows camera={{ position: [0, 0, 8], fov: 75 }} className="cursor-grab active:cursor-grabbing">
+      {/* --- RIGHT SIDEBAR TOGGLE --- */}
+      <div className="absolute top-1/2 -translate-y-1/2 right-4 z-40">
+        <button 
+          onClick={() => setIsRepoOpen(true)}
+          className="w-14 h-24 bg-white/5 backdrop-blur-xl border border-white/10 rounded-full flex flex-col items-center justify-center gap-3 hover:bg-white/10 hover:border-indigo-500/50 transition-all group pointer-events-auto shadow-2xl"
+        >
+          <Database className="w-5 h-5 text-indigo-400 group-hover:scale-125 transition-transform" />
+          <span className="[writing-mode:vertical-lr] text-[8px] font-black uppercase tracking-[3px] text-white/40 group-hover:text-white transition-colors">Manifests</span>
+        </button>
+      </div>
+
+      {/* --- REPO SIDEBAR --- */}
+      <AnimatePresence>
+        {isRepoOpen && (
+          <>
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsRepoOpen(false)}
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60]"
+            />
+            <motion.div 
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              className="fixed top-0 right-0 h-full w-[400px] bg-[#050510]/95 backdrop-blur-2xl border-l border-white/10 z-[70] shadow-2xl flex flex-col"
+            >
+              <div className="p-8 border-b border-white/10 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Database className="w-5 h-5 text-indigo-400" />
+                  <h2 className="text-[12px] font-black uppercase tracking-[4px]">Archives</h2>
+                </div>
+                <button 
+                  onClick={() => setIsRepoOpen(false)}
+                  className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center hover:bg-white/10 transition-colors"
+                >
+                  <X className="w-5 h-5 text-white/40" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-4 custom-scrollbar space-y-4">
+                {suggestions.filter(s => s.status === 'manifested').length === 0 && (
+                  <div className="h-40 flex flex-col items-center justify-center text-center opacity-20">
+                    <History className="w-10 h-10 mb-4" />
+                    <p className="text-[10px] uppercase font-black tracking-widest leading-loose">No manifestations<br/>yet recorded in this epoch.</p>
+                  </div>
+                )}
+                {suggestions
+                  .filter(s => s.status === 'manifested')
+                  .sort((a, b) => b.id - a.id)
+                  .map((s) => {
+                    let title = s.content;
+                    if (s.content.startsWith('JSON:')) {
+                      try { title = JSON.parse(s.content.substring(5)).text; } catch(e) {}
+                    }
+                    return (
+                      <motion.div 
+                        key={s.id}
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        className="px-6 py-8 bg-white/[0.03] border border-white/5 rounded-3xl hover:border-indigo-500/30 transition-all group flex flex-col gap-4"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-mono text-indigo-400/60 font-bold">NODE_{s.id}</span>
+                          <span className="text-[8px] uppercase tracking-widest text-white/20 font-black">Manifested</span>
+                        </div>
+                        <h3 className="text-[13px] font-bold text-white/90 leading-relaxed italic line-clamp-2">"{title}"</h3>
+                        <div className="flex gap-2">
+                          <button 
+                            onClick={() => {
+                              if (s.manifested_code) {
+                                setActiveModule(s.manifested_code);
+                                setIsRepoOpen(false);
+                              }
+                            }}
+                            className="flex-1 py-3 bg-white text-black text-[10px] font-black uppercase tracking-widest rounded-full hover:scale-105 transition-transform flex items-center justify-center gap-2"
+                          >
+                            <Play className="w-3 h-3" /> Execute
+                          </button>
+                          <button 
+                            onClick={() => {
+                              if (s.manifested_code) {
+                                // Just a preview of the prompt/id
+                                console.log(s);
+                              }
+                            }}
+                            className="w-12 h-12 bg-white/5 border border-white/10 rounded-full flex items-center justify-center hover:bg-white/10 transition-all text-white/40 hover:text-white"
+                          >
+                            <Info className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </motion.div>
+                    );
+                  })
+                }
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* The Canvas uses shadows and a high-fov for immersion. THREE.Clock warnings may trigger from internal fiber init. */}
+      <Canvas 
+        shadows 
+        camera={{ position: [0, 0, 10], fov: 75 }} 
+        className="cursor-grab active:cursor-grabbing"
+        gl={{ antialias: true, alpha: true }}
+        dpr={[1, 2]}
+      >
         <ambientLight intensity={0.2} />
         <pointLight position={[10, 10, 10]} intensity={1.5} color="#ffffff" />
         <pointLight position={[-10, -10, -10]} intensity={1} color="#6366f1" />
@@ -1031,13 +1403,13 @@ export default function App() {
             <div className="flex border-b border-white/10 p-6 shrink-0 bg-white/5 items-center justify-between">
               <div className="flex items-center gap-10">
                     <div className="flex gap-12">
-                  {['mind', 'identity'].map((tab) => (
+                  {['mind', 'evolution', 'identity'].map((tab) => (
                     <button 
                       key={tab}
                       onClick={() => setActiveTab(tab as any)}
                       className={`text-[12px] font-black uppercase tracking-[6px] transition-all relative ${activeTab === tab ? 'text-white' : 'text-white/20'}`}
                     >
-                      {tab === 'mind' ? 'Shared Ideas' : 'Account'}
+                      {tab === 'mind' ? 'Shared Ideas' : tab === 'evolution' ? 'Evolution' : 'Account'}
                       {activeTab === tab && <motion.div layoutId="tab" className="absolute -bottom-2 left-0 w-full h-[3px] bg-gradient-to-r from-indigo-500 via-pink-500 to-yellow-500" />}
                     </button>
                   ))}
@@ -1055,9 +1427,9 @@ export default function App() {
             </div>
 
             {/* Suggestions Root - Scrollable */}
-            <div className="flex-1 overflow-y-auto p-10 bg-[radial-gradient(circle_at_50%_50%,rgba(99,102,241,0.05)_0%,transparent_70%)] custom-scrollbar">
+            <div className="flex-1 overflow-y-auto bg-[radial-gradient(circle_at_50%_50%,rgba(99,102,241,0.05)_0%,transparent_70%)] custom-scrollbar">
               {activeTab === 'mind' ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 p-10">
                   {displaySuggestions.map((s, idx) => {
                     let processedS = { ...s };
                     let displayContent = s.content;
@@ -1222,8 +1594,16 @@ export default function App() {
                     );
                   })}
                 </div>
+              ) : activeTab === 'evolution' ? (
+                <EvolutionTree 
+                  suggestions={suggestions} 
+                  onSelect={(s) => {
+                    // Logic to jump to this node or show details
+                    console.log("Selected evolution node:", s);
+                  }} 
+                />
               ) : (
-                <div className="max-w-md mx-auto space-y-12 py-10">
+                <div className="max-w-md mx-auto space-y-12 py-20">
                   {!session ? (
                     <div className="text-center space-y-10">
                       <div className="w-24 h-24 bg-gradient-to-tr from-indigo-500 to-pink-500 rounded-full flex items-center justify-center mx-auto shadow-[0_0_50px_rgba(99,102,241,0.3)]">
@@ -1333,13 +1713,10 @@ export default function App() {
                               className="bg-white/10 border border-white/20 w-full p-4 rounded-xl text-center text-sm text-indigo-300 focus:border-indigo-500 outline-none"
                             />
                             <button 
-                              onClick={() => {
-                                localStorage.setItem('evolutive_energy_key', userApiKey);
-                                alert("API Key saved. You can now manifest apps!");
-                              }}
+                              onClick={() => saveApiKeyToAccount(userApiKey)}
                               className="py-4 px-6 bg-white text-black text-[11px] font-black uppercase tracking-widest rounded-full hover:bg-indigo-400 hover:text-white transition-all shadow-lg"
                             >
-                              Save API Key
+                              Sync to Account
                             </button>
                           </div>
                         </div>
