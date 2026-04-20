@@ -813,7 +813,11 @@ export default function App() {
         contents: prompt
       });
 
-      const generatedCode = response.text.replace(/```jsx|```tsx|```javascript|```/g, '').trim();
+      const generatedCode = (response.text || "").replace(/```jsx|```tsx|```javascript|```/g, '').trim();
+
+      if (!generatedCode) {
+        throw new Error("The consciousness returned an empty manifestation. Try refining your request.");
+      }
 
       if (supabase) {
         // Create a new version of the app
@@ -983,7 +987,7 @@ export default function App() {
         },
       });
 
-      const content = response.text.trim() || rawInput;
+      const content = (response.text || "").trim() || rawInput;
 
       if (!supabase) {
         setSuggestions([{ id: Date.now(), content, votes: 0, energy: 0, status: "pending", user_id: session?.user?.id }, ...suggestions]);
@@ -1184,7 +1188,11 @@ export default function App() {
         contents: prompt
       });
 
-      const generatedCode = response.text.replace(/```jsx|```tsx|```javascript|```/g, '').trim();
+      const generatedCode = (response.text || "").replace(/```jsx|```tsx|```javascript|```/g, '').trim();
+
+      if (!generatedCode) {
+        throw new Error("The void returned no code. Manifestation failed.");
+      }
 
       if (supabase) {
         const updateData: any = { status: 'manifested' };
