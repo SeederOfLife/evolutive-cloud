@@ -14,6 +14,7 @@ import {
   MessageSquare, 
   Plus, 
   X, 
+  Search,
   Activity, 
   Database, 
   Zap, 
@@ -37,6 +38,8 @@ import {
 } from "lucide-react";
 import { supabase } from "./lib/supabase";
 import { GoogleGenAI } from "@google/genai";
+import OpenAI from "openai";
+import * as webllm from "@mlc-ai/web-llm";
 import { User, Session } from "@supabase/supabase-js";
 import { User as UserIcon, LogOut, ShieldCheck, Key } from "lucide-react";
 
@@ -562,7 +565,27 @@ export default function App() {
   const [creatorId, setCreatorId] = useState<string | null>(null);
   const [advice, setAdvice] = useState<Advice[]>([]);
   const [isRefining, setIsRefining] = useState<number | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterType, setFilterType] = useState<'all' | 'manifested' | 'pending' | 'mine'>('all');
+  const [selectedModel, setSelectedModel] = useState(() => {
+    return localStorage.getItem('soul_model') || "gemini-3-flash-preview";
+  });
+  const [aiProvider, setAiProvider] = useState<'google' | 'openai' | 'anthropic' | 'custom' | 'web-llm' | 'gemini-nano' | 'mlc-mobile'>(() => {
+    return (localStorage.getItem('soul_provider') as any) || "google";
+  });
+  const [customEndpoint, setCustomEndpoint] = useState(() => {
+    return localStorage.getItem('soul_custom_endpoint') || "";
+  });
+  const [webLlmProgress, setWebLlmProgress] = useState<string>("");
+  const webLlmEngineRef = useRef<webllm.MLCEngine | null>(null);
 
+  useEffect(() => {
+    localStorage.setItem('soul_model', selectedModel);
+    localStorage.setItem('soul_provider', aiProvider);
+    localStorage.setItem('soul_custom_endpoint', customEndpoint);
+  }, [selectedModel, aiProvider, customEndpoint]);
+
+  // Derive ghosts from presence
   // Derive ghosts from presence
   const ghosts = useMemo(() => {
     return Object.entries(presenceData)
@@ -571,7 +594,112 @@ export default function App() {
       .filter((p: any) => p.x !== undefined && p.y !== undefined);
   }, [presenceData, session]);
 
-  // Gemini AI Provider
+  const soulRank = useMemo(() => {
+    if (!session) return { title: "Unidentified", color: "#ffffff", level: 0 };
+    const myCreations = suggestions.filter(s => s.user_id === session.user.id);
+    const manifests = myCreations.filter(s => s.status === 'manifested').length;
+    const totalEco = myCreations.reduce((acc, curr) => acc + (curr.votes || 0), 0);
+    
+    if (manifests >= 5) return { title: "Grand Architect", color: "#6366f1", level: 4 };
+    if (manifests >= 2) return { title: "Aether Weaver", color: "#ec4899", level: 3 };
+    if (totalEco >= 10) return { title: "Echo Master", color: "#f59e0b", level: 2 };
+    if (myCreations.length >= 1) return { title: "Idea Planter", color: "#10b981", level: 1 };
+    return { title: "Void Wanderer", color: "#94a3b8", level: 0 };
+  }, [suggestions, session]);
+
+  // Unified AI Bridge
+  const callUnifiedAI = async (prompt: string): Promise<string> => {
+    const key = userApiKey || process.env.GEMINI_API_KEY;
+    
+    // Offline / Specialized Mobile Handlers
+    if (aiProvider === 'gemini-nano') {
+      const w = window as any;
+      if (!w.ai || !w.ai.assistant) {
+        throw new Error("Gemini Nano not detected. Ensure 'AI Test' is enabled in your Android Chrome flags (chrome://flags/#optimization-guide-on-device-model).");
+      }
+      const session = await w.ai.assistant.create();
+      const result = await session.prompt(prompt);
+      return result;
+    }
+
+    if (aiProvider === 'web-llm') {
+      if (!webLlmEngineRef.current) {
+        setWebLlmProgress("Wakeing Browser Soul...");
+        const engine = new webllm.MLCEngine();
+        engine.setInitProgressCallback((report) => setWebLlmProgress(report.text));
+        await engine.reload(selectedModel || "Llama-3-8B-Instruct-v0.1-q4f32_1-MLC");
+        webLlmEngineRef.current = engine;
+      }
+      const response = await webLlmEngineRef.current.chat.completions.create({
+        messages: [{ role: "user", content: prompt }]
+      });
+      return response.choices[0].message.content || "";
+    }
+
+    if (aiProvider === 'mlc-mobile') {
+      // Connects to local server if user is sharing bridge from MLC app
+      const client = new OpenAI({
+        apiKey: "no-key",
+        baseURL: customEndpoint || "http://localhost:8080/v1", // Default MLC bridge
+        dangerouslyAllowBrowser: true,
+      });
+      const response = await client.chat.completions.create({
+        model: selectedModel || "main",
+        messages: [{ role: "user", content: prompt }],
+      });
+      return response.choices[0].message.content || "";
+    }
+
+    if (!key && aiProvider === 'google') throw new Error("No Google Energy Source Found.");
+    if (!userApiKey && (aiProvider === 'openai' || aiProvider === 'anthropic')) throw new Error(`No ${aiProvider.toUpperCase()} Key Found.`);
+
+    if (aiProvider === 'google') {
+      const genAI = new GoogleGenAI({ apiKey: key! });
+      const response = await genAI.models.generateContent({
+        model: selectedModel,
+        contents: prompt
+      });
+      return response.text || "";
+    }
+
+    if (aiProvider === 'openai' || aiProvider === 'custom') {
+      const client = new OpenAI({
+        apiKey: userApiKey,
+        baseURL: aiProvider === 'custom' ? customEndpoint : undefined,
+        dangerouslyAllowBrowser: true,
+      });
+
+      const response = await client.chat.completions.create({
+        model: selectedModel,
+        messages: [{ role: "user", content: prompt }],
+      });
+      return response.choices[0].message.content || "";
+    }
+
+    if (aiProvider === 'anthropic') {
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "x-api-key": userApiKey,
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "anthropic-dangerous-direct-browser-access": "true"
+        },
+        body: JSON.stringify({
+          model: selectedModel,
+          max_tokens: 4096,
+          messages: [{ role: "user", content: prompt }]
+        })
+      });
+      const data = await response.json();
+      if (data.error) throw new Error(data.error.message);
+      return data.content[0].text;
+    }
+
+    throw new Error("Soul Link Provider Disconnected.");
+  };
+
+  // Gemini AI Provider (Legacy/Internal)
   const getAI = (customKey?: string) => {
     const key = customKey || userApiKey || process.env.GEMINI_API_KEY;
     if (!key) throw new Error("No Energy Source Found. Connect Identity or Provide Key.");
@@ -765,8 +893,22 @@ export default function App() {
   };
 
   const displaySuggestions = useMemo(() => {
-    return suggestions.filter(s => s.status !== 'system_config' && s.status !== 'deleted' && !s.is_deleted);
-  }, [suggestions]);
+    return suggestions
+      .filter(s => s.status !== 'system_config' && s.status !== 'deleted' && !s.is_deleted)
+      .filter(s => {
+        // Search Filter
+        const title = s.content.startsWith('JSON:') ? JSON.parse(s.content.substring(5)).text : s.content;
+        const matchesSearch = title.toLowerCase().includes(searchQuery.toLowerCase());
+        
+        // Category Filter
+        let matchesCategory = true;
+        if (filterType === 'manifested') matchesCategory = s.status === 'manifested';
+        if (filterType === 'pending') matchesCategory = s.status === 'pending';
+        if (filterType === 'mine') matchesCategory = s.user_id === session?.user?.id;
+        
+        return matchesSearch && matchesCategory;
+      });
+  }, [suggestions, searchQuery, filterType, session]);
 
   const handleRefine = async (suggestion: Suggestion, refinementPrompt: string) => {
     if (!refinementPrompt.trim() || isRefining) return;
@@ -802,18 +944,13 @@ export default function App() {
         - Return ONLY the code block, no markdown formatting.
       `;
 
-      const ai = getAI();
       if (apiQuota < 10) {
         alert("Soul Capacity too low for refinement. Wait for recharge.");
         setIsRefining(null);
         return;
       }
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: prompt
-      });
-
-      const generatedCode = (response.text || "").replace(/```jsx|```tsx|```javascript|```/g, '').trim();
+      const text = await callUnifiedAI(prompt);
+      const generatedCode = text.replace(/```jsx|```tsx|```javascript|```/g, '').trim();
 
       if (!generatedCode) {
         throw new Error("The consciousness returned an empty manifestation. Try refining your request.");
@@ -975,19 +1112,12 @@ export default function App() {
     setIsManifesting(0);
     
     try {
-      const ai = getAI();
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: `Refine this app idea into a clear, concise one-sentence manifestation prompt. Keep it mystical and technical.
+      const prompt = `Refine this app idea into a clear, concise one-sentence manifestation prompt. Keep it mystical and technical.
         Original: "${rawInput}"
-        Manifestation:`,
-        config: {
-          temperature: 0.8,
-          maxOutputTokens: 60,
-        },
-      });
+        Manifestation:`;
 
-      const content = (response.text || "").trim() || rawInput;
+      const text = await callUnifiedAI(prompt);
+      const content = text.trim() || rawInput;
 
       if (!supabase) {
         setSuggestions([{ id: Date.now(), content, votes: 0, energy: 0, status: "pending", user_id: session?.user?.id }, ...suggestions]);
@@ -1177,18 +1307,13 @@ export default function App() {
         - Return ONLY the code block, no markdown formatting.
       `;
 
-      const ai = getAI();
       if (apiQuota < 20) {
         alert("Soul Capacity too low for manifestation. Wait for recharge.");
         setIsManifesting(null);
         return;
       }
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: prompt
-      });
-
-      const generatedCode = (response.text || "").replace(/```jsx|```tsx|```javascript|```/g, '').trim();
+      const text = await callUnifiedAI(prompt);
+      const generatedCode = text.replace(/```jsx|```tsx|```javascript|```/g, '').trim();
 
       if (!generatedCode) {
         throw new Error("The void returned no code. Manifestation failed.");
@@ -1524,6 +1649,32 @@ export default function App() {
             <div className="flex-1 overflow-y-auto bg-black/40 custom-scrollbar">
               {activeTab === 'mind' ? (
                 <div className="max-w-6xl mx-auto p-6">
+                  {/* Search and Filters */}
+                  <div className="flex flex-col md:flex-row gap-6 mb-8 items-center justify-between">
+                    <div className="relative w-full max-w-sm group">
+                      <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20 group-focus-within:text-indigo-400 transition-colors" />
+                      <input 
+                        type="text" 
+                        placeholder="Search the void..." 
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full bg-white/5 border border-white/10 rounded-full py-3 pl-12 pr-6 text-[11px] text-white focus:border-indigo-500 focus:bg-white/10 outline-none transition-all uppercase tracking-widest font-black"
+                      />
+                    </div>
+                    
+                    <div className="flex gap-2 p-1 bg-white/5 rounded-full border border-white/10 shrink-0">
+                      {(['all', 'manifested', 'pending', 'mine'] as const).map((type) => (
+                        <button 
+                          key={type}
+                          onClick={() => setFilterType(type)}
+                          className={`px-4 py-2 rounded-full text-[9px] font-black uppercase tracking-widest transition-all ${filterType === type ? 'bg-indigo-500 text-white shadow-[0_0_20px_rgba(99,102,241,0.4)]' : 'text-white/40 hover:text-white'}`}
+                        >
+                          {type}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
                   {/* Explorer Header */}
                   <div className="grid grid-cols-[1fr_120px_100px_160px] gap-4 px-6 py-3 border-b border-white/10 text-[10px] uppercase tracking-[0.2em] font-black text-white/30 mb-4">
                     <div className="flex items-center gap-2 italic"><Box className="w-3 h-3" /> Idea / Manifestation</div>
@@ -1629,6 +1780,17 @@ export default function App() {
                                     {isRefining === s.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
                                   </button>
                                 )}
+                                <button 
+                                  onClick={() => {
+                                    setInput(displayContent);
+                                    setIsOpen(false);
+                                    window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+                                  }}
+                                  className="p-2.5 rounded-lg border border-white/10 text-white/40 hover:border-indigo-500 hover:text-indigo-400 transition-all hover:bg-white/5"
+                                  title="Fork to new Idea"
+                                >
+                                  <GitBranch className="w-4 h-4" />
+                                </button>
                               </>
                             ) : (
                               processedS.status === 'pending' && (
@@ -1776,38 +1938,180 @@ export default function App() {
                           </button>
                     </div>
                   ) : (
-                    <div className="text-center space-y-10">
-                      <div className="w-24 h-24 rounded-full overflow-hidden mx-auto border-4 border-indigo-500/50 shadow-[0_0_30px_rgba(99,102,241,0.3)]">
-                        <img 
-                          src={session.user.user_metadata.avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${session.user.email}`} 
-                          alt="Soul Avatar"
-                          className="w-full h-full object-cover"
-                          referrerPolicy="no-referrer"
+                    <div className="text-center space-y-8 py-10">
+                      <div className="relative inline-block">
+                        <div className="w-24 h-24 rounded-full overflow-hidden mx-auto border-4 border-indigo-500/50 shadow-[0_0_30px_rgba(99,102,241,0.3)] relative z-10 bg-black">
+                          <img 
+                            src={session.user.user_metadata.avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${session.user.email}`} 
+                            alt="Soul Avatar"
+                            referrerPolicy="no-referrer"
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                        {/* Status Ring */}
+                        <motion.div 
+                          animate={{ rotate: 360 }}
+                          transition={{ duration: 10, repeat: Infinity, ease: "linear" }}
+                          className="absolute -inset-2 border border-dashed border-indigo-500/30 rounded-full"
                         />
                       </div>
-                      
-                      <div className="space-y-2">
-                        <h3 className="text-sm font-black uppercase tracking-[8px] text-indigo-400">{session.user.email}</h3>
-                        <p className="text-[10px] text-white/30 uppercase tracking-widest">Connected Member</p>
+
+                      <div className="space-y-4">
+                         <h3 className="text-xl font-black uppercase tracking-[8px] text-white">{session.user.email?.split('@')[0]}</h3>
+                         <div className="flex flex-col items-center gap-2">
+                          <div 
+                            className="px-6 py-1.5 rounded-full text-[10px] font-black uppercase tracking-[4px] inline-block shadow-lg border"
+                            style={{ backgroundColor: `${soulRank.color}20`, color: soulRank.color, borderColor: `${soulRank.color}40` }}
+                          >
+                            {soulRank.title}
+                          </div>
+                          <div className="flex gap-1 justify-center">
+                            {[...Array(5)].map((_, i) => (
+                              <div 
+                                key={i} 
+                                className={`w-2 h-2 rounded-full ${i < soulRank.level ? 'bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.8)]' : 'bg-white/10'}`} 
+                              />
+                            ))}
+                          </div>
+                        </div>
                       </div>
 
-                      <div className="bg-white/[0.03] p-10 rounded-3xl border border-white/5 space-y-6">
+                      <div className="grid grid-cols-3 gap-6 max-w-lg mx-auto">
+                        <div className="p-6 bg-white/[0.03] border border-white/5 rounded-3xl group">
+                          <div className="text-[10px] text-white/20 uppercase tracking-widest font-black mb-2 group-hover:text-indigo-400 transition-colors">Creations</div>
+                          <div className="text-2xl text-white font-black tracking-tighter">
+                            {suggestions.filter(s => s.user_id === session.user.id).length}
+                          </div>
+                        </div>
+                        <div className="p-6 bg-white/[0.03] border border-white/5 rounded-3xl group">
+                          <div className="text-[10px] text-white/20 uppercase tracking-widest font-black mb-2 group-hover:text-pink-400 transition-colors">Manifests</div>
+                          <div className="text-2xl text-white font-black tracking-tighter">
+                            {suggestions.filter(s => s.user_id === session.user.id && s.status === 'manifested').length}
+                          </div>
+                        </div>
+                        <div className="p-6 bg-white/[0.03] border border-white/5 rounded-3xl group">
+                          <div className="text-[10px] text-white/20 uppercase tracking-widest font-black mb-2 group-hover:text-yellow-400 transition-colors">Influence</div>
+                          <div className="text-2xl text-white font-black tracking-tighter">
+                            {suggestions.filter(s => s.user_id === session.user.id).reduce((acc, curr) => acc + (curr.votes || 0), 0)}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="bg-white/[0.03] p-10 rounded-3xl border border-white/5 space-y-10 text-left">
                         <div className="space-y-4">
-                          <label className="text-[10px] font-black uppercase tracking-[3px] text-white/40 block">Gemini API Key</label>
-                          <div className="flex flex-col gap-4">
-                            <input 
-                              type="password"
-                              value={userApiKey}
-                              onChange={(e) => setUserApiKey(e.target.value)}
-                              placeholder="Enter your Gemini API Key"
-                              className="bg-white/10 border border-white/20 w-full p-4 rounded-xl text-center text-sm text-indigo-300 focus:border-indigo-500 outline-none"
-                            />
-                            <button 
-                              onClick={() => saveApiKeyToAccount(userApiKey)}
-                              className="py-4 px-6 bg-white text-black text-[11px] font-black uppercase tracking-widest rounded-full hover:bg-indigo-400 hover:text-white transition-all shadow-lg"
-                            >
-                              Sync to Account
-                            </button>
+                          <label className="text-[10px] font-black uppercase tracking-[3px] text-white/40 block">Evolution Bridge Provider</label>
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                            {(['google', 'openai', 'anthropic', 'custom', 'web-llm', 'gemini-nano', 'mlc-mobile'] as const).map((p) => (
+                              <button
+                                key={p}
+                                onClick={() => setAiProvider(p)}
+                                className={`py-4 rounded-2xl text-[9px] font-black uppercase tracking-widest transition-all border ${aiProvider === p ? 'bg-indigo-500/20 text-indigo-400 border-indigo-500 shadow-[0_0_20px_rgba(99,102,241,0.2)]' : 'bg-white/5 text-white/30 border-white/5 hover:bg-white/10'}`}
+                              >
+                                {p.replace('-', ' ')}
+                              </button>
+                            ))}
+                          </div>
+                          
+                          {/* Tutorial/Help section */}
+                          <div className="p-4 bg-indigo-500/5 rounded-2xl border border-indigo-500/10 space-y-2">
+                            <div className="flex items-center gap-2 text-indigo-400">
+                              <Info className="w-3 h-3" />
+                              <span className="text-[9px] font-black uppercase tracking-[3px]">Tutorial: {aiProvider.replace('-', ' ')}</span>
+                            </div>
+                            <div className="text-[10px] text-white/40 leading-relaxed italic space-y-2">
+                              {aiProvider === 'google' && <p>The default engine. Recommended for stability. Get your key at aistudio.google.com.</p>}
+                              {aiProvider === 'openai' && <p>Connect to GPT-4o or o1. Requires a valid OpenAI Platform key (platform.openai.com).</p>}
+                              {aiProvider === 'anthropic' && <p>Fuel the cloud with Claude 3.5. Requires an Anthropic Console key.</p>}
+                              {aiProvider === 'custom' && <p>Point to your own server or local AI like Ollama (default: http://localhost:11434/v1).</p>}
+                              {aiProvider === 'web-llm' && (
+                                <div className="space-y-1">
+                                  <p className="font-black text-indigo-400">完全オフライン (FULL OFFLINE)</p>
+                                  <p>Runs AI inside your browser using WebGPU. No internet required after model download. Recommend Llama-3-8B (approx 4GB).</p>
+                                  {webLlmProgress && <p className="text-white/60 font-mono text-[8px] animate-pulse">{webLlmProgress}</p>}
+                                </div>
+                              )}
+                              {aiProvider === 'gemini-nano' && (
+                                <div className="space-y-1">
+                                  <p className="font-black text-indigo-400">PHONE NATIVE (BUILT-IN)</p>
+                                  <p>Uses the experimental AI feature built into your Pixel or Samsung. Requires enabling 'Optimization Guide' in Chrome flags.</p>
+                                </div>
+                              )}
+                              {aiProvider === 'mlc-mobile' && (
+                                <div className="space-y-1">
+                                  <p className="font-black text-indigo-400">LOCAL APP SYNC</p>
+                                  <p>Install the "MLC LLM" app on your iOS/Android. Start the local server in MLC and point the endpoint below to your phone's IP.</p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="space-y-6">
+                          <div className="space-y-3">
+                            <label className="text-[10px] font-black uppercase tracking-[3px] text-white/40 block">Soul Engine Model</label>
+                            <div className="flex flex-col gap-2">
+                              <input 
+                                type="text"
+                                value={selectedModel}
+                                onChange={(e) => setSelectedModel(e.target.value)}
+                                placeholder="Model ID (e.g. gpt-4o, claude-3-5-sonnet...)"
+                                className="bg-white/5 border border-white/10 w-full p-4 rounded-xl text-center text-[11px] text-indigo-300 font-mono focus:border-indigo-500 outline-none"
+                              />
+                              <div className="flex flex-wrap gap-2 justify-center mt-2">
+                                {(aiProvider === 'google' ? ['gemini-2.0-flash-exp', 'gemini-1.5-flash', 'gemini-1.5-pro'] : 
+                                  aiProvider === 'openai' ? ['gpt-4o', 'gpt-4o-mini', 'o1-preview'] :
+                                  aiProvider === 'anthropic' ? ['claude-3-5-sonnet-20240620', 'claude-3-opus-20240229'] :
+                                  aiProvider === 'web-llm' ? ['Llama-3-8B-Instruct-v0.1-q4f32_1-MLC', 'Gemma-2b-it-q4f32_1-MLC'] :
+                                  aiProvider === 'gemini-nano' ? ['builtin-nano'] :
+                                  ['llama3', 'mistral', 'codellama']).map(m => (
+                                  <button 
+                                    key={m} 
+                                    onClick={() => setSelectedModel(m)}
+                                    className="px-3 py-1 bg-white/5 rounded-full text-[8px] text-white/40 hover:text-white border border-white/5"
+                                  >
+                                    {m}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+
+                          {aiProvider === 'custom' && (
+                            <div className="space-y-3">
+                              <label className="text-[10px] font-black uppercase tracking-[3px] text-white/40 block">Connection Endpoint</label>
+                              <input 
+                                type="text"
+                                value={customEndpoint}
+                                onChange={(e) => setCustomEndpoint(e.target.value)}
+                                placeholder="http://localhost:11434/v1"
+                                className="bg-white/5 border border-white/10 w-full p-4 rounded-xl text-center text-[11px] text-white font-mono focus:border-indigo-500 outline-none"
+                              />
+                            </div>
+                          )}
+
+                          <div className="space-y-3">
+                            <label className="text-[10px] font-black uppercase tracking-[3px] text-white/40 block">Energy Source Key (API Key)</label>
+                            <div className="flex flex-col gap-4">
+                              <input 
+                                type="text"
+                                style={{ WebkitTextSecurity: 'disc' } as any}
+                                autoComplete="off"
+                                spellCheck={false}
+                                value={userApiKey}
+                                onChange={(e) => setUserApiKey(e.target.value)}
+                                placeholder={`Paste your ${aiProvider} key here`}
+                                className="bg-white/10 border border-white/20 w-full p-4 rounded-xl text-center text-sm text-indigo-300 focus:border-indigo-500 outline-none"
+                              />
+                              <button 
+                                onClick={() => saveApiKeyToAccount(userApiKey)}
+                                className="py-5 px-6 bg-white text-black text-[11px] font-black uppercase tracking-[4px] rounded-full hover:bg-indigo-400 hover:text-white transition-all shadow-xl"
+                              >
+                                Synchronize Identity
+                              </button>
+                              <p className="text-[8px] text-white/20 uppercase tracking-widest italic text-center">
+                                Soul energy is stored locally and synchronized with your secure soul identity.
+                              </p>
+                            </div>
                           </div>
                         </div>
                       </div>
