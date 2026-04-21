@@ -1174,7 +1174,15 @@ export default function App() {
   };
 
   const handlePledge = async (s: Suggestion) => {
-    if (!session || !userApiKey || !supabase) return;
+    const key = userApiKey || (isCreator ? process.env.GEMINI_API_KEY : null);
+    if (!session || !key || !supabase) {
+      if (!key && !userApiKey) {
+        alert("Please set your Energy Key in the Account tab to power manifestations.");
+        setActiveTab('identity');
+      }
+      return;
+    }
+    if (isRefining) return;
     
     // Schema-aware data extraction
     let pledgedBy = s.pledged_by || [];
@@ -1188,13 +1196,29 @@ export default function App() {
       } catch(e) {}
     }
 
-    if (pledgedBy.includes(session.user.id)) return;
+    const hasPledged = pledgedBy.includes(session.user.id);
+    const newEnergy = Math.min(100, currentEnergy + (isCreator ? 100 : 25));
+    const shouldManifest = newEnergy >= 100;
 
     try {
-      const newPledgedBy = [...pledgedBy, session.user.id];
-      const newEnergy = Math.min(100, currentEnergy + 25);
+      setIsRefining(s.id);
+      const newPledgedBy = hasPledged ? pledgedBy : [...pledgedBy, session.user.id];
       
-      const updateData: any = {};
+      let manifestedCode = s.manifested_code;
+      let newStatus = s.status;
+
+      if (shouldManifest && s.status === 'pending') {
+        const prompt = `Create a functional, professional React component titled "App" for this idea: ${s.content.startsWith('JSON:') ? JSON.parse(s.content.substring(5)).text : s.content}. 
+        Use Tailwind CSS. Return ONLY the code, no markdown wrappers. Include animations using framer-motion (window.Motion). 
+        Assume you have access to: window.React, window.Motion, window.Recharts, window.d3, window.confetti, window.lucide.`;
+        
+        const result = await callUnifiedAI(prompt);
+        manifestedCode = result.replace(/```jsx|```tsx|```javascript|```/g, '').trim();
+        newStatus = 'manifested';
+      }
+
+      const updateData: any = { status: newStatus };
+      if (manifestedCode) updateData.manifested_code = manifestedCode;
       
       // Only include fields that exist in DB
       if (dbFeatures.energy) updateData.energy = newEnergy;
@@ -1210,8 +1234,15 @@ export default function App() {
       
       const { error } = await supabase.from('suggestions').update(updateData).eq('id', s.id);
       if (error) throw error;
+      
+      if (shouldManifest) {
+        setApiQuota(prev => Math.max(0, prev - 10));
+      }
     } catch (err: any) {
-      console.error("Error pledging energy:", err);
+      console.error("Error during manifestation cycle:", err);
+      alert("The consciousness bridge flickered. Try again.");
+    } finally {
+      setIsRefining(null);
     }
   };
 
@@ -1760,9 +1791,9 @@ export default function App() {
                           <div className="flex justify-end gap-2 md:pr-2 mt-2 md:mt-0 pt-2 md:pt-0 border-t md:border-t-0 border-white/5">
                             {isApp ? (
                               <>
-                                <button onClick={() => setActiveModule(processedS.manifested_code!)} className="flex-1 md:flex-none p-2 md:p-2.5 rounded-lg bg-white text-black hover:scale-105 md:hover:scale-110 active:scale-95 transition-all flex items-center justify-center" title="Launch App">
-                                  <Play className="w-3.5 md:w-4 h-3.5 md:h-4 fill-current" />
-                                  <span className="md:hidden ml-2 text-[9px] font-black uppercase tracking-widest">Execute</span>
+                                <button onClick={() => setActiveModule(processedS.manifested_code!)} className="flex-1 md:flex-none p-2 md:p-2.5 rounded-lg bg-white text-black hover:scale-105 md:hover:scale-110 active:scale-95 transition-all flex items-center justify-center gap-2 group/launch" title="Launch App">
+                                  <Play className="w-3.5 md:w-4 h-3.5 md:h-4 fill-current group-hover/launch:animate-pulse" />
+                                  <span className="text-[9px] font-black uppercase tracking-widest">Execute</span>
                                 </button>
                                 {(isFinalized || isCreator) && (
                                   <button 
@@ -1771,57 +1802,79 @@ export default function App() {
                                       if (prompt) handleRefine(processedS, prompt);
                                     }}
                                     disabled={!!isRefining}
-                                    className="p-2 md:p-2.5 rounded-lg border border-white/10 text-white/60 hover:bg-white hover:text-black transition-all disabled:opacity-20"
+                                    className="p-2 md:p-2.5 rounded-lg border border-white/10 text-white/60 hover:bg-white hover:text-black transition-all disabled:opacity-20 flex items-center justify-center gap-2"
                                     title="Evolve"
                                   >
-                                    {isRefining === s.id ? <Loader2 className="w-3.5 md:w-4 h-3.5 md:h-4 animate-spin" /> : <RefreshCw className="w-3.5 md:w-4 h-3.5 md:h-4" />}
+                                    {isRefining === s.id ? <Loader2 className="w-3.5 md:w-4 h-3.5 md:h-4 animate-spin text-indigo-400" /> : <RefreshCw className="w-3.5 md:w-4 h-3.5 md:h-4" />}
+                                    <span className="text-[9px] uppercase font-black tracking-widest md:hidden">Evolve</span>
                                   </button>
                                 )}
                                 <button 
                                   onClick={() => {
-                                    setInput(displayContent);
-                                    setIsOpen(false);
-                                    window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+                                    const msg = window.prompt("Ask for a professional review (Comment will be pinned):");
+                                    if (msg) postAdvice(s.id, msg);
                                   }}
-                                  className="p-2 md:p-2.5 rounded-lg border border-white/10 text-white/40 hover:border-indigo-500 hover:text-indigo-400 transition-all hover:bg-white/5"
-                                  title="Fork to new Idea"
+                                  className="p-2 md:p-2.5 rounded-lg border border-indigo-500/20 text-indigo-400 hover:bg-indigo-500 hover:text-white transition-all flex items-center justify-center gap-2"
+                                  title="Request Review"
                                 >
-                                  <GitBranch className="w-3.5 md:w-4 h-3.5 md:h-4" />
+                                  <MessageSquare className="w-3.5 md:w-4 h-3.5 md:h-4" />
+                                  <span className="text-[9px] uppercase font-black tracking-widest md:hidden">Review</span>
                                 </button>
                               </>
                             ) : (
                               processedS.status === 'pending' && (
                                 <>
-                                  <button 
-                                    onClick={() => handleVote(s.id, processedS.votes)}
-                                    className="flex-1 md:flex-none p-2 md:p-2.5 rounded-lg border border-white/10 text-white/40 hover:border-white hover:text-white transition-all hover:bg-white/5 flex items-center justify-center"
-                                    title="Upvote"
-                                  >
-                                    <ChevronUp className="w-3.5 md:w-4 h-3.5 md:h-4" />
-                                    <span className="md:hidden ml-2 text-[9px] font-black uppercase tracking-widest">Vote</span>
-                                  </button>
+                                  {!isCreator && (
+                                    <button 
+                                      onClick={() => handleVote(s.id, processedS.votes)}
+                                      className="flex-1 md:flex-none p-2 md:p-2.5 rounded-lg border border-white/10 text-white/40 hover:border-white hover:text-white transition-all hover:bg-white/5 flex items-center justify-center gap-2"
+                                      title="Upvote"
+                                    >
+                                      <ChevronUp className="w-3.5 md:w-4 h-3.5 md:h-4" />
+                                      <span className="text-[9px] font-black uppercase tracking-widest">Vote</span>
+                                    </button>
+                                  )}
                                   <button 
                                     onClick={() => handlePledge(processedS)}
-                                    disabled={!session || !userApiKey || (processedS.pledged_by || []).includes(session?.user?.id || '')}
-                                    className="flex-1 md:flex-none p-2 md:p-2.5 rounded-lg bg-white/5 border border-white/10 text-yellow-500/50 hover:bg-yellow-500 hover:text-black hover:border-yellow-500 transition-all disabled:opacity-20 flex items-center justify-center"
-                                    title="Manifest with Energy"
+                                    disabled={!!isRefining || (!isCreator && !userApiKey)}
+                                    className={`flex-1 md:flex-none p-2 md:p-2.5 rounded-lg border flex items-center justify-center transition-all gap-2 relative ${
+                                      isCreator 
+                                      ? 'bg-gradient-to-r from-indigo-600 to-indigo-800 border-indigo-500 text-white hover:scale-105 shadow-[0_0_20px_rgba(79,70,229,0.3)]' 
+                                      : 'bg-white/5 border-white/10 text-yellow-500/50 hover:bg-yellow-500 hover:text-black'
+                                    }`}
+                                    title={isCreator ? "Manifest Immediately" : "Manifest with Energy"}
                                   >
-                                    <Sparkles className="w-3.5 md:w-4 h-3.5 md:h-4" />
-                                    <span className="md:hidden ml-2 text-[9px] font-black uppercase tracking-widest">Power</span>
+                                    {isRefining === s.id ? (
+                                      <Loader2 className="w-3.5 md:w-4 h-3.5 md:h-4 animate-spin" />
+                                    ) : isCreator ? (
+                                      <Zap className="w-3.5 md:w-4 h-3.5 md:h-4 fill-current animate-pulse text-yellow-400" />
+                                    ) : (
+                                      <Sparkles className="w-3.5 md:w-4 h-3.5 md:h-4" />
+                                    )}
+                                    <span className="text-[9px] font-black uppercase tracking-widest">
+                                      {isRefining === s.id ? 'Manifesting...' : isCreator ? 'Manifest Now' : 'Power-Up'}
+                                    </span>
+                                    
+                                    {isCreator && !isRefining && (
+                                      <div className="absolute -top-1 -right-1 flex h-2 w-2">
+                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+                                        <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
+                                      </div>
+                                    )}
                                   </button>
                                 </>
                               )
                             )}
 
-                            {(isCreator || (processedS.user_id && session?.user?.id && processedS.user_id === session.user.id) || (processedS.pledged_by || []).includes(session?.user?.id || '')) && (
+                            {(isCreator || (processedS.user_id && session?.user?.id && processedS.user_id === session.user.id)) && (
                               <button 
                                 onClick={() => {
-                                  if (window.confirm("Delete this entry?")) {
+                                  if (window.confirm("This action is irreversible. Delete from collective memory?")) {
                                     handleDeleteSuggestion(s.id);
                                   }
                                 }}
-                                className="p-2 md:p-2.5 rounded-lg border border-pink-500/20 text-pink-500/40 hover:bg-pink-500 hover:text-white hover:border-pink-500 transition-all"
-                                title="Delete"
+                                className="p-2 md:p-2.5 rounded-lg border border-pink-500/10 text-pink-500/20 hover:bg-pink-500 hover:text-white hover:border-pink-500 transition-all"
+                                title="Delete Forever"
                               >
                                 <Trash2 className="w-3.5 md:w-4 h-3.5 md:h-4" />
                               </button>
