@@ -441,9 +441,9 @@ function ModulePlayer({ code, onClose }: { code: string, onClose: () => void }) 
       initial={{ opacity: 0, scale: 0.9 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.9 }}
-      className="fixed inset-0 z-50 flex items-center justify-center p-10 bg-black/80 backdrop-blur-md"
+      className="fixed inset-0 z-50 flex items-center justify-center p-0 md:p-10 bg-black/80 backdrop-blur-md"
     >
-      <div className="relative w-full max-w-5xl aspect-video bg-[#050505] border border-white/10 rounded-2xl overflow-hidden shadow-2xl flex flex-col">
+      <div className="relative w-full md:max-w-5xl h-full md:h-auto md:aspect-video bg-[#050505] border-none md:border md:border-white/10 rounded-none md:rounded-2xl overflow-hidden shadow-2xl flex flex-col">
         <div className="p-4 border-b border-white/5 flex justify-between items-center bg-white/5">
           <div className="flex items-center gap-2">
             <Sparkles className="w-4 h-4 text-indigo-400" />
@@ -1401,33 +1401,33 @@ export default function App() {
         })}
       </div>
 
-      <header className="absolute top-10 left-10 z-10 pointer-events-none">
-        <h1 className="text-[64px] font-[900] tracking-[-2px] leading-[0.9] text-white/15 uppercase">
+      <header className="absolute top-6 left-6 md:top-10 md:left-10 z-10 pointer-events-none">
+        <h1 className="text-[32px] md:text-[64px] font-[900] tracking-[-1px] md:tracking-[-2px] leading-[0.9] text-white/15 uppercase">
           EVOLUTIVE<br />CLOUD
         </h1>
-            <div className="mt-2 flex flex-col gap-2">
-          <div className="text-[11px] tracking-[4px] text-indigo-400 uppercase font-bold">
+            <div className="mt-2 flex flex-col gap-1 md:gap-2">
+          <div className="text-[8px] md:text-[11px] tracking-[2px] md:tracking-[4px] text-indigo-400 uppercase font-bold">
             Evolutive Cloud . Online
           </div>
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1 text-[9px] text-white/40 uppercase tracking-widest font-mono">
-              <Activity className="w-3 h-3" />
-              <span>{isOpen ? "Menu Open" : "Menu Closed"}</span>
+          <div className="flex flex-wrap items-center gap-2 md:gap-3">
+            <div className="flex items-center gap-1 text-[8px] md:text-[9px] text-white/40 uppercase tracking-widest font-mono">
+              <Activity className="w-2 md:w-3 h-2 md:h-3" />
+              <span>{isOpen ? "Open" : "Closed"}</span>
             </div>
-            <div className="flex items-center gap-1 text-[9px] text-green-500/60 uppercase tracking-widest font-mono">
-              <Database className="w-3 h-3" />
-              <span>Cloud: Syncing</span>
+            <div className="flex items-center gap-1 text-[8px] md:text-[9px] text-green-500/60 uppercase tracking-widest font-mono">
+              <Database className="w-2 md:w-3 h-2 md:h-3" />
+              <span>Synced</span>
             </div>
-            <div className="flex items-center gap-1 text-[9px] text-indigo-400/80 uppercase tracking-widest font-mono ml-2">
-              <Users className="w-3 h-3" />
-              <span>Active Users: {activeUsersCount}</span>
+            <div className="flex items-center gap-1 text-[8px] md:text-[9px] text-indigo-400/80 uppercase tracking-widest font-mono">
+              <Users className="w-2 md:w-3 h-2 md:h-3" />
+              <span className="hidden sm:inline">Active:</span> <span>{activeUsersCount}</span>
             </div>
           </div>
         </div>
       </header>
 
       {/* --- HUD LAYER --- */}
-      <div className="absolute top-10 left-10 z-20 flex flex-col gap-4">
+      <div className="absolute top-6 right-20 md:top-10 md:left-10 md:right-auto z-20 flex flex-col gap-4">
         {isCreator && (
           <button 
             onClick={handleToggleFinalize}
@@ -1442,13 +1442,13 @@ export default function App() {
       </div>
 
       {/* --- RIGHT SIDEBAR TOGGLE --- */}
-      <div className="absolute top-1/2 -translate-y-1/2 right-4 z-40">
+      <div className="absolute top-1/2 -translate-y-1/2 right-2 md:right-4 z-40">
         <button 
           onClick={() => setIsRepoOpen(true)}
-          className="w-14 h-24 bg-white/5 backdrop-blur-xl border border-white/10 rounded-full flex flex-col items-center justify-center gap-3 hover:bg-white/10 hover:border-indigo-500/50 transition-all group pointer-events-auto shadow-2xl"
+          className="w-12 h-20 md:w-14 md:h-24 bg-white/5 backdrop-blur-xl border border-white/10 rounded-full flex flex-col items-center justify-center gap-2 md:gap-3 hover:bg-white/10 hover:border-indigo-500/50 transition-all group pointer-events-auto shadow-2xl"
         >
-          <Database className="w-5 h-5 text-indigo-400 group-hover:scale-125 transition-transform" />
-          <span className="[writing-mode:vertical-lr] text-[8px] font-black uppercase tracking-[3px] text-white/40 group-hover:text-white transition-colors">Manifests</span>
+          <Database className="w-4 h-4 md:w-5 md:h-5 text-indigo-400 group-hover:scale-125 transition-transform" />
+          <span className="[writing-mode:vertical-lr] text-[7px] md:text-[8px] font-black uppercase tracking-[2px] md:tracking-[3px] text-white/40 group-hover:text-white transition-colors">Manifests</span>
         </button>
       </div>
 
@@ -1470,7 +1470,7 @@ export default function App() {
               transition={{ type: 'spring', damping: 25, stiffness: 200 }}
               className="fixed top-0 right-0 h-full w-[400px] bg-[#050510]/95 backdrop-blur-2xl border-l border-white/10 z-[70] shadow-2xl flex flex-col"
             >
-              <div className="p-8 border-b border-white/10 flex items-center justify-between">
+              <div className="p-6 md:p-8 border-b border-white/10 flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <Database className="w-5 h-5 text-indigo-400" />
                   <h2 className="text-[12px] font-black uppercase tracking-[4px]">Archives</h2>
@@ -1483,7 +1483,7 @@ export default function App() {
                 </button>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-4 custom-scrollbar space-y-4">
+              <div className="flex-1 overflow-y-auto p-3 md:p-4 custom-scrollbar space-y-4">
                 {displaySuggestions.filter(s => s.status === 'manifested').length === 0 && (
                   <div className="h-40 flex flex-col items-center justify-center text-center opacity-20">
                     <History className="w-10 h-10 mb-4" />
@@ -1574,7 +1574,7 @@ export default function App() {
       </Canvas>
 
       {/* --- HUD: ECHO INPUT --- */}
-      <div className="absolute bottom-10 left-1/2 -translate-x-1/2 z-20 w-[400px]">
+      <div className="absolute bottom-6 md:bottom-10 left-1/2 -translate-x-1/2 z-20 w-[90%] sm:w-[400px]">
         <form onSubmit={sendEcho} className="relative group">
           {/* Input is circular */}
           <input 
@@ -1582,7 +1582,7 @@ export default function App() {
             placeholder="Broadcast to the void..."
             value={echoInput}
             onChange={(e) => setEchoInput(e.target.value)}
-            className="w-full bg-white/5 border-2 border-white/10 px-8 py-5 rounded-full text-[12px] text-white focus:border-indigo-500 focus:bg-white/10 outline-none text-center backdrop-blur-md transition-all placeholder:text-white/20 font-black uppercase tracking-widest"
+            className="w-full bg-white/5 border-2 border-white/10 px-6 md:px-8 py-4 md:py-5 rounded-full text-[10px] md:text-[12px] text-white focus:border-indigo-500 focus:bg-white/10 outline-none text-center backdrop-blur-md transition-all placeholder:text-white/20 font-black uppercase tracking-widest"
           />
           <div className="absolute -inset-1 bg-gradient-to-r from-indigo-500 via-pink-500 to-yellow-500 rounded-full blur opacity-20 group-hover:opacity-40 transition-opacity -z-10" />
           <button type="submit" className="hidden" />
@@ -1596,53 +1596,49 @@ export default function App() {
             initial={{ opacity: 0, y: 40 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 40 }}
-            className="fixed inset-0 m-auto w-[90vw] h-[85vh] bg-[#050510]/95 backdrop-blur-2xl border-2 border-white/10 flex flex-col z-50 shadow-[0_0_100px_rgba(0,0,0,0.8)] overflow-hidden rounded-none"
+            className="fixed inset-0 m-auto w-full h-full md:w-[90vw] md:h-[85vh] bg-[#050510]/95 backdrop-blur-2xl border-none md:border-2 md:border-white/10 flex flex-col z-50 shadow-[0_0_100px_rgba(0,0,0,0.8)] overflow-hidden rounded-none md:rounded-none"
           >
             {/* Mind Panel is a Cubic Structure (Cubic/Sharp) */}
-            <div className="flex border-b border-white/10 p-6 shrink-0 bg-white/5 items-center justify-between">
-              <div className="flex items-center gap-10">
-                    <div className="flex gap-12">
+            <div className="flex flex-col md:flex-row border-b border-white/10 p-4 md:p-6 shrink-0 bg-white/5 items-center justify-between gap-4">
+              <div className="flex flex-col md:flex-row items-center gap-4 md:gap-10 w-full md:w-auto">
+                    <div className="flex gap-6 md:gap-12 overflow-x-auto w-full md:w-auto px-2 md:px-0 no-scrollbar">
                   {['mind', 'evolution', 'identity'].map((tab) => (
                     <button 
                       key={tab}
                       onClick={() => setActiveTab(tab as any)}
-                      className={`text-[12px] font-black uppercase tracking-[6px] transition-all relative ${activeTab === tab ? 'text-white' : 'text-white/20'}`}
+                      className={`text-[10px] md:text-[12px] font-black uppercase tracking-[3px] md:tracking-[6px] transition-all relative py-2 whitespace-nowrap ${activeTab === tab ? 'text-white' : 'text-white/20'}`}
                     >
-                      {tab === 'mind' ? 'Shared Ideas' : tab === 'evolution' ? 'Evolution' : 'Account'}
-                      {activeTab === tab && <motion.div layoutId="tab" className="absolute -bottom-2 left-0 w-full h-[3px] bg-gradient-to-r from-indigo-500 via-pink-500 to-yellow-500" />}
+                      {tab === 'mind' ? 'Shared' : tab === 'evolution' ? 'Evolution' : 'Account'}
+                      {activeTab === tab && <motion.div layoutId="tab" className="absolute -bottom-1 left-0 w-full h-[2px] md:h-[3px] bg-gradient-to-r from-indigo-500 via-pink-500 to-yellow-500" />}
                     </button>
                   ))}
                 </div>
 
-                {/* Status Indicator */}
-                <div className="flex items-center gap-3 px-4 py-2 bg-white/5 rounded-full border border-white/10">
-                  <div className={`w-2 h-2 rounded-full ${isFinalized ? 'bg-green-500 animate-pulse shadow-[0_0_10px_green]' : 'bg-yellow-500 shadow-[0_0_10px_yellow]'}`} />
-                  <span className="text-[10px] font-black text-white/60 tracking-widest uppercase">
-                    {isFinalized ? 'Community Mode' : 'Creator Mode'}
-                  </span>
-                </div>
-
-                {/* API Quota Tracking */}
-                <div className="flex items-center gap-3 px-4 py-2 bg-white/5 rounded-full border border-white/10 group/quota relative">
-                  <div className="w-2.5 h-2.5 rounded-full overflow-hidden bg-white/10 relative">
-                    <motion.div 
-                      className="absolute bottom-0 left-0 w-full bg-indigo-500" 
-                      initial={{ height: "100%" }}
-                      animate={{ height: `${apiQuota}%` }}
-                    />
+                <div className="flex items-center gap-4 w-full md:w-auto justify-center">
+                  {/* Status Indicator */}
+                  <div className="flex items-center gap-2 md:gap-3 px-3 md:px-4 py-1.5 md:py-2 bg-white/5 rounded-full border border-white/10">
+                    <div className={`w-1.5 md:w-2 h-1.5 md:h-2 rounded-full ${isFinalized ? 'bg-green-500 animate-pulse' : 'bg-yellow-500'}`} />
+                    <span className="text-[8px] md:text-[10px] font-black text-white/60 tracking-widest uppercase">
+                      {isFinalized ? 'Community' : 'Creator'}
+                    </span>
                   </div>
-                  <span className="text-[10px] font-black text-white/40 tracking-widest uppercase">
-                    API <span className="text-white/80">{apiQuota}%</span>
-                  </span>
-                  
-                  {/* Tooltip */}
-                  <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 opacity-0 group-hover/quota:opacity-100 transition-opacity pointer-events-none bg-black border border-white/10 px-3 py-1.5 rounded text-[8px] whitespace-nowrap z-50 text-white/40 uppercase tracking-widest">
-                    Soul Remaining: {apiQuota}/100 <br/>
-                    Recharges 1% per minute
+
+                  {/* API Quota Tracking */}
+                  <div className="flex items-center gap-2 md:gap-3 px-3 md:px-4 py-1.5 md:py-2 bg-white/5 rounded-full border border-white/10 group/quota relative">
+                    <div className="w-2 md:w-2.5 h-2 md:h-2.5 rounded-full overflow-hidden bg-white/10 relative">
+                      <motion.div 
+                        className="absolute bottom-0 left-0 w-full bg-indigo-500" 
+                        initial={{ height: "100%" }}
+                        animate={{ height: `${apiQuota}%` }}
+                      />
+                    </div>
+                    <span className="text-[8px] md:text-[10px] font-black text-white/40 tracking-widest uppercase">
+                      SOUL <span className="text-white/80">{apiQuota}%</span>
+                    </span>
                   </div>
                 </div>
               </div>
-              <button onClick={() => setIsOpen(false)} className="hover:rotate-90 transition-transform p-2"><X className="w-6 h-6 text-white/40" /></button>
+              <button onClick={() => setIsOpen(false)} className="absolute top-4 right-4 md:static hover:rotate-90 transition-transform p-2"><X className="w-5 md:w-6 h-5 md:h-6 text-white/40" /></button>
             </div>
 
             {/* Suggestions Root - Scrollable */}
@@ -1676,17 +1672,17 @@ export default function App() {
                   </div>
 
                   {/* Explorer Header */}
-                  <div className="grid grid-cols-[1fr_120px_100px_160px] gap-4 px-6 py-3 border-b border-white/10 text-[10px] uppercase tracking-[0.2em] font-black text-white/30 mb-4">
+                  <div className="hidden md:grid grid-cols-[1fr_120px_100px_160px] gap-4 px-6 py-3 border-b border-white/10 text-[10px] uppercase tracking-[0.2em] font-black text-white/30 mb-4">
                     <div className="flex items-center gap-2 italic"><Box className="w-3 h-3" /> Idea / Manifestation</div>
                     <div className="text-center">Complexity</div>
                     <div className="text-center">Status</div>
                     <div className="text-right">Operations</div>
                   </div>
 
-                  <div className="flex flex-col gap-2">
+                  <div className="flex flex-col gap-3">
                   {displaySuggestions.length === 0 && (
-                    <div className="py-20 text-center border-2 border-dashed border-white/5 rounded-[2rem]">
-                      <p className="text-white/20 italic tracking-widest text-xs uppercase">The collective mind is currently silent. Awaiting a spark...</p>
+                    <div className="py-12 md:py-20 text-center border-2 border-dashed border-white/5 rounded-[1.5rem] md:rounded-[2rem]">
+                      <p className="text-white/20 italic tracking-widest text-[10px] md:text-xs uppercase px-6">The collective mind is currently silent. Awaiting a spark...</p>
                     </div>
                   )}
                   {displaySuggestions.map((s, idx) => {
@@ -1711,32 +1707,32 @@ export default function App() {
                         transition={{ delay: idx * 0.03 }}
                         className="group relative"
                       >
-                        <div className="grid grid-cols-[1fr_120px_100px_160px] gap-4 items-center px-6 py-4 rounded-2xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.05] hover:border-indigo-500/30 transition-all cursor-default">
+                        <div className="flex flex-col md:grid md:grid-cols-[1fr_120px_100px_160px] gap-4 items-stretch md:items-center p-4 md:px-6 md:py-4 rounded-2xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.05] hover:border-indigo-500/30 transition-all cursor-default">
                           {/* Main Info */}
-                          <div className="flex items-start gap-4 overflow-hidden">
-                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${isApp ? 'bg-indigo-500/20 text-indigo-400' : 'bg-white/5 text-white/40 shadow-inner'}`}>
-                              {isApp ? <Layout className="w-5 h-5" /> : <DraftingCompass className="w-5 h-5" />}
+                          <div className="flex items-start gap-3 md:gap-4 overflow-hidden">
+                            <div className={`w-8 h-8 md:w-10 md:h-10 rounded-lg md:rounded-xl flex items-center justify-center shrink-0 ${isApp ? 'bg-indigo-500/20 text-indigo-400' : 'bg-white/5 text-white/40 shadow-inner'}`}>
+                              {isApp ? <Layout className="w-4 h-4 md:w-5 md:h-5" /> : <DraftingCompass className="w-4 h-4 md:w-5 md:h-5" />}
                             </div>
-                            <div className="overflow-hidden">
-                              <h3 className="text-white font-bold text-sm truncate group-hover:text-indigo-300 transition-colors">
+                            <div className="overflow-hidden flex-1">
+                              <h3 className="text-white font-bold text-xs md:text-sm truncate group-hover:text-indigo-300 transition-colors">
                                 {displayContent}
                               </h3>
-                              <p className="text-[10px] text-white/20 uppercase tracking-widest mt-1 flex items-center gap-2">
+                              <div className="text-[8px] md:text-[10px] text-white/20 uppercase tracking-widest mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
                                 <span className={isApp ? 'text-indigo-500' : ''}>#{s.id}</span> 
-                                <span className="w-1 h-1 rounded-full bg-white/10" />
-                                {isApp ? `Version v${processedS.version || 1}` : 'Proposal Draft'}
+                                <span className="hidden md:inline w-1 h-1 rounded-full bg-white/10" />
+                                <span>{isApp ? `Version v${processedS.version || 1}` : 'Proposal Draft'}</span>
                                 {(processedS.pledged_by || []).length > 0 && (
                                   <>
                                     <span className="w-1 h-1 rounded-full bg-white/10" />
-                                    <span className="flex items-center gap-1 text-yellow-500/50"><Zap className="w-2.5 h-2.5 fill-current" /> Supported</span>
+                                    <span className="flex items-center gap-1 text-yellow-500/50"><Zap className="w-2 md:w-2.5 h-2 md:h-2.5 fill-current" /> Supported</span>
                                   </>
                                 )}
-                              </p>
+                              </div>
                             </div>
                           </div>
 
                           {/* Data Column: Stats */}
-                          <div className="flex flex-col items-center gap-1">
+                          <div className="flex flex-col items-center md:items-center gap-1">
                              <div className="w-full bg-white/5 h-1 rounded-full overflow-hidden">
                                <motion.div 
                                  initial={{ width: 0 }}
@@ -1744,14 +1740,14 @@ export default function App() {
                                  className="h-full bg-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.5)]"
                                />
                              </div>
-                             <span className="text-[9px] font-mono text-white/40 tracking-tighter uppercase whitespace-nowrap">
-                               {processedS.votes || 0} Votes / {processedS.energy || 0}% Energy
+                             <span className="text-[7px] md:text-[9px] font-mono text-white/40 tracking-tighter uppercase whitespace-nowrap">
+                               {processedS.votes || 0} Votes / {processedS.energy || 0}% Power
                              </span>
                           </div>
 
                           {/* Data Column: Status */}
-                          <div className="flex justify-center">
-                             <div className={`px-2 py-1 rounded text-[8px] font-black uppercase tracking-widest border ${
+                          <div className="flex justify-start md:justify-center">
+                             <div className={`px-2 py-0.5 md:py-1 rounded text-[7px] md:text-[8px] font-black uppercase tracking-widest border ${
                                isApp 
                                ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' 
                                : 'bg-white/5 text-white/30 border-white/10'
@@ -1761,11 +1757,12 @@ export default function App() {
                           </div>
 
                           {/* Actions */}
-                          <div className="flex justify-end gap-2 pr-2">
+                          <div className="flex justify-end gap-2 md:pr-2 mt-2 md:mt-0 pt-2 md:pt-0 border-t md:border-t-0 border-white/5">
                             {isApp ? (
                               <>
-                                <button onClick={() => setActiveModule(processedS.manifested_code!)} className="p-2.5 rounded-lg bg-white text-black hover:scale-110 active:scale-95 transition-all" title="Launch App">
-                                  <Play className="w-4 h-4 fill-current" />
+                                <button onClick={() => setActiveModule(processedS.manifested_code!)} className="flex-1 md:flex-none p-2 md:p-2.5 rounded-lg bg-white text-black hover:scale-105 md:hover:scale-110 active:scale-95 transition-all flex items-center justify-center" title="Launch App">
+                                  <Play className="w-3.5 md:w-4 h-3.5 md:h-4 fill-current" />
+                                  <span className="md:hidden ml-2 text-[9px] font-black uppercase tracking-widest">Execute</span>
                                 </button>
                                 {(isFinalized || isCreator) && (
                                   <button 
@@ -1774,10 +1771,10 @@ export default function App() {
                                       if (prompt) handleRefine(processedS, prompt);
                                     }}
                                     disabled={!!isRefining}
-                                    className="p-2.5 rounded-lg border border-white/10 text-white/60 hover:bg-white hover:text-black transition-all disabled:opacity-20"
+                                    className="p-2 md:p-2.5 rounded-lg border border-white/10 text-white/60 hover:bg-white hover:text-black transition-all disabled:opacity-20"
                                     title="Evolve"
                                   >
-                                    {isRefining === s.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                                    {isRefining === s.id ? <Loader2 className="w-3.5 md:w-4 h-3.5 md:h-4 animate-spin" /> : <RefreshCw className="w-3.5 md:w-4 h-3.5 md:h-4" />}
                                   </button>
                                 )}
                                 <button 
@@ -1786,10 +1783,10 @@ export default function App() {
                                     setIsOpen(false);
                                     window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
                                   }}
-                                  className="p-2.5 rounded-lg border border-white/10 text-white/40 hover:border-indigo-500 hover:text-indigo-400 transition-all hover:bg-white/5"
+                                  className="p-2 md:p-2.5 rounded-lg border border-white/10 text-white/40 hover:border-indigo-500 hover:text-indigo-400 transition-all hover:bg-white/5"
                                   title="Fork to new Idea"
                                 >
-                                  <GitBranch className="w-4 h-4" />
+                                  <GitBranch className="w-3.5 md:w-4 h-3.5 md:h-4" />
                                 </button>
                               </>
                             ) : (
@@ -1797,18 +1794,20 @@ export default function App() {
                                 <>
                                   <button 
                                     onClick={() => handleVote(s.id, processedS.votes)}
-                                    className="p-2.5 rounded-lg border border-white/10 text-white/40 hover:border-white hover:text-white transition-all hover:bg-white/5"
+                                    className="flex-1 md:flex-none p-2 md:p-2.5 rounded-lg border border-white/10 text-white/40 hover:border-white hover:text-white transition-all hover:bg-white/5 flex items-center justify-center"
                                     title="Upvote"
                                   >
-                                    <ChevronUp className="w-4 h-4" />
+                                    <ChevronUp className="w-3.5 md:w-4 h-3.5 md:h-4" />
+                                    <span className="md:hidden ml-2 text-[9px] font-black uppercase tracking-widest">Vote</span>
                                   </button>
                                   <button 
                                     onClick={() => handlePledge(processedS)}
                                     disabled={!session || !userApiKey || (processedS.pledged_by || []).includes(session?.user?.id || '')}
-                                    className="p-2.5 rounded-lg bg-white/5 border border-white/10 text-yellow-500/50 hover:bg-yellow-500 hover:text-black hover:border-yellow-500 transition-all disabled:opacity-20"
+                                    className="flex-1 md:flex-none p-2 md:p-2.5 rounded-lg bg-white/5 border border-white/10 text-yellow-500/50 hover:bg-yellow-500 hover:text-black hover:border-yellow-500 transition-all disabled:opacity-20 flex items-center justify-center"
                                     title="Manifest with Energy"
                                   >
-                                    <Sparkles className="w-4 h-4" />
+                                    <Sparkles className="w-3.5 md:w-4 h-3.5 md:h-4" />
+                                    <span className="md:hidden ml-2 text-[9px] font-black uppercase tracking-widest">Power</span>
                                   </button>
                                 </>
                               )
@@ -1821,10 +1820,10 @@ export default function App() {
                                     handleDeleteSuggestion(s.id);
                                   }
                                 }}
-                                className="p-2.5 rounded-lg border border-pink-500/20 text-pink-500/40 hover:bg-pink-500 hover:text-white hover:border-pink-500 transition-all"
+                                className="p-2 md:p-2.5 rounded-lg border border-pink-500/20 text-pink-500/40 hover:bg-pink-500 hover:text-white hover:border-pink-500 transition-all"
                                 title="Delete"
                               >
-                                <Trash2 className="w-4 h-4" />
+                                <Trash2 className="w-3.5 md:w-4 h-3.5 md:h-4" />
                               </button>
                             )}
                           </div>
@@ -1976,36 +1975,36 @@ export default function App() {
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-3 gap-6 max-w-lg mx-auto">
-                        <div className="p-6 bg-white/[0.03] border border-white/5 rounded-3xl group">
-                          <div className="text-[10px] text-white/20 uppercase tracking-widest font-black mb-2 group-hover:text-indigo-400 transition-colors">Creations</div>
-                          <div className="text-2xl text-white font-black tracking-tighter">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 md:gap-6 max-w-lg mx-auto">
+                        <div className="p-4 md:p-6 bg-white/[0.03] border border-white/5 rounded-2xl md:rounded-3xl group">
+                          <div className="text-[8px] md:text-[10px] text-white/20 uppercase tracking-widest font-black mb-1 md:mb-2 group-hover:text-indigo-400 transition-colors text-center md:text-left">Shared</div>
+                          <div className="text-xl md:text-2xl text-white font-black tracking-tighter text-center md:text-left">
                             {suggestions.filter(s => s.user_id === session.user.id).length}
                           </div>
                         </div>
-                        <div className="p-6 bg-white/[0.03] border border-white/5 rounded-3xl group">
-                          <div className="text-[10px] text-white/20 uppercase tracking-widest font-black mb-2 group-hover:text-pink-400 transition-colors">Manifests</div>
-                          <div className="text-2xl text-white font-black tracking-tighter">
+                        <div className="p-4 md:p-6 bg-white/[0.03] border border-white/5 rounded-2xl md:rounded-3xl group">
+                          <div className="text-[8px] md:text-[10px] text-white/20 uppercase tracking-widest font-black mb-1 md:mb-2 group-hover:text-pink-400 transition-colors text-center md:text-left">Manifests</div>
+                          <div className="text-xl md:text-2xl text-white font-black tracking-tighter text-center md:text-left">
                             {suggestions.filter(s => s.user_id === session.user.id && s.status === 'manifested').length}
                           </div>
                         </div>
-                        <div className="p-6 bg-white/[0.03] border border-white/5 rounded-3xl group">
-                          <div className="text-[10px] text-white/20 uppercase tracking-widest font-black mb-2 group-hover:text-yellow-400 transition-colors">Influence</div>
-                          <div className="text-2xl text-white font-black tracking-tighter">
+                        <div className="p-4 md:p-6 bg-white/[0.03] border border-white/5 rounded-2xl md:rounded-3xl group">
+                          <div className="text-[8px] md:text-[10px] text-white/20 uppercase tracking-widest font-black mb-1 md:mb-2 group-hover:text-yellow-400 transition-colors text-center md:text-left">Soul Power</div>
+                          <div className="text-xl md:text-2xl text-white font-black tracking-tighter text-center md:text-left">
                             {suggestions.filter(s => s.user_id === session.user.id).reduce((acc, curr) => acc + (curr.votes || 0), 0)}
                           </div>
                         </div>
                       </div>
 
-                      <div className="bg-white/[0.03] p-10 rounded-3xl border border-white/5 space-y-10 text-left">
+                      <div className="bg-white/[0.03] p-6 md:p-10 rounded-2xl md:rounded-3xl border border-white/5 space-y-6 md:space-y-10 text-left">
                         <div className="space-y-4">
-                          <label className="text-[10px] font-black uppercase tracking-[3px] text-white/40 block">Evolution Bridge Provider</label>
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                          <label className="text-[9px] md:text-[10px] font-black uppercase tracking-[2px] md:tracking-[3px] text-white/40 block">Evolution Bridge Provider</label>
+                          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
                             {(['google', 'openai', 'anthropic', 'custom', 'web-llm', 'gemini-nano', 'mlc-mobile'] as const).map((p) => (
                               <button
                                 key={p}
                                 onClick={() => setAiProvider(p)}
-                                className={`py-4 rounded-2xl text-[9px] font-black uppercase tracking-widest transition-all border ${aiProvider === p ? 'bg-indigo-500/20 text-indigo-400 border-indigo-500 shadow-[0_0_20px_rgba(99,102,241,0.2)]' : 'bg-white/5 text-white/30 border-white/5 hover:bg-white/10'}`}
+                                className={`py-3 md:py-4 rounded-xl md:rounded-2xl text-[8px] md:text-[9px] font-black uppercase tracking-widest transition-all border ${aiProvider === p ? 'bg-indigo-500/20 text-indigo-400 border-indigo-500 shadow-[0_0_20px_rgba(99,102,241,0.2)]' : 'bg-white/5 text-white/30 border-white/5 hover:bg-white/10'}`}
                               >
                                 {p.replace('-', ' ')}
                               </button>
@@ -2013,33 +2012,33 @@ export default function App() {
                           </div>
                           
                           {/* Tutorial/Help section */}
-                          <div className="p-4 bg-indigo-500/5 rounded-2xl border border-indigo-500/10 space-y-2">
+                          <div className="p-4 bg-indigo-500/5 rounded-xl md:rounded-2xl border border-indigo-500/10 space-y-2">
                             <div className="flex items-center gap-2 text-indigo-400">
-                              <Info className="w-3 h-3" />
-                              <span className="text-[9px] font-black uppercase tracking-[3px]">Tutorial: {aiProvider.replace('-', ' ')}</span>
+                              <Info className="w-2.5 md:w-3 h-2.5 md:h-3" />
+                              <span className="text-[8px] md:text-[9px] font-black uppercase tracking-[2px] md:tracking-[3px]">Tutorial: {aiProvider.replace('-', ' ')}</span>
                             </div>
-                            <div className="text-[10px] text-white/40 leading-relaxed italic space-y-2">
-                              {aiProvider === 'google' && <p>The default engine. Recommended for stability. Get your key at aistudio.google.com.</p>}
-                              {aiProvider === 'openai' && <p>Connect to GPT-4o or o1. Requires a valid OpenAI Platform key (platform.openai.com).</p>}
-                              {aiProvider === 'anthropic' && <p>Fuel the cloud with Claude 3.5. Requires an Anthropic Console key.</p>}
-                              {aiProvider === 'custom' && <p>Point to your own server or local AI like Ollama (default: http://localhost:11434/v1).</p>}
+                            <div className="text-[9px] md:text-[10px] text-white/40 leading-relaxed italic space-y-2">
+                              {aiProvider === 'google' && <p>The default engine. Stability guaranteed. Key: aistudio.google.com.</p>}
+                              {aiProvider === 'openai' && <p>Connect to GPT-4o. Key: platform.openai.com.</p>}
+                              {aiProvider === 'anthropic' && <p>Claude 3.5 support. Key: console.anthropic.com.</p>}
+                              {aiProvider === 'custom' && <p>Local AI (Ollama). Default: http://localhost:11434/v1.</p>}
                               {aiProvider === 'web-llm' && (
                                 <div className="space-y-1">
-                                  <p className="font-black text-indigo-400">完全オフライン (FULL OFFLINE)</p>
-                                  <p>Runs AI inside your browser using WebGPU. No internet required after model download. Recommend Llama-3-8B (approx 4GB).</p>
-                                  {webLlmProgress && <p className="text-white/60 font-mono text-[8px] animate-pulse">{webLlmProgress}</p>}
+                                  <p className="font-black text-indigo-400">OFFLINE BROWSER MODE</p>
+                                  <p>Uses WebGPU. Runs inside the tab. First load is slow (model download).</p>
+                                  {webLlmProgress && <p className="text-white/60 font-mono text-[7px] animate-pulse">{webLlmProgress}</p>}
                                 </div>
                               )}
                               {aiProvider === 'gemini-nano' && (
                                 <div className="space-y-1">
-                                  <p className="font-black text-indigo-400">PHONE NATIVE (BUILT-IN)</p>
-                                  <p>Uses the experimental AI feature built into your Pixel or Samsung. Requires enabling 'Optimization Guide' in Chrome flags.</p>
+                                  <p className="font-black text-indigo-400">MOBILE NATIVE AI</p>
+                                  <p>Uses Pixel/Samsung on-device AI. Enable 'Optimization Guide' in Chrome flags.</p>
                                 </div>
                               )}
                               {aiProvider === 'mlc-mobile' && (
                                 <div className="space-y-1">
-                                  <p className="font-black text-indigo-400">LOCAL APP SYNC</p>
-                                  <p>Install the "MLC LLM" app on your iOS/Android. Start the local server in MLC and point the endpoint below to your phone's IP.</p>
+                                  <p className="font-black text-indigo-400">MOBILE APP SYNC</p>
+                                  <p>Sync with MLC LLM app. Start server in app and use phone IP below.</p>
                                 </div>
                               )}
                             </div>
@@ -2048,50 +2047,37 @@ export default function App() {
 
                         <div className="space-y-6">
                           <div className="space-y-3">
-                            <label className="text-[10px] font-black uppercase tracking-[3px] text-white/40 block">Soul Engine Model</label>
+                            <label className="text-[9px] md:text-[10px] font-black uppercase tracking-[2px] md:tracking-[3px] text-white/40 block text-center md:text-left">Soul Engine Model</label>
                             <div className="flex flex-col gap-2">
                               <input 
                                 type="text"
                                 value={selectedModel}
                                 onChange={(e) => setSelectedModel(e.target.value)}
-                                placeholder="Model ID (e.g. gpt-4o, claude-3-5-sonnet...)"
-                                className="bg-white/5 border border-white/10 w-full p-4 rounded-xl text-center text-[11px] text-indigo-300 font-mono focus:border-indigo-500 outline-none"
+                                placeholder="Model ID (gpt-4o, llama3, ...)"
+                                className="bg-white/5 border border-white/10 w-full p-3 md:p-4 rounded-xl text-center text-[10px] md:text-[11px] text-indigo-300 font-mono focus:border-indigo-500 outline-none"
                               />
-                              <div className="flex flex-wrap gap-2 justify-center mt-2">
+                              <div className="flex flex-wrap gap-1.5 md:gap-2 justify-center mt-1 md:mt-2">
                                 {(aiProvider === 'google' ? ['gemini-2.0-flash-exp', 'gemini-1.5-flash', 'gemini-1.5-pro'] : 
-                                  aiProvider === 'openai' ? ['gpt-4o', 'gpt-4o-mini', 'o1-preview'] :
-                                  aiProvider === 'anthropic' ? ['claude-3-5-sonnet-20240620', 'claude-3-opus-20240229'] :
+                                  aiProvider === 'openai' ? ['gpt-4o', 'gpt-4o-mini'] :
+                                  aiProvider === 'anthropic' ? ['claude-3-5-sonnet-20240620'] :
                                   aiProvider === 'web-llm' ? ['Llama-3-8B-Instruct-v0.1-q4f32_1-MLC', 'Gemma-2b-it-q4f32_1-MLC'] :
                                   aiProvider === 'gemini-nano' ? ['builtin-nano'] :
-                                  ['llama3', 'mistral', 'codellama']).map(m => (
+                                  ['llama3', 'mistral']).map(m => (
                                   <button 
                                     key={m} 
                                     onClick={() => setSelectedModel(m)}
-                                    className="px-3 py-1 bg-white/5 rounded-full text-[8px] text-white/40 hover:text-white border border-white/5"
+                                    className="px-2 md:px-3 py-1 bg-white/5 rounded-full text-[7px] md:text-[8px] text-white/40 hover:text-white border border-white/5 whitespace-nowrap"
                                   >
-                                    {m}
+                                    {m.split('-')[0].toUpperCase()}
                                   </button>
                                 ))}
                               </div>
                             </div>
                           </div>
 
-                          {aiProvider === 'custom' && (
-                            <div className="space-y-3">
-                              <label className="text-[10px] font-black uppercase tracking-[3px] text-white/40 block">Connection Endpoint</label>
-                              <input 
-                                type="text"
-                                value={customEndpoint}
-                                onChange={(e) => setCustomEndpoint(e.target.value)}
-                                placeholder="http://localhost:11434/v1"
-                                className="bg-white/5 border border-white/10 w-full p-4 rounded-xl text-center text-[11px] text-white font-mono focus:border-indigo-500 outline-none"
-                              />
-                            </div>
-                          )}
-
                           <div className="space-y-3">
-                            <label className="text-[10px] font-black uppercase tracking-[3px] text-white/40 block">Energy Source Key (API Key)</label>
-                            <div className="flex flex-col gap-4">
+                            <label className="text-[9px] md:text-[10px] font-black uppercase tracking-[2px] md:tracking-[3px] text-white/40 block text-center md:text-left">API Energy Key</label>
+                            <div className="flex flex-col gap-3 md:gap-4">
                               <input 
                                 type="text"
                                 style={{ WebkitTextSecurity: 'disc' } as any}
@@ -2099,18 +2085,15 @@ export default function App() {
                                 spellCheck={false}
                                 value={userApiKey}
                                 onChange={(e) => setUserApiKey(e.target.value)}
-                                placeholder={`Paste your ${aiProvider} key here`}
-                                className="bg-white/10 border border-white/20 w-full p-4 rounded-xl text-center text-sm text-indigo-300 focus:border-indigo-500 outline-none"
+                                placeholder={`Enter ${aiProvider} Energy Key`}
+                                className="bg-white/10 border border-white/20 w-full p-3 md:p-4 rounded-xl text-center text-xs md:text-sm text-indigo-300 focus:border-indigo-500 outline-none"
                               />
                               <button 
                                 onClick={() => saveApiKeyToAccount(userApiKey)}
-                                className="py-5 px-6 bg-white text-black text-[11px] font-black uppercase tracking-[4px] rounded-full hover:bg-indigo-400 hover:text-white transition-all shadow-xl"
+                                className="py-4 md:py-5 px-6 bg-white text-black text-[10px] md:text-[11px] font-black uppercase tracking-[3px] md:tracking-[4px] rounded-full hover:bg-indigo-400 hover:text-white transition-all shadow-xl"
                               >
-                                Synchronize Identity
+                                Synchronize Soul
                               </button>
-                              <p className="text-[8px] text-white/20 uppercase tracking-widest italic text-center">
-                                Soul energy is stored locally and synchronized with your secure soul identity.
-                              </p>
                             </div>
                           </div>
                         </div>
@@ -2129,32 +2112,30 @@ export default function App() {
             </div>
 
             {/* Intent Input area (Cubic Structure) */}
-            <div className="p-10 border-t border-white/10 shrink-0 bg-white/10">
+            <div className="p-4 md:p-10 border-t border-white/10 shrink-0 bg-white/10">
               {activeTab === 'mind' ? (
-                <div className="flex flex-col gap-6 max-w-4xl mx-auto">
+                <div className="flex flex-col gap-4 md:gap-6 max-w-4xl mx-auto">
                   {!canSuggest && (
-                    <div className="text-center">
-                      <p className="text-[10px] font-black text-yellow-500 uppercase tracking-widest bg-yellow-500/10 py-2 border border-yellow-500/30 rounded-full">
-                        Lock engaged: Waiting for Creator to switch to Collective Mode
+                    <div className="text-center px-4">
+                      <p className="text-[8px] md:text-[10px] font-black text-yellow-500 uppercase tracking-widest bg-yellow-500/10 py-2 border border-yellow-500/30 rounded-full italic">
+                        Access Restricted: Waiting for Master Bridge Sync
                       </p>
                     </div>
                   )}
-                  <div className={`flex gap-6 w-full transition-opacity ${!canSuggest ? 'opacity-30 pointer-events-none' : ''}`}>
-                    {/* Suggestion input is circular */}
+                  <div className={`flex gap-3 md:gap-6 w-full transition-opacity ${!canSuggest ? 'opacity-30 pointer-events-none' : ''}`}>
                     <input 
                       value={input}
                       onChange={(e) => setInput(e.target.value)}
                       onKeyDown={(e) => e.key === 'Enter' && canSuggest && handleSuggest()}
-                      placeholder="Type your app idea..."
-                      className="flex-1 bg-white/5 border-2 border-white/10 px-8 py-6 rounded-full text-sm text-white focus:outline-none focus:border-indigo-500 placeholder:text-white/20 font-black uppercase tracking-[4px] text-center"
+                      placeholder="Manifest an idea..."
+                      className="flex-1 bg-white/5 border-2 border-white/10 px-6 md:px-8 py-4 md:py-6 rounded-full text-xs md:text-sm text-white focus:outline-none focus:border-indigo-500 placeholder:text-white/10 font-black uppercase tracking-[2px] md:tracking-[4px] text-center"
                     />
-                    {/* Suggestion button is circular */}
                     <button 
                       onClick={handleSuggest}
                       disabled={!canSuggest}
-                      className="w-20 h-20 rounded-full bg-white text-black flex items-center justify-center transition-all hover:scale-110 shadow-2xl hover:bg-gradient-to-br hover:from-indigo-500 hover:to-pink-500 hover:text-white disabled:opacity-50"
+                      className="w-14 h-14 md:w-20 md:h-20 shrink-0 rounded-full bg-white text-black flex items-center justify-center transition-all hover:scale-105 active:scale-95 shadow-2xl hover:bg-indigo-500 hover:text-white disabled:opacity-50"
                     >
-                      <Plus className="w-10 h-10 font-bold" />
+                      <Plus className="w-6 md:w-10 h-6 md:h-10 font-bold" />
                     </button>
                   </div>
                 </div>
