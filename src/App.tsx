@@ -3,12 +3,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useRef, useState, useEffect, useMemo } from "react";
+import React, { useRef, useState, useEffect, useMemo, useCallback } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { OrbitControls, Float, MeshDistortMaterial } from "@react-three/drei";
 import * as THREE from "three";
 import { motion, AnimatePresence } from "motion/react";
-// Removal of Tone.js for simplified access as requested
 import { 
   ChevronUp, 
   MessageSquare, 
@@ -34,514 +33,43 @@ import {
   GitBranch,
   Box,
   Layout,
-  DraftingCompass
+  DraftingCompass,
+  LogOut, 
+  ShieldCheck, 
+  Key, 
+  Cpu, 
+  Globe
 } from "lucide-react";
 import { supabase } from "./lib/supabase";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import OpenAI from "openai";
 import * as webllm from "@mlc-ai/web-llm";
 import { User, Session } from "@supabase/supabase-js";
-import { User as UserIcon, LogOut, ShieldCheck, Key, Cpu, Globe } from "lucide-react";
+import { 
+  Suggestion, 
+  Advice, 
+  UserProfile, 
+  VoidEcho, 
+  EvolutionSnapshot, 
+  ProjectConfig 
+} from "./types";
+import { EvolutionTree } from "./components/EvolutionTree";
+import { ModulePlayer } from "./components/ModulePlayer";
+import { EvolutiveSeed, ModuleNode, Nebula } from "./components/ThreeWorld";
 
-// --- TYPES ---
-interface Suggestion {
-  id: number;
-  content: string;
-  votes: number;
-  energy: number; // 0 to 100
-  status: string;
-  user_id?: string;
-  manifested_code?: string;
-  created_at?: string;
-  pledged_by?: string[]; // user ids
-  parent_id?: number | null; // For refinement iterations
-  version?: number;
-  is_deleted?: boolean;
-}
+// --- TYPES REMOVED (IMPORTED FROM ./types) ---
 
-function EvolutionTree({ suggestions, onSelect }: { suggestions: Suggestion[], onSelect: (s: Suggestion) => void }) {
-  const filteredSuggestions = useMemo(() => 
-    suggestions.filter(s => s.status !== 'deleted' && !s.is_deleted), 
-  [suggestions]);
-
-  const rootNodes = useMemo(() => 
-    filteredSuggestions.filter(s => !s.parent_id && s.status !== 'system_config'), 
-  [filteredSuggestions]);
-  
-  const buildTree = (s: Suggestion, level: number = 0): any => {
-    const children = filteredSuggestions.filter(child => child.parent_id === s.id);
-    return {
-      node: s,
-      level,
-      children: children.map(c => buildTree(c, level + 1))
-    };
-  };
-
-  const forest = useMemo(() => rootNodes.map(r => buildTree(r)), [rootNodes, filteredSuggestions]);
-
-  if (forest.length === 0) {
-    return (
-      <div className="h-full flex flex-col items-center justify-center opacity-20 text-center">
-        <GitBranch className="w-20 h-20 mb-6" />
-        <p className="text-xl font-black uppercase tracking-[10px]">No Evolutionary Paths<br/>Detected Yet</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="w-full h-full overflow-auto custom-scrollbar p-20 flex flex-col gap-32">
-      {forest.map((tree, i) => (
-        <div key={i} className="flex flex-col gap-4">
-          <div className="h-px w-32 bg-gradient-to-r from-transparent via-indigo-500/50 to-transparent" />
-          <EvolutionBranch branch={tree} onSelect={onSelect} />
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function EvolutionBranch({ branch, onSelect }: { branch: any, onSelect: (s: Suggestion) => void }) {
-  let title = branch.node.content;
-  if (branch.node.content.startsWith('JSON:')) {
-    try { title = JSON.parse(branch.node.content.substring(5)).text; } catch(e) {}
-  }
-
-  return (
-    <div className="flex items-center gap-16 relative">
-      <motion.div 
-        whileHover={{ scale: 1.05, y: -5 }}
-        onClick={() => onSelect(branch.node)}
-        className={`shrink-0 w-64 p-6 rounded-[2rem] border-2 cursor-pointer transition-all relative z-10 ${
-          branch.node.status === 'manifested' 
-            ? 'bg-indigo-500/10 border-indigo-500/50 shadow-[0_0_30px_rgba(99,102,241,0.1)]' 
-            : 'bg-white/[0.03] border-white/10 hover:border-white/20'
-        }`}
-      >
-        {branch.node.status === 'manifested' && (
-          <div className="absolute -top-3 -right-3 w-8 h-8 bg-indigo-500 rounded-full flex items-center justify-center shadow-lg animate-pulse">
-            <Sparkles className="w-4 h-4 text-white" />
-          </div>
-        )}
-        <div className="text-[9px] font-black uppercase tracking-widest text-white/20 mb-3 flex items-center gap-2">
-          <div className={`w-1.5 h-1.5 rounded-full ${branch.node.status === 'manifested' ? 'bg-indigo-400' : 'bg-white/20'}`} />
-          NODE_{branch.node.id}
-        </div>
-        <div className="text-[11px] text-white/80 font-bold line-clamp-3 leading-relaxed mb-6 italic group-hover:text-white">
-           "{title}"
-        </div>
-        <div className="flex justify-between items-center border-t border-white/5 pt-4">
-           <span className={`text-[8px] uppercase font-black tracking-[2px] ${branch.node.status === 'manifested' ? 'text-indigo-400' : 'text-white/40'}`}>
-             {branch.node.status}
-           </span>
-           <div className="flex gap-2">
-             {branch.node.version && <span className="px-2 py-0.5 rounded-full bg-white/5 text-[7px] text-white/40 font-black tracking-tighter">V{branch.node.version}</span>}
-             <span className="px-2 py-0.5 rounded-full bg-white/5 text-[7px] text-indigo-400 font-black tracking-tighter uppercase">{branch.node.votes}V</span>
-           </div>
-        </div>
-      </motion.div>
-
-      {branch.children.length > 0 && (
-        <div className="flex flex-col gap-12 relative py-4">
-          <div className="absolute left-0 top-0 bottom-0 w-px bg-gradient-to-b from-white/5 via-indigo-500/20 to-white/5" style={{ left: '-32px' }} />
-          {branch.children.map((child: any, i: number) => (
-            <div key={i} className="flex items-center relative">
-               <div className="absolute left-0 w-8 h-px bg-indigo-500/20" style={{ left: '-32px' }} />
-               <EvolutionBranch branch={child} onSelect={onSelect} />
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-interface Advice {
-  id: number;
-  suggestion_id: number;
-  user_id: string;
-  user_email: string;
-  content: string;
-  created_at: string;
-}
-
-interface UserProfile {
-  id: string;
-  full_name?: string;
-  avatar_url?: string;
-  personal_api_key?: string;
-}
-
-interface VoidEcho {
-  id: string;
-  userId: string;
-  text: string;
-  x: number;
-  y: number;
-  createdAt: number;
-}
-
-interface EvolutionSnapshot {
-  id: string;
-  manifested_at: string;
-  count: number;
-}
-
-interface ProjectConfig {
-  creator_id: string;
-  is_finalized: boolean;
-  epoch_name: string;
-}
+// --- INTERFACES REMOVED (IMPORTED FROM ./types) ---
 
 // --- SOUND ENGINE REMOVED FOR SIMPLICITY ---
 
 // --- 3D COMPONENTS ---
 
-function EvolutiveSeed({ onClick, isOpen }: { onClick: () => void, isOpen: boolean }) {
-  const meshRef = useRef<THREE.Mesh>(null!);
-  const timeRef = useRef(0);
-
-  useFrame((state, delta) => {
-    if (!meshRef.current) return;
-    timeRef.current += delta;
-    const time = timeRef.current;
-    meshRef.current.rotation.y = time * 0.15;
-    const pulse = 1 + Math.sin(time * (isOpen ? 2 : 0.5)) * (isOpen ? 0.1 : 0.05);
-    meshRef.current.scale.set(pulse, pulse, pulse);
-  });
-
-  return (
-    <Float speed={2} rotationIntensity={1} floatIntensity={2}>
-      <mesh ref={meshRef} onClick={onClick} castShadow>
-        <sphereGeometry args={[1.5, 64, 64]} />
-        <MeshDistortMaterial
-          color={isOpen ? "#818cf8" : "#6366f1"}
-          speed={isOpen ? 5 : 3}
-          distort={isOpen ? 0.6 : 0.4}
-          radius={1}
-          metalness={0.7}
-          roughness={0.1}
-          emissive={isOpen ? "#4338ca" : "#2e1065"}
-          emissiveIntensity={0.8}
-        />
-      </mesh>
-    </Float>
-  );
-}
-
-function ModuleNode({ suggestion, onRun }: { suggestion: Suggestion, onRun: (s: Suggestion) => void }) {
-  const meshRef = useRef<THREE.Mesh>(null!);
-  const timeRef = useRef(0);
-  const [hovered, setHovered] = useState(false);
-  
-  // Create a unique orbit for each node based on its ID
-  const { radius, speed, offset, yOffset, color } = useMemo(() => {
-    const colors = ["#ff006e", "#3a86ff", "#fb5607", "#ffbe0b", "#8338ec", "#00f5d4"];
-    return {
-      radius: 3.5 + Math.random() * 2,
-      speed: 0.1 + Math.random() * 0.2,
-      offset: Math.random() * Math.PI * 2,
-      yOffset: (Math.random() - 0.5) * 2,
-      color: colors[Math.floor(Math.random() * colors.length)]
-    };
-  }, []);
-
-  useFrame((state, delta) => {
-    if (!meshRef.current) return;
-    timeRef.current += delta;
-    const time = timeRef.current;
-    const t = time * speed + offset;
-    meshRef.current.position.x = Math.cos(t) * radius;
-    meshRef.current.position.z = Math.sin(t) * radius;
-    meshRef.current.position.y = yOffset + Math.sin(t * 2) * 0.5;
-    meshRef.current.rotation.y += 0.01;
-  });
-
-  return (
-    <mesh 
-      ref={meshRef} 
-      onClick={(e) => {
-        e.stopPropagation();
-        onRun(suggestion);
-      }}
-      onPointerOver={() => setHovered(true)}
-      onPointerOut={() => setHovered(false)}
-    >
-      <sphereGeometry args={[0.15, 32, 32]} />
-      <meshStandardMaterial 
-        color={hovered ? "#fff" : color} 
-        emissive={hovered ? "#fff" : color}
-        emissiveIntensity={hovered ? 2 : 1.5}
-        metalness={0.9}
-        roughness={0.1}
-        transparent
-        opacity={0.9}
-      />
-    </mesh>
-  );
-}
-
-function Nebula({ count = 3000 }) {
-  const timeRef = useRef(0);
-  const circleTexture = useMemo(() => {
-    const canvas = document.createElement('canvas');
-    canvas.width = 64;
-    canvas.height = 64;
-    const ctx = canvas.getContext('2d');
-    if (ctx) {
-      ctx.beginPath();
-      ctx.arc(32, 32, 30, 0, Math.PI * 2);
-      ctx.fillStyle = '#ffffff';
-      ctx.fill();
-    }
-    return new THREE.CanvasTexture(canvas);
-  }, []);
-
-  const { points, colors } = useMemo(() => {
-    const p = new Float32Array(count * 3);
-    const c = new Float32Array(count * 3);
-    const palette = [
-      new THREE.Color("#ff006e"),
-      new THREE.Color("#3a86ff"),
-      new THREE.Color("#fb5607"),
-      new THREE.Color("#ffbe0b"),
-      new THREE.Color("#8338ec"),
-    ];
-
-    for (let i = 0; i < count; i++) {
-      p[i * 3] = (Math.random() - 0.5) * 50;
-      p[i * 3 + 1] = (Math.random() - 0.5) * 50;
-      p[i * 3 + 2] = (Math.random() - 0.5) * 50;
-      
-      const col = palette[Math.floor(Math.random() * palette.length)];
-      c[i * 3] = col.r;
-      c[i * 3 + 1] = col.g;
-      c[i * 3 + 2] = col.b;
-    }
-    return { points: p, colors: c };
-  }, [count]);
-
-  const matRef = useRef<THREE.PointsMaterial>(null!);
-  useFrame((state, delta) => {
-    if (!matRef.current) return;
-    timeRef.current += delta;
-    const time = timeRef.current;
-    matRef.current.size = 0.1 + Math.sin(time * 0.5) * 0.05;
-  });
-
-  return (
-    <points>
-      <bufferGeometry>
-        <bufferAttribute
-          attach="attributes-position"
-          count={points.length / 3}
-          array={points}
-          itemSize={3}
-        />
-        <bufferAttribute
-          attach="attributes-color"
-          count={colors.length / 3}
-          array={colors}
-          itemSize={3}
-        />
-      </bufferGeometry>
-      <pointsMaterial
-        ref={matRef}
-        size={0.15}
-        vertexColors
-        transparent
-        map={circleTexture}
-        opacity={0.6}
-        sizeAttenuation
-        blending={THREE.AdditiveBlending}
-        depthWrite={false}
-      />
-    </points>
-  );
-}
+// --- 3D WORLD REMOVED ---
 
 // --- MODULE PLAYER (SANDBOX) ---
 
-function ModulePlayer({ 
-  suggestion, 
-  onClose, 
-  onSave 
-}: { 
-  suggestion: Suggestion, 
-  onClose: () => void, 
-  onSave?: (code: string) => Promise<void> 
-}) {
-  const [code, setCode] = useState(suggestion.manifested_code || "");
-  const [isEditing, setIsEditing] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const iframeRef = useRef<HTMLIFrameElement>(null);
-
-  const cleanCode = useMemo(() => {
-    return code
-      .replace(/import\s+.*\s+from\s+['"].*['"];?/g, '') // Remove imports
-      .replace(/export\s+default\s+/g, '') // Remove export default
-      .replace(/export\s+/g, ''); // Remove other exports
-  }, [code]);
-
-  const handleSave = async () => {
-    if (!onSave) return;
-    setIsSaving(true);
-    try {
-      await onSave(code);
-      setIsEditing(false);
-    } catch (err) {
-      console.error("Save failed:", err);
-      alert("Failed to save changes to the collective mind.");
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const srcDoc = useMemo(() => `
-    <!DOCTYPE html>
-    <html>
-      <head>
-        <meta charset="UTF-8" />
-        <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-        <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-        <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-        <script src="https://cdn.tailwindcss.com"></script>
-        <script src="https://unpkg.com/lucide@latest"></script>
-        <script src="https://unpkg.com/framer-motion@10.16.4/dist/framer-motion.js"></script>
-        <script src="https://unpkg.com/recharts/umd/Recharts.js"></script>
-        <script src="https://unpkg.com/d3@7"></script>
-        <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
-        <style>
-          body { 
-            background: transparent; 
-            color: white; 
-            margin: 0; 
-            font-family: 'Inter', sans-serif; 
-            min-height: 100vh;
-            display: flex;
-            align-items: flex-start;
-            justify-content: center;
-            overflow-y: auto;
-            overflow-x: hidden;
-          }
-          #root { width: 100%; height: 100%; }
-          .custom-scrollbar::-webkit-scrollbar { width: 6px; }
-          .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-          .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(129, 140, 248, 0.2); border-radius: 10px; }
-          .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(129, 140, 248, 0.4); }
-        </style>
-      </head>
-      <body class="custom-scrollbar">
-        <div id="root"></div>
-        <script type="text/babel">
-          (function() {
-            try {
-              const React = window.React;
-              const { useState, useEffect, useMemo, useRef, useCallback, createContext, useContext } = React;
-              const ReactDOM = window.ReactDOM;
-              const motion = window.Motion;
-              const Recharts = window.Recharts;
-              const d3 = window.d3;
-              const confetti = window.confetti;
-
-              // Mock icons helper if lucide-react isn't fully available
-              const Lucide = window.lucide;
-              
-              // THE GENERATED CODE
-              ${cleanCode}
-
-              // If the code didn't define App, but defined something else, try to find it
-              const ComponentToRender = typeof App !== 'undefined' ? App : null;
-              
-              if (ComponentToRender) {
-                const root = ReactDOM.createRoot(document.getElementById('root'));
-                root.render(<ComponentToRender />);
-              } else {
-                document.getElementById('root').innerHTML = '<div style="padding:20px; color:rgba(255,255,255,0.5); text-align:center">Evolution Manifested. No entry point found.</div>';
-              }
-            } catch (err) {
-              document.getElementById('root').innerHTML = '<pre style="color:pink; padding:20px; white-space:pre-wrap">' + err.message + '</pre>';
-            }
-          })();
-        </script>
-      </body>
-    </html>
-  `, [cleanCode]);
-
-  return (
-    <motion.div 
-      initial={{ opacity: 0, scale: 0.9 }}
-      animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.9 }}
-      className="fixed inset-0 z-50 flex items-center justify-center p-0 md:p-10 bg-black/80 backdrop-blur-md"
-    >
-      <div className="relative w-full md:max-w-5xl h-full md:h-auto md:aspect-video bg-[#050505] border-none md:border md:border-white/10 rounded-none md:rounded-2xl overflow-hidden shadow-2xl flex flex-col">
-        <div className="p-4 border-b border-white/5 flex justify-between items-center bg-white/5">
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-indigo-400" />
-              <span className="text-xs uppercase tracking-widest font-bold">Evolution_{suggestion.id}</span>
-            </div>
-            
-            <div className="hidden md:flex items-center gap-2 p-1 bg-white/5 rounded-lg border border-white/10">
-              <button 
-                onClick={() => setIsEditing(false)}
-                className={`px-3 py-1.5 rounded-md text-[9px] font-black uppercase tracking-widest transition-all ${!isEditing ? 'bg-indigo-500 text-white' : 'text-white/40 hover:text-white'}`}
-              >
-                Manifestation
-              </button>
-              <button 
-                onClick={() => setIsEditing(true)}
-                className={`px-3 py-1.5 rounded-md text-[9px] font-black uppercase tracking-widest transition-all ${isEditing ? 'bg-indigo-500 text-white' : 'text-white/40 hover:text-white'}`}
-              >
-                Source Code
-              </button>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            {isEditing && (
-              <button 
-                onClick={handleSave}
-                disabled={isSaving || code === suggestion.manifested_code}
-                className="px-4 py-2 bg-green-600 text-white text-[9px] font-black uppercase tracking-widest rounded-full hover:bg-green-500 disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-2"
-              >
-                {isSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Database className="w-3 h-3" />}
-                Save Sync
-              </button>
-            )}
-            <button onClick={onClose} className="p-1 hover:bg-white/10 rounded-full transition-colors text-white/40 hover:text-white">
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
-        <div className="flex-1 bg-transparent relative overflow-hidden">
-          {isEditing ? (
-            <div className="absolute inset-0 flex flex-col bg-[#080808]">
-              <textarea 
-                value={code}
-                onChange={(e) => setCode(e.target.value)}
-                spellCheck={false}
-                className="flex-1 w-full h-full bg-transparent p-6 md:p-10 font-mono text-xs md:text-sm text-indigo-300 outline-none resize-none selection:bg-indigo-500/30 no-scrollbar"
-                placeholder="// Enter your manifestation modifications here..."
-              />
-              <div className="p-4 border-t border-white/5 bg-black/40 text-[9px] text-white/20 uppercase tracking-[4px] font-black flex justify-between items-center">
-                 <span>Collaborative Revision Layer active</span>
-                 <span className="italic">Changes must be synchronized to persist</span>
-              </div>
-            </div>
-          ) : (
-            <iframe 
-              ref={iframeRef}
-              srcDoc={srcDoc}
-              className="w-full h-full border-none"
-              sandbox="allow-scripts"
-            />
-          )}
-        </div>
-      </div>
-    </motion.div>
-  );
-}
+// --- MODULE PLAYER REMOVED ---
 
 // --- MAIN UI ---
 
