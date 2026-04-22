@@ -495,7 +495,27 @@ export default function App() {
   // Identity State
   const [session, setSession] = useState<Session | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-  const [userApiKey, setUserApiKey] = useState<string>(() => localStorage.getItem('evolutive_energy_key') || "");
+  
+  const [selectedModel, setSelectedModel] = useState(() => {
+    return localStorage.getItem('soul_model') || "gemini-3-flash-preview";
+  });
+  const [aiProvider, setAiProvider] = useState<'google' | 'openai' | 'anthropic' | 'custom' | 'web-llm' | 'gemini-nano' | 'mlc-mobile'>(() => {
+    return (localStorage.getItem('soul_provider') as any) || "google";
+  });
+
+  const [providerKeys, setProviderKeys] = useState<Record<string, string>>(() => {
+    try {
+      const saved = localStorage.getItem('soul_nexus_keys');
+      const legacy = localStorage.getItem('evolutive_energy_key');
+      const initial = saved ? JSON.parse(saved) : {};
+      if (legacy && !initial.google) initial.google = legacy;
+      return initial;
+    } catch {
+      return {};
+    }
+  });
+
+  const userApiKey = useMemo(() => providerKeys[aiProvider] || "", [providerKeys, aiProvider]);
 
   // Sync Profile on Auth
   useEffect(() => {
@@ -509,19 +529,22 @@ export default function App() {
           .eq('id', session.user.id)
           .maybeSingle();
 
-        if (error) {
-          // Silent failure for non-critical profile table
-          return;
-        }
+        if (error) return;
 
         if (data) {
           setUserProfile(data);
-          if (data.personal_api_key && !userApiKey) {
-            setUserApiKey(data.personal_api_key);
-            localStorage.setItem('evolutive_energy_key', data.personal_api_key);
+          if (data.personal_api_key) {
+             try {
+                const cloudKeys = JSON.parse(data.personal_api_key);
+                setProviderKeys(prev => ({ ...prev, ...cloudKeys }));
+                localStorage.setItem('soul_nexus_keys', JSON.stringify({ ...providerKeys, ...cloudKeys }));
+             } catch {
+                // If it's a legacy single string key
+                setProviderKeys(prev => ({ ...prev, google: data.personal_api_key }));
+                localStorage.setItem('soul_nexus_keys', JSON.stringify({ ...providerKeys, google: data.personal_api_key }));
+             }
           }
         } else {
-          // Attempt to create profile
           await supabase.from('user_profiles').insert([{ id: session.user.id }]);
         }
       } catch (e) {
@@ -532,18 +555,18 @@ export default function App() {
     fetchProfile();
   }, [session, supabase]);
 
-  const saveApiKeyToAccount = async (key: string) => {
-    setUserApiKey(key);
-    localStorage.setItem('evolutive_energy_key', key);
+  const saveApiKeyToAccount = async (key: string, provider: string = aiProvider) => {
+    const newKeys = { ...providerKeys, [provider]: key };
+    setProviderKeys(newKeys);
+    localStorage.setItem('soul_nexus_keys', JSON.stringify(newKeys));
+    if (provider === 'google') localStorage.setItem('evolutive_energy_key', key);
+
     if (session && supabase) {
       try {
-        await supabase.from('user_profiles').update({ personal_api_key: key }).eq('id', session.user.id);
-        alert("API Key synced to your account.");
+        await supabase.from('user_profiles').update({ personal_api_key: JSON.stringify(newKeys) }).eq('id', session.user.id);
       } catch (e) {
         console.error("Error syncing API key:", e);
       }
-    } else {
-      alert("API Key saved locally.");
     }
   };
 
@@ -567,12 +590,6 @@ export default function App() {
   const [isRefining, setIsRefining] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterType, setFilterType] = useState<'all' | 'manifested' | 'pending' | 'mine'>('all');
-  const [selectedModel, setSelectedModel] = useState(() => {
-    return localStorage.getItem('soul_model') || "gemini-3-flash-preview";
-  });
-  const [aiProvider, setAiProvider] = useState<'google' | 'openai' | 'anthropic' | 'custom' | 'web-llm' | 'gemini-nano' | 'mlc-mobile'>(() => {
-    return (localStorage.getItem('soul_provider') as any) || "google";
-  });
   const [customEndpoint, setCustomEndpoint] = useState(() => {
     return localStorage.getItem('soul_custom_endpoint') || "";
   });
@@ -588,20 +605,15 @@ export default function App() {
     try {
       let isOnline = false;
       let tokens: string | null = null;
+      const key = providerKeys[provider] || (provider === 'google' ? process.env.GEMINI_API_KEY : null);
 
       if (provider === 'google') {
-        const key = userApiKey || process.env.GEMINI_API_KEY;
         if (!key) throw new Error("No key");
-        const genAI = new GoogleGenAI({ apiKey: key });
-        // Use existing pattern: models.generateContent
-        await genAI.models.generateContent({
-          model: "gemini-1.5-flash",
-          contents: "health check"
-        });
-        isOnline = true;
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`);
+        if (res.ok) isOnline = true;
       } else if (provider === 'openai') {
-        if (!userApiKey) throw new Error("No Key");
-        const client = new OpenAI({ apiKey: userApiKey, dangerouslyAllowBrowser: true });
+        if (!key) throw new Error("No Key");
+        const client = new OpenAI({ apiKey: key, dangerouslyAllowBrowser: true });
         await client.models.list();
         isOnline = true;
       } else if (provider === 'web-llm') {
@@ -612,9 +624,8 @@ export default function App() {
         isOnline = !!(w.ai && w.ai.assistant);
       } else if (provider === 'custom') {
         const res = await fetch(customEndpoint + "/models", { mode: 'no-cors' });
-        isOnline = true; // no-cors means we can't read body but request went through
+        isOnline = true;
       } else {
-        // Ping generic endpoint if possible
         isOnline = true;
       }
 
@@ -662,7 +673,8 @@ export default function App() {
   // Unified AI Bridge
   const callUnifiedAI = async (prompt: string): Promise<string> => {
     try {
-      const key = userApiKey || process.env.GEMINI_API_KEY;
+      const activeKey = providerKeys[aiProvider] || "";
+      const googleKey = providerKeys['google'] || process.env.GEMINI_API_KEY;
       
       // Offline / Specialized Mobile Handlers
       if (aiProvider === 'gemini-nano') {
@@ -702,11 +714,13 @@ export default function App() {
         return response.choices[0].message.content || "";
       }
 
-      if (!key && aiProvider === 'google') throw new Error("No Google Energy Source Found.");
-      if (!userApiKey && (aiProvider === 'openai' || aiProvider === 'anthropic')) throw new Error(`No ${aiProvider.toUpperCase()} Key Found.`);
+      if (!googleKey && aiProvider === 'google') throw new Error("No Google Energy Source Found.");
+      if (!activeKey && (aiProvider === 'openai' || aiProvider === 'anthropic' || aiProvider === 'custom')) {
+         if (aiProvider !== 'custom') throw new Error(`No ${aiProvider.toUpperCase()} Key Found.`);
+      }
 
       if (aiProvider === 'google') {
-        const genAI = new GoogleGenAI({ apiKey: key! });
+        const genAI = new GoogleGenAI({ apiKey: googleKey! });
         const response = await genAI.models.generateContent({
           model: selectedModel,
           contents: prompt
@@ -716,7 +730,7 @@ export default function App() {
 
       if (aiProvider === 'openai' || aiProvider === 'custom') {
         const client = new OpenAI({
-          apiKey: userApiKey,
+          apiKey: activeKey,
           baseURL: aiProvider === 'custom' ? customEndpoint : undefined,
           dangerouslyAllowBrowser: true,
         });
@@ -732,7 +746,7 @@ export default function App() {
         const response = await fetch("https://api.anthropic.com/v1/messages", {
           method: "POST",
           headers: {
-            "x-api-key": userApiKey,
+            "x-api-key": activeKey,
             "anthropic-version": "2023-06-01",
             "content-type": "application/json",
             "anthropic-dangerous-direct-browser-access": "true"
@@ -760,7 +774,7 @@ export default function App() {
 
   // Gemini AI Provider (Legacy/Internal)
   const getAI = (customKey?: string) => {
-    const key = customKey || userApiKey || process.env.GEMINI_API_KEY;
+    const key = customKey || providerKeys['google'] || process.env.GEMINI_API_KEY;
     if (!key) throw new Error("No Energy Source Found. Connect Identity or Provide Key.");
     return new GoogleGenAI({ apiKey: key });
   };
@@ -777,7 +791,8 @@ export default function App() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       if (!session) {
-        setUserApiKey("");
+        setProviderKeys({});
+        localStorage.removeItem('soul_nexus_keys');
         localStorage.removeItem('evolutive_energy_key');
       }
     });
