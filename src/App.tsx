@@ -38,7 +38,8 @@ import {
   ShieldCheck, 
   Key, 
   Cpu, 
-  Globe
+  Globe,
+  CircleUser
 } from "lucide-react";
 import { supabase } from "./lib/supabase";
 import { GoogleGenAI } from "@google/genai";
@@ -432,7 +433,7 @@ export default function App() {
     const envKey = typeof process !== 'undefined' && process.env ? (process.env.GEMINI_API_KEY as string) : undefined;
     const key = customKey || providerKeys['google'] || envKey;
     if (!key) throw new Error("No Energy Source Found. Connect Identity or Provide Key.");
-    return new GoogleGenerativeAI(key);
+    return null; // Legacy helper no longer used
   };
 
   // Auth Session Listener
@@ -716,8 +717,19 @@ export default function App() {
           status: 'manifested',
           votes: 0,
           energy: 100,
-          manifested_code: generatedCode,
         };
+
+        if (dbFeatures.manifested_code) {
+          insertData.manifested_code = generatedCode;
+        } else {
+          insertData.content = 'JSON:' + JSON.stringify({
+            text: insertData.content,
+            status: insertData.status,
+            votes: insertData.votes,
+            energy: insertData.energy,
+            manifested_code: generatedCode
+          });
+        }
 
         if (dbFeatures.parent_id) insertData.parent_id = suggestion.id;
         // Don't assume version exists if not detected
@@ -977,17 +989,18 @@ export default function App() {
       }
 
       const updateData: any = { status: newStatus };
-      if (manifestedCode) updateData.manifested_code = manifestedCode;
+      if (manifestedCode && dbFeatures.manifested_code) updateData.manifested_code = manifestedCode;
       
       // Only include fields that exist in DB
       if (dbFeatures.energy) updateData.energy = newEnergy;
       if (dbFeatures.pledged_by) updateData.pledged_by = newPledgedBy;
 
       // Wrap missing fields into content
-      if (!dbFeatures.energy || !dbFeatures.pledged_by) {
+      if (!dbFeatures.energy || !dbFeatures.pledged_by || !dbFeatures.manifested_code) {
         const meta = s.content.startsWith('JSON:') ? JSON.parse(s.content.substring(5)) : { text: s.content };
         if (!dbFeatures.energy) meta.energy = newEnergy;
         if (!dbFeatures.pledged_by) meta.pledged_by = newPledgedBy;
+        if (!dbFeatures.manifested_code && manifestedCode) meta.manifested_code = manifestedCode;
         updateData.content = 'JSON:' + JSON.stringify(meta);
       }
       
@@ -1698,7 +1711,7 @@ export default function App() {
                   {!session ? (
                     <div className="text-center space-y-10">
                       <div className="w-24 h-24 bg-gradient-to-tr from-indigo-500 to-pink-500 rounded-full flex items-center justify-center mx-auto shadow-[0_0_50px_rgba(99,102,241,0.3)]">
-                        <UserIcon className="w-10 h-10 text-white" />
+                        <CircleUser className="w-10 h-10 text-white" />
                       </div>
                       <div className="space-y-4">
                         <h3 className="text-2xl font-black uppercase tracking-[10px] text-white">Account</h3>
@@ -2075,7 +2088,15 @@ export default function App() {
             onClose={() => setActiveModule(null)} 
             onSave={async (newCode) => {
               if (!supabase) return;
-              const { error } = await supabase.from('suggestions').update({ manifested_code: newCode }).eq('id', activeModule.id);
+              const updatePayload: any = {};
+              if (dbFeatures.manifested_code) {
+                updatePayload.manifested_code = newCode;
+              } else {
+                const meta = activeModule.content.startsWith('JSON:') ? JSON.parse(activeModule.content.substring(5)) : { text: activeModule.content };
+                meta.manifested_code = newCode;
+                updatePayload.content = 'JSON:' + JSON.stringify(meta);
+              }
+              const { error } = await supabase.from('suggestions').update(updatePayload).eq('id', activeModule.id);
               if (error) throw error;
               setSuggestions(prev => prev.map(s => s.id === activeModule.id ? { ...s, manifested_code: newCode } : s));
             }}
