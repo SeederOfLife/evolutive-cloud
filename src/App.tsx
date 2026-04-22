@@ -41,7 +41,7 @@ import { GoogleGenAI } from "@google/genai";
 import OpenAI from "openai";
 import * as webllm from "@mlc-ai/web-llm";
 import { User, Session } from "@supabase/supabase-js";
-import { User as UserIcon, LogOut, ShieldCheck, Key } from "lucide-react";
+import { User as UserIcon, LogOut, ShieldCheck, Key, Cpu, Globe } from "lucide-react";
 
 // --- TYPES ---
 interface Suggestion {
@@ -579,6 +579,58 @@ export default function App() {
   const [webLlmProgress, setWebLlmProgress] = useState<string>("");
   const webLlmEngineRef = useRef<webllm.MLCEngine | null>(null);
 
+  // AI Nexus Health Monitoring
+  const [providerHealth, setProviderHealth] = useState<Record<string, { status: 'online' | 'offline' | 'checking' | null, ping: number | null, tokens: string | null }>>({});
+
+  const checkHealth = async (provider: string) => {
+    setProviderHealth(prev => ({ ...prev, [provider]: { ...prev[provider], status: 'checking' } }));
+    const startTime = Date.now();
+    try {
+      let isOnline = false;
+      let tokens: string | null = null;
+
+      if (provider === 'google') {
+        const key = userApiKey || process.env.GEMINI_API_KEY;
+        if (!key) throw new Error("No key");
+        const genAI = new GoogleGenAI({ apiKey: key });
+        // Use existing pattern: models.generateContent
+        await genAI.models.generateContent({
+          model: "gemini-1.5-flash",
+          contents: "health check"
+        });
+        isOnline = true;
+      } else if (provider === 'openai') {
+        if (!userApiKey) throw new Error("No Key");
+        const client = new OpenAI({ apiKey: userApiKey, dangerouslyAllowBrowser: true });
+        await client.models.list();
+        isOnline = true;
+      } else if (provider === 'web-llm') {
+        const w = window as any;
+        isOnline = !!w.navigator.gpu;
+      } else if (provider === 'gemini-nano') {
+        const w = window as any;
+        isOnline = !!(w.ai && w.ai.assistant);
+      } else if (provider === 'custom') {
+        const res = await fetch(customEndpoint + "/models", { mode: 'no-cors' });
+        isOnline = true; // no-cors means we can't read body but request went through
+      } else {
+        // Ping generic endpoint if possible
+        isOnline = true;
+      }
+
+      const ping = Date.now() - startTime;
+      setProviderHealth(prev => ({ 
+        ...prev, 
+        [provider]: { status: 'online', ping, tokens: tokens || "Available" } 
+      }));
+    } catch (e) {
+      setProviderHealth(prev => ({ 
+        ...prev, 
+        [provider]: { status: 'offline', ping: null, tokens: null } 
+      }));
+    }
+  };
+
   useEffect(() => {
     localStorage.setItem('soul_model', selectedModel);
     localStorage.setItem('soul_provider', aiProvider);
@@ -609,94 +661,101 @@ export default function App() {
 
   // Unified AI Bridge
   const callUnifiedAI = async (prompt: string): Promise<string> => {
-    const key = userApiKey || process.env.GEMINI_API_KEY;
-    
-    // Offline / Specialized Mobile Handlers
-    if (aiProvider === 'gemini-nano') {
-      const w = window as any;
-      if (!w.ai || !w.ai.assistant) {
-        throw new Error("Gemini Nano not detected. Ensure 'AI Test' is enabled in your Android Chrome flags (chrome://flags/#optimization-guide-on-device-model).");
+    try {
+      const key = userApiKey || process.env.GEMINI_API_KEY;
+      
+      // Offline / Specialized Mobile Handlers
+      if (aiProvider === 'gemini-nano') {
+        const w = window as any;
+        if (!w.ai || !w.ai.assistant) {
+          throw new Error("Gemini Nano not detected. Ensure 'AI Test' is enabled in your Android Chrome flags (chrome://flags/#optimization-guide-on-device-model).");
+        }
+        const session = await w.ai.assistant.create();
+        const result = await session.prompt(prompt);
+        return result;
       }
-      const session = await w.ai.assistant.create();
-      const result = await session.prompt(prompt);
-      return result;
-    }
 
-    if (aiProvider === 'web-llm') {
-      if (!webLlmEngineRef.current) {
-        setWebLlmProgress("Wakeing Browser Soul...");
-        const engine = new webllm.MLCEngine();
-        engine.setInitProgressCallback((report) => setWebLlmProgress(report.text));
-        await engine.reload(selectedModel || "Llama-3-8B-Instruct-v0.1-q4f32_1-MLC");
-        webLlmEngineRef.current = engine;
-      }
-      const response = await webLlmEngineRef.current.chat.completions.create({
-        messages: [{ role: "user", content: prompt }]
-      });
-      return response.choices[0].message.content || "";
-    }
-
-    if (aiProvider === 'mlc-mobile') {
-      // Connects to local server if user is sharing bridge from MLC app
-      const client = new OpenAI({
-        apiKey: "no-key",
-        baseURL: customEndpoint || "http://localhost:8080/v1", // Default MLC bridge
-        dangerouslyAllowBrowser: true,
-      });
-      const response = await client.chat.completions.create({
-        model: selectedModel || "main",
-        messages: [{ role: "user", content: prompt }],
-      });
-      return response.choices[0].message.content || "";
-    }
-
-    if (!key && aiProvider === 'google') throw new Error("No Google Energy Source Found.");
-    if (!userApiKey && (aiProvider === 'openai' || aiProvider === 'anthropic')) throw new Error(`No ${aiProvider.toUpperCase()} Key Found.`);
-
-    if (aiProvider === 'google') {
-      const genAI = new GoogleGenAI({ apiKey: key! });
-      const response = await genAI.models.generateContent({
-        model: selectedModel,
-        contents: prompt
-      });
-      return response.text || "";
-    }
-
-    if (aiProvider === 'openai' || aiProvider === 'custom') {
-      const client = new OpenAI({
-        apiKey: userApiKey,
-        baseURL: aiProvider === 'custom' ? customEndpoint : undefined,
-        dangerouslyAllowBrowser: true,
-      });
-
-      const response = await client.chat.completions.create({
-        model: selectedModel,
-        messages: [{ role: "user", content: prompt }],
-      });
-      return response.choices[0].message.content || "";
-    }
-
-    if (aiProvider === 'anthropic') {
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "x-api-key": userApiKey,
-          "anthropic-version": "2023-06-01",
-          "content-type": "application/json",
-          "anthropic-dangerous-direct-browser-access": "true"
-        },
-        body: JSON.stringify({
-          model: selectedModel,
-          max_tokens: 4096,
+      if (aiProvider === 'web-llm') {
+        if (!webLlmEngineRef.current) {
+          setWebLlmProgress("Wakeing Browser Soul...");
+          const engine = new webllm.MLCEngine();
+          engine.setInitProgressCallback((report) => setWebLlmProgress(report.text));
+          await engine.reload(selectedModel || "Llama-3-8B-Instruct-v0.1-q4f32_1-MLC");
+          webLlmEngineRef.current = engine;
+        }
+        const response = await webLlmEngineRef.current.chat.completions.create({
           messages: [{ role: "user", content: prompt }]
-        })
-      });
-      const data = await response.json();
-      if (data.error) throw new Error(data.error.message);
-      return data.content[0].text;
-    }
+        });
+        return response.choices[0].message.content || "";
+      }
 
-    throw new Error("Soul Link Provider Disconnected.");
+      if (aiProvider === 'mlc-mobile') {
+        const client = new OpenAI({
+          apiKey: "no-key",
+          baseURL: customEndpoint || "http://localhost:8080/v1",
+          dangerouslyAllowBrowser: true,
+        });
+        const response = await client.chat.completions.create({
+          model: selectedModel || "main",
+          messages: [{ role: "user", content: prompt }],
+        });
+        return response.choices[0].message.content || "";
+      }
+
+      if (!key && aiProvider === 'google') throw new Error("No Google Energy Source Found.");
+      if (!userApiKey && (aiProvider === 'openai' || aiProvider === 'anthropic')) throw new Error(`No ${aiProvider.toUpperCase()} Key Found.`);
+
+      if (aiProvider === 'google') {
+        const genAI = new GoogleGenAI({ apiKey: key! });
+        const response = await genAI.models.generateContent({
+          model: selectedModel,
+          contents: prompt
+        });
+        return response.text || "";
+      }
+
+      if (aiProvider === 'openai' || aiProvider === 'custom') {
+        const client = new OpenAI({
+          apiKey: userApiKey,
+          baseURL: aiProvider === 'custom' ? customEndpoint : undefined,
+          dangerouslyAllowBrowser: true,
+        });
+
+        const response = await client.chat.completions.create({
+          model: selectedModel,
+          messages: [{ role: "user", content: prompt }],
+        });
+        return response.choices[0].message.content || "";
+      }
+
+      if (aiProvider === 'anthropic') {
+        const response = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: {
+            "x-api-key": userApiKey,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json",
+            "anthropic-dangerous-direct-browser-access": "true"
+          },
+          body: JSON.stringify({
+            model: selectedModel,
+            max_tokens: 4096,
+            messages: [{ role: "user", content: prompt }]
+          })
+        });
+        const data = await response.json();
+        if (data.error) throw new Error(data.error.message);
+        return data.content[0].text;
+      }
+
+      throw new Error("Soul Link Provider Disconnected.");
+    } catch (err: any) {
+      const msg = err.message || String(err);
+      if (msg.includes('connection error') || msg.includes('Failed to fetch')) {
+        throw new Error(`[${aiProvider}] Connection failed. If using mobile local AI, ensure the bridge app is active. Otherwise check your internet.`);
+      }
+      throw err;
+    }
   };
 
   // Gemini AI Provider (Legacy/Internal)
@@ -1116,8 +1175,14 @@ export default function App() {
         Original: "${rawInput}"
         Manifestation:`;
 
-      const text = await callUnifiedAI(prompt);
-      const content = text.trim() || rawInput;
+      let content = rawInput;
+      try {
+        const text = await callUnifiedAI(prompt);
+        content = text.trim() || rawInput;
+      } catch (aiErr) {
+        console.warn("Consciousness Refinement Link failed (Connection error?). Resting on raw intent.", aiErr);
+        // We use the raw input if the AI refinement fails to prevent blocking the user
+      }
 
       if (!supabase) {
         setSuggestions([{ id: Date.now(), content, votes: 0, energy: 0, status: "pending", user_id: session?.user?.id }, ...suggestions]);
@@ -2049,77 +2114,139 @@ export default function App() {
                         </div>
                       </div>
 
-                      <div className="bg-white/[0.03] p-6 md:p-10 rounded-2xl md:rounded-3xl border border-white/5 space-y-6 md:space-y-10 text-left">
-                        <div className="space-y-4">
-                          <label className="text-[9px] md:text-[10px] font-black uppercase tracking-[2px] md:tracking-[3px] text-white/40 block">Evolution Bridge Provider</label>
-                          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+                      <div className="bg-white/[0.03] p-4 md:p-8 rounded-[2rem] md:rounded-[3rem] border border-white/5 space-y-8 text-left">
+                        <div className="flex items-center justify-between border-b border-white/5 pb-4">
+                          <div className="space-y-1">
+                            <h4 className="text-[10px] font-black uppercase tracking-[4px] text-white">AI Nexus</h4>
+                            <p className="text-[8px] text-white/30 uppercase tracking-widest font-medium">Switch & Monitor Evolution Bridges</p>
+                          </div>
+                          <div className="flex gap-2">
                             {(['google', 'openai', 'anthropic', 'custom', 'web-llm', 'gemini-nano', 'mlc-mobile'] as const).map((p) => (
                               <button
                                 key={p}
                                 onClick={() => setAiProvider(p)}
-                                className={`py-3 md:py-4 rounded-xl md:rounded-2xl text-[8px] md:text-[9px] font-black uppercase tracking-widest transition-all border ${aiProvider === p ? 'bg-indigo-500/20 text-indigo-400 border-indigo-500 shadow-[0_0_20px_rgba(99,102,241,0.2)]' : 'bg-white/5 text-white/30 border-white/5 hover:bg-white/10'}`}
+                                className={`w-3 h-3 rounded-full transition-all flex items-center justify-center relative ${aiProvider === p ? 'bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.5)] scale-125' : 'bg-white/10 hover:bg-white/20'}`}
+                                title={p.toUpperCase()}
                               >
-                                {p.replace('-', ' ')}
+                                {providerHealth[p]?.status === 'online' && (
+                                   <div className="absolute -top-1 -right-1 w-1.5 h-1.5 bg-green-500 rounded-full border border-[#050510]" />
+                                )}
                               </button>
                             ))}
                           </div>
-                          
-                          {/* Tutorial/Help section */}
-                          <div className="p-4 bg-indigo-500/5 rounded-xl md:rounded-2xl border border-indigo-500/10 space-y-2">
-                            <div className="flex items-center gap-2 text-indigo-400">
-                              <Info className="w-2.5 md:w-3 h-2.5 md:h-3" />
-                              <span className="text-[8px] md:text-[9px] font-black uppercase tracking-[2px] md:tracking-[3px]">Tutorial: {aiProvider.replace('-', ' ')}</span>
-                            </div>
-                            <div className="text-[9px] md:text-[10px] text-white/40 leading-relaxed italic space-y-2">
-                              {aiProvider === 'google' && <p>The default engine. Stability guaranteed. Key: aistudio.google.com.</p>}
-                              {aiProvider === 'openai' && <p>Connect to GPT-4o. Key: platform.openai.com.</p>}
-                              {aiProvider === 'anthropic' && <p>Claude 3.5 support. Key: console.anthropic.com.</p>}
-                              {aiProvider === 'custom' && <p>Local AI (Ollama). Default: http://localhost:11434/v1.</p>}
-                              {aiProvider === 'web-llm' && (
-                                <div className="space-y-1">
-                                  <p className="font-black text-indigo-400">OFFLINE BROWSER MODE</p>
-                                  <p>Uses WebGPU. Runs inside the tab. First load is slow (model download).</p>
-                                  {webLlmProgress && <p className="text-white/60 font-mono text-[7px] animate-pulse">{webLlmProgress}</p>}
-                                </div>
-                              )}
-                              {aiProvider === 'gemini-nano' && (
-                                <div className="space-y-1">
-                                  <p className="font-black text-indigo-400">MOBILE NATIVE AI</p>
-                                  <p>Uses Pixel/Samsung on-device AI. Enable 'Optimization Guide' in Chrome flags.</p>
-                                </div>
-                              )}
-                              {aiProvider === 'mlc-mobile' && (
-                                <div className="space-y-1">
-                                  <p className="font-black text-indigo-400">MOBILE APP SYNC</p>
-                                  <p>Sync with MLC LLM app. Start server in app and use phone IP below.</p>
-                                </div>
-                              )}
-                            </div>
-                          </div>
                         </div>
 
-                        <div className="space-y-6">
-                          <div className="space-y-3">
-                            <label className="text-[9px] md:text-[10px] font-black uppercase tracking-[2px] md:tracking-[3px] text-white/40 block text-center md:text-left">Soul Engine Model</label>
-                            <div className="flex flex-col gap-2">
-                              <input 
-                                type="text"
-                                value={selectedModel}
-                                onChange={(e) => setSelectedModel(e.target.value)}
-                                placeholder="Model ID (gpt-4o, llama3, ...)"
-                                className="bg-white/5 border border-white/10 w-full p-3 md:p-4 rounded-xl text-center text-[10px] md:text-[11px] text-indigo-300 font-mono focus:border-indigo-500 outline-none"
-                              />
-                              <div className="flex flex-wrap gap-1.5 md:gap-2 justify-center mt-1 md:mt-2">
-                                {(aiProvider === 'google' ? ['gemini-2.0-flash-exp', 'gemini-1.5-flash', 'gemini-1.5-pro'] : 
-                                  aiProvider === 'openai' ? ['gpt-4o', 'gpt-4o-mini'] :
+                        {/* Individual Provider Identity Page */}
+                        <motion.div 
+                          key={aiProvider}
+                          initial={{ opacity: 0, x: 20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          className="space-y-8"
+                        >
+                          <div className="flex items-start justify-between">
+                            <div className="space-y-3">
+                              <div className="flex items-center gap-3">
+                                <h2 className="text-2xl md:text-3xl font-black uppercase tracking-[6px] text-white">{aiProvider.replace('-', ' ')}</h2>
+                                {aiProvider === 'google' && <span className="px-2 py-0.5 bg-indigo-500/10 text-indigo-400 text-[7px] font-black uppercase tracking-widest border border-indigo-500/20 rounded-full">Primary</span>}
+                              </div>
+                              <div className="flex items-center gap-4">
+                                <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-[8px] font-black uppercase tracking-widest ${
+                                  providerHealth[aiProvider]?.status === 'online' ? 'bg-green-500/10 text-green-400 border-green-500/20' : 
+                                  providerHealth[aiProvider]?.status === 'offline' ? 'bg-pink-500/10 text-pink-400 border-pink-500/20' :
+                                  providerHealth[aiProvider]?.status === 'checking' ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20' :
+                                  'bg-white/5 text-white/20 border-white/5'
+                                }`}>
+                                  <div className={`w-1.5 h-1.5 rounded-full ${
+                                    providerHealth[aiProvider]?.status === 'online' ? 'bg-green-400 animate-pulse' : 
+                                    providerHealth[aiProvider]?.status === 'offline' ? 'bg-pink-400' : 
+                                    providerHealth[aiProvider]?.status === 'checking' ? 'bg-yellow-400 animate-spin' : 'bg-white/20'
+                                  }`} />
+                                  {providerHealth[aiProvider]?.status || 'Idle'}
+                                </div>
+                                {providerHealth[aiProvider]?.ping && (
+                                  <span className="text-[9px] font-mono text-white/40 tracking-tighter">{providerHealth[aiProvider].ping}ms link latency</span>
+                                )}
+                              </div>
+                            </div>
+                            <button 
+                              onClick={() => checkHealth(aiProvider)}
+                              disabled={providerHealth[aiProvider]?.status === 'checking'}
+                              className="p-4 rounded-[1.5rem] bg-white/5 border border-white/10 text-white/40 hover:bg-white hover:text-black hover:border-white transition-all hover:scale-105 active:scale-95 disabled:opacity-50 group"
+                              title="Nexus Sync Check"
+                            >
+                              <Activity className={`w-5 h-5 group-hover:scale-110 transition-transform ${providerHealth[aiProvider]?.status === 'checking' ? 'animate-spin' : ''}`} />
+                            </button>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="bg-black/20 p-6 rounded-[2rem] border border-white/5 space-y-4 group text-center md:text-left">
+                              <div className="flex items-center justify-between">
+                                <label className="text-[9px] font-black uppercase tracking-[3px] text-white/40 group-focus-within:text-indigo-400 transition-colors">Energy Secret</label>
+                                <Lock className="w-3 h-3 text-white/10" />
+                              </div>
+                              <div className="relative">
+                                <Key className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/10 group-focus-within:text-indigo-400 transition-colors" />
+                                <input 
+                                  type="password" 
+                                  placeholder="Identity Token Required"
+                                  value={userApiKey}
+                                  onChange={(e) => saveApiKeyToAccount(e.target.value)}
+                                  className="w-full bg-black/40 border border-white/5 rounded-2xl py-4 pl-12 pr-4 text-[11px] text-white outline-none focus:border-indigo-500/30 transition-all font-mono"
+                                />
+                              </div>
+                              <button 
+                                onClick={() => saveApiKeyToAccount(userApiKey)}
+                                className="w-full py-3 bg-white/5 hover:bg-white hover:text-black text-[8px] font-black uppercase tracking-widest rounded-xl transition-all border border-white/5"
+                              >
+                                Synchronize Key
+                              </button>
+                            </div>
+
+                            <div className="bg-black/20 p-6 rounded-[2rem] border border-white/5 space-y-4 group text-center md:text-left">
+                              <div className="flex items-center justify-between">
+                                <label className="text-[9px] font-black uppercase tracking-[3px] text-white/40 group-focus-within:text-pink-400 transition-colors">Evolution Model</label>
+                                <Cpu className="w-3 h-3 text-white/10" />
+                              </div>
+                              <div className="relative">
+                                <Zap className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/10 group-focus-within:text-pink-400 transition-colors" />
+                                <select 
+                                  value={selectedModel}
+                                  onChange={(e) => setSelectedModel(e.target.value)}
+                                  className="w-full bg-black/40 border border-white/5 rounded-2xl py-4 pl-12 pr-4 text-[11px] text-white outline-none focus:border-pink-500/30 transition-all appearance-none uppercase font-black"
+                                >
+                                  {aiProvider === 'google' && (
+                                    <>
+                                      <option value="gemini-2.0-flash-exp">Gemini 2 Flash (Ultra)</option>
+                                      <option value="gemini-1.5-pro-exp-02-05">Gemini 1.5 Pro</option>
+                                    </>
+                                  )}
+                                  {aiProvider === 'openai' && (
+                                    <>
+                                      <option value="gpt-4o">GPT-4o (Production)</option>
+                                      <option value="gpt-4o-mini">GPT-4o Mini (Efficient)</option>
+                                      <option value="o1-preview">o1 Preview (Reasoning)</option>
+                                    </>
+                                  )}
+                                  {aiProvider === 'anthropic' && (
+                                    <>
+                                      <option value="claude-3-5-sonnet-20240620">Claude 3.5 Sonnet</option>
+                                      <option value="claude-3-opus-20240229">Claude 3 Opus</option>
+                                    </>
+                                  )}
+                                  {aiProvider === 'custom' || aiProvider === 'mlc-mobile' || aiProvider === 'web-llm' || aiProvider === 'gemini-nano' ? (
+                                     <option value={selectedModel}>{selectedModel.toUpperCase()}</option>
+                                  ) : null}
+                                </select>
+                              </div>
+                              <div className="flex flex-wrap gap-1 md:gap-1.5 justify-center md:justify-start">
+                                {(aiProvider === 'google' ? ['gemini-2.0-flash-exp', 'gemini-1.5-flash'] : 
+                                  aiProvider === 'openai' ? ['gpt-4o', 'o1-mini'] :
                                   aiProvider === 'anthropic' ? ['claude-3-5-sonnet-20240620'] :
-                                  aiProvider === 'web-llm' ? ['Llama-3-8B-Instruct-v0.1-q4f32_1-MLC', 'Gemma-2b-it-q4f32_1-MLC'] :
-                                  aiProvider === 'gemini-nano' ? ['builtin-nano'] :
-                                  ['llama3', 'mistral']).map(m => (
+                                  aiProvider === 'custom' ? ['llama3', 'mistral', 'phi3'] : []).map(m => (
                                   <button 
                                     key={m} 
                                     onClick={() => setSelectedModel(m)}
-                                    className="px-2 md:px-3 py-1 bg-white/5 rounded-full text-[7px] md:text-[8px] text-white/40 hover:text-white border border-white/5 whitespace-nowrap"
+                                    className={`px-2 py-1 rounded-md text-[7px] font-black border transition-all ${selectedModel === m ? 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30' : 'bg-white/5 text-white/30 border-white/5 hover:border-white/20'}`}
                                   >
                                     {m.split('-')[0].toUpperCase()}
                                   </button>
@@ -2128,35 +2255,56 @@ export default function App() {
                             </div>
                           </div>
 
-                          <div className="space-y-3">
-                            <label className="text-[9px] md:text-[10px] font-black uppercase tracking-[2px] md:tracking-[3px] text-white/40 block text-center md:text-left">API Energy Key</label>
-                            <div className="flex flex-col gap-3 md:gap-4">
-                              <input 
-                                type="text"
-                                style={{ WebkitTextSecurity: 'disc' } as any}
-                                autoComplete="off"
-                                spellCheck={false}
-                                value={userApiKey}
-                                onChange={(e) => setUserApiKey(e.target.value)}
-                                placeholder={`Enter ${aiProvider} Energy Key`}
-                                className="bg-white/10 border border-white/20 w-full p-3 md:p-4 rounded-xl text-center text-xs md:text-sm text-indigo-300 focus:border-indigo-500 outline-none"
-                              />
-                              <button 
-                                onClick={() => saveApiKeyToAccount(userApiKey)}
-                                className="py-4 md:py-5 px-6 bg-white text-black text-[10px] md:text-[11px] font-black uppercase tracking-[3px] md:tracking-[4px] rounded-full hover:bg-indigo-400 hover:text-white transition-all shadow-xl"
-                              >
-                                Synchronize Soul
-                              </button>
+                          {(aiProvider === 'custom' || aiProvider === 'mlc-mobile') && (
+                            <div className="bg-black/20 p-6 rounded-[2rem] border border-yellow-500/10 space-y-3 text-center md:text-left">
+                              <label className="text-[9px] font-black uppercase tracking-[3px] text-white/40 block">Network Anchor (Endpoint URL)</label>
+                              <div className="relative group">
+                                <Globe className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/10 group-focus-within:text-yellow-400 transition-colors" />
+                                <input 
+                                  type="text"
+                                  value={customEndpoint}
+                                  onChange={(e) => setCustomEndpoint(e.target.value)}
+                                  className="w-full bg-black/40 border border-white/10 rounded-2xl py-4 pl-12 px-4 text-[11px] text-white outline-none focus:border-yellow-500/50 transition-all font-mono"
+                                  placeholder={aiProvider === 'custom' ? "http://localhost:11434/v1" : "http://手机IP:8080/v1"}
+                                />
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="p-6 bg-indigo-500/[0.03] border border-indigo-500/10 rounded-[2rem] space-y-4">
+                             <div className="flex items-center gap-3 text-indigo-400">
+                               <div className="p-1.5 rounded-lg bg-indigo-500/10"><Info className="w-3.5 h-3.5" /></div>
+                               <span className="text-[10px] font-black uppercase tracking-[4px]">Soul Connection Guide</span>
+                             </div>
+                             <div className="text-[9px] md:text-[10px] text-white/40 leading-relaxed uppercase tracking-widest space-y-3 font-medium">
+                                {aiProvider === 'google' && <p>Primary neural bridge. Built for Architectural manifest. Key at <a href="https://aistudio.google.com" target="_blank" className="text-indigo-400 underline">Google AI Studio</a>.</p>}
+                                {aiProvider === 'openai' && <p>Standard intelligence lattice. Production grade logic. Key at <a href="https://platform.openai.com" target="_blank" className="text-pink-400 underline">OpenAI Portal</a>.</p>}
+                                {aiProvider === 'anthropic' && <p>Claude 3.5 Sonnet support for human-centric manifests. Key at <a href="https://console.anthropic.com" target="_blank" className="text-yellow-400 underline">Anthropic Console</a>.</p>}
+                             </div>
+                          </div>
+
+                          <div className="flex items-center justify-between px-2">
+                            <div className="space-y-2">
+                               <span className="text-[8px] text-white/20 uppercase tracking-[3px] font-black">Cognitive Footprint</span>
+                               <div className="flex gap-1.5">
+                                 {[...Array(5)].map((_, i) => (
+                                   <div key={i} className={`w-4 md:w-6 h-1 rounded-full transition-all duration-700 ${i < (aiProvider === 'google' || aiProvider === 'openai' ? 2 : aiProvider === 'web-llm' ? 5 : 3) ? 'bg-indigo-500 shadow-[0_0_5px_rgba(99,102,241,0.5)]' : 'bg-white/5'}`} />
+                                 ))}
+                               </div>
+                            </div>
+                            <div className="text-right space-y-1">
+                               <span className="text-[8px] text-white/20 uppercase tracking-[3px] font-black block">Nexus Sync Status</span>
+                               <span className="text-[12px] font-black text-indigo-400 uppercase tracking-widest">{providerHealth[aiProvider]?.tokens || "Unlimited"}</span>
                             </div>
                           </div>
-                        </div>
+                        </motion.div>
                       </div>
 
                       <button 
-                        onClick={() => supabase?.auth.signOut()}
-                        className="px-10 py-4 border-2 border-pink-500/30 text-pink-500/60 text-[10px] font-black uppercase tracking-[4px] rounded-full hover:bg-pink-500 hover:text-white transition-all"
+                        onClick={() => supabase.auth.signOut()}
+                        className="px-10 py-5 bg-white text-black text-[11px] font-black uppercase tracking-[6px] rounded-full hover:bg-pink-500 hover:text-white transition-all shadow-xl active:scale-95"
                       >
-                        Sign Out
+                        Sever Connection
                       </button>
                     </div>
                   )}
