@@ -1,7 +1,18 @@
 import { createClient } from '@supabase/supabase-js';
 
 const getEnv = (key: string) => {
-  return (import.meta as any).env?.[key] || (process.env as any)?.[key] || '';
+  const metaEnv = (import.meta as any).env;
+  if (metaEnv && metaEnv[key]) return metaEnv[key];
+  
+  try {
+    if (typeof process !== 'undefined' && process.env) {
+      return (process.env as any)[key] || '';
+    }
+  } catch {
+    // Fallback to empty string if process is not defined
+  }
+  
+  return '';
 };
 
 const supabaseUrl = (getEnv('VITE_SUPABASE_URL') || getEnv('SUPABASE_URL') || getEnv('NEXT_PUBLIC_SUPABASE_URL')).trim();

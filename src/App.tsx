@@ -489,6 +489,7 @@ export default function App() {
   const [presenceData, setPresenceData] = useState<Record<string, any>>({});
   const [echoes, setEchoes] = useState<VoidEcho[]>([]);
   const [echoInput, setEchoInput] = useState("");
+  const [isInitializing, setIsInitializing] = useState(true);
   const channelRef = useRef<any>(null);
   const isSyncing = useRef(false);
 
@@ -804,7 +805,15 @@ export default function App() {
 
   // Initial fetch and Project setup
   useEffect(() => {
-    fetchSuggestions();
+    const init = async () => {
+      try {
+        await fetchSuggestions();
+        await syncProject();
+      } finally {
+        setIsInitializing(false);
+      }
+    };
+    init();
     
     const syncProject = async () => {
       if (isSyncing.current) return;
@@ -1464,6 +1473,30 @@ export default function App() {
 
   return (
     <div className="relative h-screen w-full bg-[#020205] text-white selection:bg-indigo-500/30 overflow-hidden font-sans">
+      <AnimatePresence>
+        {isInitializing && (
+          <motion.div 
+            initial={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 1 }}
+            className="fixed inset-0 z-[200] bg-[#020208] flex flex-col items-center justify-center p-6 text-center"
+          >
+            <div className="relative">
+              <div className="absolute -inset-10 bg-indigo-500/20 blur-[60px] rounded-full animate-pulse" />
+              <Loader2 className="w-16 h-16 text-indigo-500 animate-spin relative z-10" />
+            </div>
+            <h1 className="mt-12 text-2xl md:text-3xl font-black uppercase tracking-[10px] text-white">Neural Pulse</h1>
+            <p className="mt-4 text-[10px] md:text-sm text-indigo-400 font-bold uppercase tracking-[4px] animate-pulse">Syncing with Collective Mind...</p>
+            <div className="mt-20 w-48 h-0.5 bg-white/5 rounded-full overflow-hidden">
+               <motion.div 
+                 className="h-full bg-indigo-500"
+                 animate={{ x: [-200, 200] }}
+                 transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }}
+               />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       
       {/* --- BACKGROUND BLOBS & GLOW --- */}
       <div className="void-glow" />
