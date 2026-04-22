@@ -113,6 +113,24 @@ export default function App() {
     } catch { return "google"; }
   });
 
+  useEffect(() => {
+    // When provider changes, ensure the selected model is valid for that provider
+    const providers: Record<string, string[]> = {
+      google: ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash-exp'],
+      openai: ['gpt-4o', 'gpt-4o-mini', 'o1-preview'],
+      anthropic: ['claude-3-5-sonnet-20240620', 'claude-3-opus-20240229']
+    };
+
+    if (providers[aiProvider] && !providers[aiProvider].includes(selectedModel)) {
+      setSelectedModel(providers[aiProvider][0]);
+    }
+    localStorage.setItem('soul_provider', aiProvider);
+  }, [aiProvider]);
+
+  useEffect(() => {
+    localStorage.setItem('soul_model', selectedModel);
+  }, [selectedModel]);
+
   const [providerKeys, setProviderKeys] = useState<Record<string, string>>(() => {
     try {
       const saved = localStorage.getItem('soul_nexus_keys');
@@ -331,11 +349,22 @@ export default function App() {
       }
 
       if (aiProvider === 'google') {
-        const genAI = new GoogleGenerativeAI(googleKey!);
-        const model = genAI.getGenerativeModel({ model: selectedModel });
+        const keyToUse = googleKey;
+        if (!keyToUse) throw new Error("No Google Energy Source Found. Ensure your API Key is set in the Account tab.");
+        
+        const genAI = new GoogleGenerativeAI(keyToUse);
+        // Safety: Ensure the model is valid for Google
+        let modelId = selectedModel;
+        if (!modelId.startsWith('gemini-')) {
+          modelId = "gemini-1.5-flash"; // Fallback to compatible model
+        }
+        
+        const model = genAI.getGenerativeModel({ model: modelId });
         const result = await model.generateContent(prompt);
         const response = await result.response;
-        return response.text() || "";
+        const text = response.text();
+        if (!text) throw new Error("The Oracle returned an empty response.");
+        return text;
       }
 
       if (aiProvider === 'openai' || aiProvider === 'custom') {
@@ -959,7 +988,8 @@ export default function App() {
       }
     } catch (err: any) {
       console.error("Error during manifestation cycle:", err);
-      alert("The consciousness bridge flickered. Try again.");
+      const errMsg = err.message || String(err);
+      alert(`The consciousness bridge flickered: ${errMsg}\n\nPlease verify your API key and internet connection.`);
     } finally {
       setIsRefining(null);
     }
@@ -1093,7 +1123,8 @@ export default function App() {
 
     } catch (err: any) {
       console.error("Generation failure:", err);
-      alert("Generation failed. The request may be too complex or the server is busy.");
+      const errMsg = err.message || String(err);
+      alert(`Manifestation failed: ${errMsg}`);
     } finally {
       setIsManifesting(null);
     }
