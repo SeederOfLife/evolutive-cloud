@@ -201,6 +201,7 @@ function EvolutiveSeed({ onClick, isOpen }: { onClick: () => void, isOpen: boole
   const timeRef = useRef(0);
 
   useFrame((state, delta) => {
+    if (!meshRef.current) return;
     timeRef.current += delta;
     const time = timeRef.current;
     meshRef.current.rotation.y = time * 0.15;
@@ -245,6 +246,7 @@ function ModuleNode({ suggestion, onRun }: { suggestion: Suggestion, onRun: (s: 
   }, []);
 
   useFrame((state, delta) => {
+    if (!meshRef.current) return;
     timeRef.current += delta;
     const time = timeRef.current;
     const t = time * speed + offset;
@@ -320,6 +322,7 @@ function Nebula({ count = 3000 }) {
 
   const matRef = useRef<THREE.PointsMaterial>(null!);
   useFrame((state, delta) => {
+    if (!matRef.current) return;
     timeRef.current += delta;
     const time = timeRef.current;
     matRef.current.size = 0.1 + Math.sin(time * 0.5) * 0.05;
@@ -443,6 +446,9 @@ function ModulePlayer({
               // Mock icons helper if lucide-react isn't fully available
               const Lucide = window.lucide;
               
+              // THE GENERATED CODE
+              ${cleanCode}
+
               // If the code didn't define App, but defined something else, try to find it
               const ComponentToRender = typeof App !== 'undefined' ? App : null;
               
@@ -597,6 +603,7 @@ export default function App() {
   useEffect(() => {
     if (!session || !supabase) return;
 
+    if (!supabase) return;
     const fetchProfile = async () => {
       try {
         const { data, error } = await supabase
@@ -930,6 +937,11 @@ export default function App() {
     };
 
     const init = async () => {
+      if (!supabase) {
+        console.warn("Supabase not available. Running in offline/limited mode.");
+        setIsInitializing(false);
+        return;
+      }
       try {
         console.log("Initializing Evolution Link...");
         // Safety timeout: Never leave the user on a white page for more than 5 seconds
