@@ -734,7 +734,7 @@ export default function App() {
   }, [presenceData, session]);
 
   const soulRank = useMemo(() => {
-    if (!session) return { title: "Unidentified", color: "#ffffff", level: 0 };
+    if (!session?.user?.id) return { title: "Unidentified", color: "#ffffff", level: 0 };
     const myCreations = suggestions.filter(s => s.user_id === session.user.id);
     const manifests = myCreations.filter(s => s.status === 'manifested').length;
     const totalEco = myCreations.reduce((acc, curr) => acc + (curr.votes || 0), 0);
@@ -750,7 +750,7 @@ export default function App() {
   const callUnifiedAI = async (prompt: string): Promise<string> => {
     try {
       const activeKey = providerKeys[aiProvider] || "";
-      const googleKey = providerKeys['google'] || process.env.GEMINI_API_KEY;
+      const googleKey = providerKeys['google'] || (typeof process !== 'undefined' && process.env ? process.env.GEMINI_API_KEY : undefined);
       
       // Offline / Specialized Mobile Handlers
       if (aiProvider === 'gemini-nano') {
