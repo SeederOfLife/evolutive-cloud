@@ -1085,13 +1085,13 @@ export default function App() {
         Task: Create a beautiful, polished, and functionally complex React application for: "${suggestion.content}"
         
         Capabilities & Libraries:
-        - React 18 (Standard hooks available globally: useState, useEffect, useMemo, etc.)
+        - React 18 (Hooks are available in the local scope: useState, useEffect, useMemo, etc. DO NOT declare these.)
         - Tailwind CSS (Full utility suite)
-        - window.Motion (Framer Motion equivalent for smooth layouts and animations)
-        - window.Recharts (Professional charting: LineChart, AreaChart, BarChart, etc.)
-        - window.d3 (Powerful data manipulation and visualization)
-        - window.confetti (Visual celebrations)
-        - window.lucide (Global icon set access)
+        - window.Motion (Framer Motion: use "motion" and "AnimatePresence" directly from scope. DO NOT redeclare them.)
+        - window.Recharts (Standard charts available in scope: LineChart, BarChart, ResponsiveContainer, etc. DO NOT redeclare them.)
+        - window.d3 (d3 available in scope.)
+        - window.confetti (confetti available in scope.)
+        - window.LucideReact (Standard icons available via the <Icon name="..." /> helper component which is pre-defined.)
 
         Design Style:
         - Modern SaaS / Dark Laboratory aesthetic.
@@ -1108,8 +1108,11 @@ export default function App() {
         - Output ONLY the component code.
         - The component must be named "App".
         - Use Tailwind CSS for all styling.
+        - IMPORTANT: Do NOT include any import statements.
+        - IMPORTANT: Do NOT redeclare hooks (useState, etc) or libraries (Motion, Recharts, LucideReact) as they are already mapped to the local scope.
+        - For icons, always use the <Icon name="IconName" /> component (e.g. <Icon name="Zap" />).
         - The container should be transparent or dark to work with the Evolutive Cloud background.
-        - Return ONLY the code block, no markdown formatting.
+        - Return ONLY the code, no markdown formatting.
       `;
 
       if (apiQuota < 20) {

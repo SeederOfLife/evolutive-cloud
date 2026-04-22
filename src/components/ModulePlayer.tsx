@@ -22,7 +22,12 @@ export function ModulePlayer({
     return code
       .replace(/import\s+.*\s+from\s+['"].*['"];?/g, '') // Remove imports
       .replace(/export\s+default\s+/g, '') // Remove export default
-      .replace(/export\s+/g, ''); // Remove other exports
+      .replace(/export\s+/g, '') // Remove other exports
+      .replace(/const\s+\{.*\}\s+=\s+window\.React;?/g, '') // Remove redunant React hooks declaration
+      .replace(/const\s+\{.*\}\s+=\s+window\.ReactDOM;?/g, '')
+      .replace(/const\s+\{.*\}\s+=\s+window\.Motion;?/g, '')
+      .replace(/const\s+\{.*\}\s+=\s+window\.lucide;?/g, '')
+      .replace(/const\s+\{.*\}\s+=\s+window\.lucide-react;?/g, '');
   }, [code]);
 
   const handleSave = async () => {
@@ -44,13 +49,14 @@ export function ModulePlayer({
     <html>
       <head>
         <meta charset="UTF-8" />
-        <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-        <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+        <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+        <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
         <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
         <script src="https://cdn.tailwindcss.com"></script>
         <script src="https://unpkg.com/lucide@latest"></script>
+        <script src="https://unpkg.com/lucide-react@latest/dist/umd/lucide-react.js"></script>
         <script src="https://unpkg.com/framer-motion@10.16.4/dist/framer-motion.js"></script>
-        <script src="https://unpkg.com/recharts/umd/Recharts.js"></script>
+        <script src="https://unpkg.com/recharts/umd/Recharts.min.js"></script>
         <script src="https://unpkg.com/d3@7"></script>
         <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
         <style>
@@ -58,7 +64,7 @@ export function ModulePlayer({
             background: transparent; 
             color: white; 
             margin: 0; 
-            font-family: 'Inter', sans-serif; 
+            font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
             min-height: 100vh;
             display: flex;
             align-items: flex-start;
@@ -78,31 +84,39 @@ export function ModulePlayer({
         <script type="text/babel">
           (function() {
             try {
-              const React = window.React;
-              const { useState, useEffect, useMemo, useRef, useCallback, createContext, useContext } = React;
-              const ReactDOM = window.ReactDOM;
-              const motion = window.Motion;
-              const Recharts = window.Recharts;
+              // Expose everything to scope for generated code
+              const { useState, useEffect, useMemo, useRef, useCallback, createContext, useContext, useReducer, useLayoutEffect } = window.React;
+              const { motion, AnimatePresence, LayoutGroup } = window.Motion || {};
+              const { 
+                LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+                BarChart, Bar, PieChart, Pie, Cell, Sector
+              } = window.Recharts || {};
               const d3 = window.d3;
               const confetti = window.confetti;
-
-              // Mock icons helper if lucide-react isn't fully available
               const Lucide = window.lucide;
-              
-              // THE GENERATED CODE
+              const LucideReact = window.LucideReact;
+
+              // Helper for icons
+              const Icon = ({ name, ...props }) => {
+                if (!LucideReact) return null;
+                const Component = LucideReact[name];
+                return Component ? <Component {...props} /> : null;
+              };
+
+              // Inject the code
               ${cleanCode}
 
-              // If the code didn't define App, but defined something else, try to find it
+              // Rendering
               const ComponentToRender = typeof App !== 'undefined' ? App : null;
-              
               if (ComponentToRender) {
                 const root = ReactDOM.createRoot(document.getElementById('root'));
                 root.render(<ComponentToRender />);
               } else {
-                document.getElementById('root').innerHTML = '<div style="padding:20px; color:rgba(255,255,255,0.5); text-align:center">Evolution Manifested. No entry point found.</div>';
+                 document.getElementById('root').innerHTML = '<div style="padding:40px; color:rgba(255,255,255,0.3); text-align:center; font-size:12px; letter-spacing:2px; text-transform:uppercase">Manifestation Layer Empty. No "App" component detected.</div>';
               }
             } catch (err) {
-              document.getElementById('root').innerHTML = '<pre style="color:pink; padding:20px; white-space:pre-wrap">' + err.message + '</pre>';
+              console.error("Manifestation Error:", err);
+              document.getElementById('root').innerHTML = '<div style="color:#ff6b6b; padding:20px; font-family:monospace; line-height:1.5; font-size:12px; background:rgba(255,0,0,0.1); border:1px solid rgba(255,0,0,0.2); border-radius:12px"><b>MANIFESTATION ERROR:</b><br/>' + err.message + '</div>';
             }
           })();
         </script>
