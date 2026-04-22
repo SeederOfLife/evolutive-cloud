@@ -37,7 +37,7 @@ import {
   DraftingCompass
 } from "lucide-react";
 import { supabase } from "./lib/supabase";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import OpenAI from "openai";
 import * as webllm from "@mlc-ai/web-llm";
 import { User, Session } from "@supabase/supabase-js";
@@ -227,7 +227,7 @@ function EvolutiveSeed({ onClick, isOpen }: { onClick: () => void, isOpen: boole
   );
 }
 
-function ModuleNode({ suggestion, onRun }: { suggestion: Suggestion, onRun: (code: string) => void }) {
+function ModuleNode({ suggestion, onRun }: { suggestion: Suggestion, onRun: (s: Suggestion) => void }) {
   const meshRef = useRef<THREE.Mesh>(null!);
   const timeRef = useRef(0);
   const [hovered, setHovered] = useState(false);
@@ -259,7 +259,7 @@ function ModuleNode({ suggestion, onRun }: { suggestion: Suggestion, onRun: (cod
       ref={meshRef} 
       onClick={(e) => {
         e.stopPropagation();
-        if (suggestion.manifested_code) onRun(suggestion.manifested_code);
+        onRun(suggestion);
       }}
       onPointerOver={() => setHovered(true)}
       onPointerOut={() => setHovered(false)}
@@ -358,7 +358,18 @@ function Nebula({ count = 3000 }) {
 
 // --- MODULE PLAYER (SANDBOX) ---
 
-function ModulePlayer({ code, onClose }: { code: string, onClose: () => void }) {
+function ModulePlayer({ 
+  suggestion, 
+  onClose, 
+  onSave 
+}: { 
+  suggestion: Suggestion, 
+  onClose: () => void, 
+  onSave?: (code: string) => Promise<void> 
+}) {
+  const [code, setCode] = useState(suggestion.manifested_code || "");
+  const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   const cleanCode = useMemo(() => {
@@ -367,6 +378,20 @@ function ModulePlayer({ code, onClose }: { code: string, onClose: () => void }) 
       .replace(/export\s+default\s+/g, '') // Remove export default
       .replace(/export\s+/g, ''); // Remove other exports
   }, [code]);
+
+  const handleSave = async () => {
+    if (!onSave) return;
+    setIsSaving(true);
+    try {
+      await onSave(code);
+      setIsEditing(false);
+    } catch (err) {
+      console.error("Save failed:", err);
+      alert("Failed to save changes to the collective mind.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const srcDoc = useMemo(() => `
     <!DOCTYPE html>
@@ -445,21 +470,67 @@ function ModulePlayer({ code, onClose }: { code: string, onClose: () => void }) 
     >
       <div className="relative w-full md:max-w-5xl h-full md:h-auto md:aspect-video bg-[#050505] border-none md:border md:border-white/10 rounded-none md:rounded-2xl overflow-hidden shadow-2xl flex flex-col">
         <div className="p-4 border-b border-white/5 flex justify-between items-center bg-white/5">
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-indigo-400" />
-            <span className="text-xs uppercase tracking-widest font-bold">Generated App</span>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-indigo-400" />
+              <span className="text-xs uppercase tracking-widest font-bold">Evolution_{suggestion.id}</span>
+            </div>
+            
+            <div className="hidden md:flex items-center gap-2 p-1 bg-white/5 rounded-lg border border-white/10">
+              <button 
+                onClick={() => setIsEditing(false)}
+                className={`px-3 py-1.5 rounded-md text-[9px] font-black uppercase tracking-widest transition-all ${!isEditing ? 'bg-indigo-500 text-white' : 'text-white/40 hover:text-white'}`}
+              >
+                Manifestation
+              </button>
+              <button 
+                onClick={() => setIsEditing(true)}
+                className={`px-3 py-1.5 rounded-md text-[9px] font-black uppercase tracking-widest transition-all ${isEditing ? 'bg-indigo-500 text-white' : 'text-white/40 hover:text-white'}`}
+              >
+                Source Code
+              </button>
+            </div>
           </div>
-          <button onClick={onClose} className="p-1 hover:bg-white/10 rounded-full transition-colors">
-            <X className="w-5 h-5" />
-          </button>
+
+          <div className="flex items-center gap-3">
+            {isEditing && (
+              <button 
+                onClick={handleSave}
+                disabled={isSaving || code === suggestion.manifested_code}
+                className="px-4 py-2 bg-green-600 text-white text-[9px] font-black uppercase tracking-widest rounded-full hover:bg-green-500 disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {isSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Database className="w-3 h-3" />}
+                Save Sync
+              </button>
+            )}
+            <button onClick={onClose} className="p-1 hover:bg-white/10 rounded-full transition-colors text-white/40 hover:text-white">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
-        <div className="flex-1 bg-transparent">
-          <iframe 
-            ref={iframeRef}
-            srcDoc={srcDoc}
-            className="w-full h-full border-none"
-            sandbox="allow-scripts"
-          />
+        <div className="flex-1 bg-transparent relative overflow-hidden">
+          {isEditing ? (
+            <div className="absolute inset-0 flex flex-col bg-[#080808]">
+              <textarea 
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                spellCheck={false}
+                className="flex-1 w-full h-full bg-transparent p-6 md:p-10 font-mono text-xs md:text-sm text-indigo-300 outline-none resize-none selection:bg-indigo-500/30 no-scrollbar"
+                placeholder="// Enter your manifestation modifications here..."
+              />
+              <div className="p-4 border-t border-white/5 bg-black/40 text-[9px] text-white/20 uppercase tracking-[4px] font-black flex justify-between items-center">
+                 <span>Collaborative Revision Layer active</span>
+                 <span className="italic">Changes must be synchronized to persist</span>
+              </div>
+            </div>
+          ) : (
+            <iframe 
+              ref={iframeRef}
+              srcDoc={srcDoc}
+              className="w-full h-full border-none"
+              sandbox="allow-scripts"
+            />
+          )}
         </div>
       </div>
     </motion.div>
@@ -483,7 +554,7 @@ export default function App() {
   }>({ pledged_by: true, manifested_code: true, energy: true, parent_id: true, version: true, user_id: true });
   const [isLoading, setIsLoading] = useState(false);
   const [isManifesting, setIsManifesting] = useState<number | null>(null);
-  const [activeModule, setActiveModule] = useState<string | null>(null);
+  const [activeModule, setActiveModule] = useState<Suggestion | null>(null);
   const [isRepoOpen, setIsRepoOpen] = useState(false);
   const [activeUsersCount, setActiveUsersCount] = useState(1);
   const [presenceData, setPresenceData] = useState<Record<string, any>>({});
@@ -498,7 +569,7 @@ export default function App() {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   
   const [selectedModel, setSelectedModel] = useState(() => {
-    return localStorage.getItem('soul_model') || "gemini-3-flash-preview";
+    return localStorage.getItem('soul_model') || "gemini-1.5-flash";
   });
   const [aiProvider, setAiProvider] = useState<'google' | 'openai' | 'anthropic' | 'custom' | 'web-llm' | 'gemini-nano' | 'mlc-mobile'>(() => {
     return (localStorage.getItem('soul_provider') as any) || "google";
@@ -721,12 +792,11 @@ export default function App() {
       }
 
       if (aiProvider === 'google') {
-        const genAI = new GoogleGenAI({ apiKey: googleKey! });
-        const response = await genAI.models.generateContent({
-          model: selectedModel,
-          contents: prompt
-        });
-        return response.text || "";
+        const genAI = new GoogleGenerativeAI(googleKey!);
+        const model = genAI.getGenerativeModel({ model: selectedModel });
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        return response.text() || "";
       }
 
       if (aiProvider === 'openai' || aiProvider === 'custom') {
@@ -777,7 +847,7 @@ export default function App() {
   const getAI = (customKey?: string) => {
     const key = customKey || providerKeys['google'] || process.env.GEMINI_API_KEY;
     if (!key) throw new Error("No Energy Source Found. Connect Identity or Provide Key.");
-    return new GoogleGenAI({ apiKey: key });
+    return new GoogleGenerativeAI(key);
   };
 
   // Auth Session Listener
@@ -1321,11 +1391,15 @@ export default function App() {
         updateData.content = 'JSON:' + JSON.stringify(meta);
       }
       
-      const { error } = await supabase.from('suggestions').update(updateData).eq('id', s.id);
-      if (error) throw error;
+      const { error: updateError } = await supabase.from('suggestions').update(updateData).eq('id', s.id);
+      if (updateError) throw updateError;
       
       if (shouldManifest) {
         setApiQuota(prev => Math.max(0, prev - 10));
+        // Update local state for immediate launch
+        const updatedS = { ...s, status: 'manifested' as const, manifested_code: manifestedCode };
+        setSuggestions(prev => prev.map(p => p.id === s.id ? updatedS : p));
+        setActiveModule(updatedS);
       }
     } catch (err: any) {
       console.error("Error during manifestation cycle:", err);
@@ -1342,25 +1416,22 @@ export default function App() {
     }
     
     try {
-      // Direct Hard Delete - Most reliable to "remember" the deletion
+      // Direct Hard Delete
       const { error } = await supabase.from('suggestions').delete().eq('id', id);
       
       if (error) {
-        console.warn("Hard delete failed, attempting soft delete (fallback):", error);
-        // Fallback: try soft delete if delete is prohibited by RLS but update is allowed
-        const updateData: any = { status: 'deleted' };
-        if (suggestions.some(s => s.id === id && 'is_deleted' in s)) {
-           updateData.is_deleted = true;
+        console.warn("Hard delete denied. Likely RLS policy mismatch:", error.message);
+        // Fallback: try soft delete if delete is prohibited but update is allowed
+        const { error: updateError } = await supabase.from('suggestions').update({ status: 'deleted' }).eq('id', id);
+        if (updateError) {
+          throw new Error(`Delete failed: ${error.message} | Soft fallback failed: ${updateError.message}`);
         }
-        const { error: updateError } = await supabase.from('suggestions').update(updateData).eq('id', id);
-        if (updateError) throw updateError;
       }
       
-      // Update local state immediately for responsiveness
       setSuggestions(prev => prev.filter(s => s.id !== id));
     } catch (err: any) {
-      console.error("Critical Error during deletion:", err);
-      alert("Failed to delete. Please check your connection or permissions.");
+      console.error("Deletion Error:", err);
+      alert(`Critical System Failure: ${err.message || 'Access Denied. Are you the creator?'}`);
     }
   };
 
@@ -1460,8 +1531,9 @@ export default function App() {
       }
 
       setApiQuota(prev => Math.max(0, prev - 15));
-      setSuggestions(suggestions.map(s => s.id === suggestion.id ? { ...s, status: 'manifested', manifested_code: generatedCode } : s));
-      setActiveModule(generatedCode);
+      const updatedSuggestion = { ...suggestion, status: 'manifested' as const, manifested_code: generatedCode };
+      setSuggestions(suggestions.map(s => s.id === suggestion.id ? updatedSuggestion : s));
+      setActiveModule(updatedSuggestion);
 
     } catch (err: any) {
       console.error("Generation failure:", err);
@@ -1658,7 +1730,7 @@ export default function App() {
                           <button 
                             onClick={() => {
                               if (s.manifested_code) {
-                                setActiveModule(s.manifested_code);
+                                setActiveModule(s as any);
                                 setIsRepoOpen(false);
                               }
                             }}
@@ -1709,7 +1781,7 @@ export default function App() {
             <ModuleNode 
               key={s.id} 
               suggestion={s} 
-              onRun={(code) => setActiveModule(code)} 
+              onRun={(suggestion) => setActiveModule(suggestion)} 
             />
           ))
         }
@@ -1904,7 +1976,7 @@ export default function App() {
                           <div className="flex justify-end gap-2 md:pr-2 mt-2 md:mt-0 pt-2 md:pt-0 border-t md:border-t-0 border-white/5">
                             {isApp ? (
                               <>
-                                <button onClick={() => setActiveModule(processedS.manifested_code!)} className="flex-1 md:flex-none p-2 md:p-2.5 rounded-lg bg-white text-black hover:scale-105 md:hover:scale-110 active:scale-95 transition-all flex items-center justify-center gap-2 group/launch" title="Launch App">
+                                <button onClick={() => setActiveModule(processedS as any)} className="flex-1 md:flex-none p-2 md:p-2.5 rounded-lg bg-white text-black hover:scale-105 md:hover:scale-110 active:scale-95 transition-all flex items-center justify-center gap-2 group/launch" title="Launch App">
                                   <Play className="w-3.5 md:w-4 h-3.5 md:h-4 fill-current group-hover/launch:animate-pulse" />
                                   <span className="text-[9px] font-black uppercase tracking-widest">Execute</span>
                                 </button>
@@ -2264,8 +2336,9 @@ export default function App() {
                                 >
                                   {aiProvider === 'google' && (
                                     <>
-                                      <option value="gemini-2.0-flash-exp">Gemini 2 Flash (Ultra)</option>
-                                      <option value="gemini-1.5-pro-exp-02-05">Gemini 1.5 Pro</option>
+                                      <option value="gemini-1.5-flash">Gemini 1.5 Flash (Swift)</option>
+                                      <option value="gemini-1.5-pro">Gemini 1.5 Pro (Deep)</option>
+                                      <option value="gemini-2.0-flash-exp">Gemini 2.0 Flash (Exp)</option>
                                     </>
                                   )}
                                   {aiProvider === 'openai' && (
@@ -2396,7 +2469,16 @@ export default function App() {
 
       <AnimatePresence>
         {activeModule && (
-          <ModulePlayer code={activeModule} onClose={() => setActiveModule(null)} />
+          <ModulePlayer 
+            suggestion={activeModule} 
+            onClose={() => setActiveModule(null)} 
+            onSave={async (newCode) => {
+              if (!supabase) return;
+              const { error } = await supabase.from('suggestions').update({ manifested_code: newCode }).eq('id', activeModule.id);
+              if (error) throw error;
+              setSuggestions(prev => prev.map(s => s.id === activeModule.id ? { ...s, manifested_code: newCode } : s));
+            }}
+          />
         )}
       </AnimatePresence>
     </div>
