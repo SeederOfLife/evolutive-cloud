@@ -41,7 +41,7 @@ import {
   Globe
 } from "lucide-react";
 import { supabase } from "./lib/supabase";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI } from "@google/genai";
 import OpenAI from "openai";
 import * as webllm from "@mlc-ai/web-llm";
 import { User, Session } from "@supabase/supabase-js";
@@ -116,7 +116,7 @@ export default function App() {
   useEffect(() => {
     // When provider changes, ensure the selected model is valid for that provider
     const providers: Record<string, string[]> = {
-      google: ['gemini-1.5-flash', 'gemini-1.5-pro'],
+      google: ['gemini-3-flash-preview', 'gemini-3.1-pro-preview'],
       openai: ['gpt-4o', 'gpt-4o-mini', 'o1-preview'],
       anthropic: ['claude-3-5-sonnet-20240620', 'claude-3-opus-20240229']
     };
@@ -352,28 +352,31 @@ export default function App() {
         const keyToUse = googleKey;
         if (!keyToUse) throw new Error("No Google Energy Source Found. Ensure your API Key is set in the Account tab.");
         
-        const genAI = new GoogleGenerativeAI(keyToUse);
+        const ai = new GoogleGenAI({ apiKey: keyToUse });
         // Safety: Ensure the model is valid for Google
         let modelId = selectedModel;
         if (!modelId.startsWith('gemini-')) {
-          modelId = "gemini-1.5-flash"; // Fallback to compatible model
+          modelId = "gemini-3-flash-preview"; // Fallback to stable model
         }
         
         try {
-          const model = genAI.getGenerativeModel({ model: modelId });
-          const result = await model.generateContent(prompt);
-          const response = await result.response;
-          const text = response.text();
+          const response = await ai.models.generateContent({
+            model: modelId,
+            contents: prompt
+          });
+          
+          const text = response.text;
           if (!text) throw new Error("The Oracle returned an empty response.");
           return text;
         } catch (e: any) {
           const errText = e.message || String(e);
           if (errText.includes('404') || errText.toLowerCase().includes('not found') || errText.includes('503')) {
-            console.warn("Primary model unavailable, falling back to gemini-1.5-flash:", errText);
-            const fallbackModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-            const fallbackResult = await fallbackModel.generateContent(prompt);
-            const fallbackResponse = await fallbackResult.response;
-            return fallbackResponse.text();
+            console.warn("Primary model unavailable, falling back to gemini-3-flash-preview:", errText);
+            const fallbackResponse = await ai.models.generateContent({
+              model: "gemini-3-flash-preview",
+              contents: prompt
+            });
+            return fallbackResponse.text || "";
           }
           throw e;
         }
@@ -1935,8 +1938,8 @@ export default function App() {
                                 >
                                   {aiProvider === 'google' && (
                                     <>
-                                      <option value="gemini-1.5-flash">Gemini 1.5 Flash (Swift)</option>
-                                      <option value="gemini-1.5-pro">Gemini 1.5 Pro (Deep)</option>
+                                      <option value="gemini-3-flash-preview">Gemini 3 Flash (Swift)</option>
+                                      <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (Deep)</option>
                                     </>
                                   )}
                                   {aiProvider === 'openai' && (
@@ -1958,7 +1961,7 @@ export default function App() {
                                 </select>
                               </div>
                               <div className="flex flex-wrap gap-1 md:gap-1.5 justify-center md:justify-start">
-                                {(aiProvider === 'google' ? ['gemini-2.0-flash-exp', 'gemini-1.5-flash'] : 
+                                {(aiProvider === 'google' ? ['gemini-3-flash-preview', 'gemini-3.1-pro-preview'] : 
                                   aiProvider === 'openai' ? ['gpt-4o', 'o1-mini'] :
                                   aiProvider === 'anthropic' ? ['claude-3-5-sonnet-20240620'] :
                                   aiProvider === 'custom' ? ['llama3', 'mistral', 'phi3'] : []).map(m => (
