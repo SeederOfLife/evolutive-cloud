@@ -116,7 +116,7 @@ export default function App() {
   useEffect(() => {
     // When provider changes, ensure the selected model is valid for that provider
     const providers: Record<string, string[]> = {
-      google: ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash-exp'],
+      google: ['gemini-1.5-flash', 'gemini-1.5-pro'],
       openai: ['gpt-4o', 'gpt-4o-mini', 'o1-preview'],
       anthropic: ['claude-3-5-sonnet-20240620', 'claude-3-opus-20240229']
     };
@@ -359,12 +359,24 @@ export default function App() {
           modelId = "gemini-1.5-flash"; // Fallback to compatible model
         }
         
-        const model = genAI.getGenerativeModel({ model: modelId });
-        const result = await model.generateContent(prompt);
-        const response = await result.response;
-        const text = response.text();
-        if (!text) throw new Error("The Oracle returned an empty response.");
-        return text;
+        try {
+          const model = genAI.getGenerativeModel({ model: modelId });
+          const result = await model.generateContent(prompt);
+          const response = await result.response;
+          const text = response.text();
+          if (!text) throw new Error("The Oracle returned an empty response.");
+          return text;
+        } catch (e: any) {
+          const errText = e.message || String(e);
+          if (errText.includes('404') || errText.toLowerCase().includes('not found') || errText.includes('503')) {
+            console.warn("Primary model unavailable, falling back to gemini-1.5-flash:", errText);
+            const fallbackModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+            const fallbackResult = await fallbackModel.generateContent(prompt);
+            const fallbackResponse = await fallbackResult.response;
+            return fallbackResponse.text();
+          }
+          throw e;
+        }
       }
 
       if (aiProvider === 'openai' || aiProvider === 'custom') {
@@ -1925,7 +1937,6 @@ export default function App() {
                                     <>
                                       <option value="gemini-1.5-flash">Gemini 1.5 Flash (Swift)</option>
                                       <option value="gemini-1.5-pro">Gemini 1.5 Pro (Deep)</option>
-                                      <option value="gemini-2.0-flash-exp">Gemini 2.0 Flash (Exp)</option>
                                     </>
                                   )}
                                   {aiProvider === 'openai' && (
