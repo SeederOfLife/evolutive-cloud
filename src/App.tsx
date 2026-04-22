@@ -569,10 +569,14 @@ export default function App() {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   
   const [selectedModel, setSelectedModel] = useState(() => {
-    return localStorage.getItem('soul_model') || "gemini-1.5-flash";
+    try {
+      return localStorage.getItem('soul_model') || "gemini-1.5-flash";
+    } catch { return "gemini-1.5-flash"; }
   });
   const [aiProvider, setAiProvider] = useState<'google' | 'openai' | 'anthropic' | 'custom' | 'web-llm' | 'gemini-nano' | 'mlc-mobile'>(() => {
-    return (localStorage.getItem('soul_provider') as any) || "google";
+    try {
+      return (localStorage.getItem('soul_provider') as any) || "google";
+    } catch { return "google"; }
   });
 
   const [providerKeys, setProviderKeys] = useState<Record<string, string>>(() => {
@@ -928,8 +932,18 @@ export default function App() {
     const init = async () => {
       try {
         console.log("Initializing Evolution Link...");
+        // Safety timeout: Never leave the user on a white page for more than 5 seconds
+        const safetyTimeout = setTimeout(() => {
+          if (mounted) {
+            console.warn("Initialization safety threshold reached. Forcing manifest.");
+            setIsInitializing(false);
+          }
+        }, 5000);
+
         fetchSuggestions().catch(e => console.error("Fetch suggestions failed:", e));
         await syncProject();
+        
+        clearTimeout(safetyTimeout);
       } catch (err) {
         console.error("Initialization error:", err);
       } finally {
@@ -942,8 +956,6 @@ export default function App() {
     init();
     
     if (supabase) {
-      syncProject();
-
       // Real-time listener for suggestions and presence and echoes
       if (!channelRef.current) {
         channelRef.current = supabase.channel('void-sync');
@@ -1045,7 +1057,16 @@ export default function App() {
       .filter(s => s.status !== 'system_config' && s.status !== 'deleted' && !s.is_deleted)
       .filter(s => {
         // Search Filter
-        const title = s.content.startsWith('JSON:') ? JSON.parse(s.content.substring(5)).text : s.content;
+        let title = s.content;
+        if (s.content.startsWith('JSON:')) {
+          try {
+            const parsed = JSON.parse(s.content.substring(5));
+            title = parsed.text || "Untitled Idea";
+          } catch(e) {
+            title = s.content.substring(5).substring(0, 50);
+          }
+        }
+        
         const matchesSearch = title.toLowerCase().includes(searchQuery.toLowerCase());
         
         // Category Filter
