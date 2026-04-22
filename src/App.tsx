@@ -845,7 +845,9 @@ export default function App() {
 
   // Gemini AI Provider (Legacy/Internal)
   const getAI = (customKey?: string) => {
-    const key = customKey || providerKeys['google'] || process.env.GEMINI_API_KEY;
+    // Defensive check for process.env in browser environments
+    const envKey = typeof process !== 'undefined' && process.env ? (process.env.GEMINI_API_KEY as string) : undefined;
+    const key = customKey || providerKeys['google'] || envKey;
     if (!key) throw new Error("No Energy Source Found. Connect Identity or Provide Key.");
     return new GoogleGenerativeAI(key);
   };
@@ -875,15 +877,7 @@ export default function App() {
 
   // Initial fetch and Project setup
   useEffect(() => {
-    const init = async () => {
-      try {
-        await fetchSuggestions();
-        await syncProject();
-      } finally {
-        setIsInitializing(false);
-      }
-    };
-    init();
+    let mounted = true;
     
     const syncProject = async () => {
       if (isSyncing.current) return;
@@ -897,9 +891,6 @@ export default function App() {
         
         if (error) {
           console.error("SyncProject Query Error (Status 400/406?):", error);
-          if (error.code === 'PGRST116') {
-             console.warn("Multiple system_config records found. This project might be in an inconsistent state.");
-          }
           return;
         }
 
@@ -907,46 +898,49 @@ export default function App() {
           try {
             const config = JSON.parse(data.content || "{}") as ProjectConfig;
             setIsFinalized(!!config.is_finalized);
-            
-            // Re-identify creator if missing
             if (!config.creator_id && session?.user?.id) {
-              console.log("Identifying new creator...");
               config.creator_id = session.user.id;
               await supabase.from('suggestions').update({ content: JSON.stringify(config) }).eq('id', data.id);
             }
-            
             setCreatorId(config.creator_id || "");
-            console.log("System Config Loaded. Creator ID:", config.creator_id);
           } catch (e) {
             console.error("Config Parse Error:", e);
           }
         } else if (session?.user?.id) {
-          // Explicitly set as creator locally first to unblock UI
           setCreatorId(session.user.id);
-          
           const config: ProjectConfig = {
             creator_id: session.user.id,
             is_finalized: false,
             epoch_name: "The Genesis"
           };
-          
-          // Try a minimalist insert first to avoid schema errors
-          const { error: insertError } = await supabase.from('suggestions').insert([{
+          await supabase.from('suggestions').insert([{
             content: JSON.stringify(config),
             status: 'system_config'
           }]);
-          
-          if (insertError) {
-            console.error("SyncProject Insert Error (Schema mismatch?):", insertError);
-          } else {
-            setCreatorId(session.user.id);
-          }
         }
       } catch (err) {
         console.error("SyncProject Global Exception:", err);
+      } finally {
+        isSyncing.current = false;
       }
     };
 
+    const init = async () => {
+      try {
+        console.log("Initializing Evolution Link...");
+        fetchSuggestions().catch(e => console.error("Fetch suggestions failed:", e));
+        await syncProject();
+      } catch (err) {
+        console.error("Initialization error:", err);
+      } finally {
+        if (mounted) {
+          setTimeout(() => setIsInitializing(false), 500);
+        }
+      }
+    };
+
+    init();
+    
     if (supabase) {
       syncProject();
 
@@ -1023,6 +1017,7 @@ export default function App() {
       window.addEventListener('mousemove', handleMouseMove);
 
       return () => {
+        mounted = false;
         if (channelRef.current) {
           supabase.removeChannel(channelRef.current);
           channelRef.current = null;
