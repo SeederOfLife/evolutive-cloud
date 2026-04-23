@@ -1509,20 +1509,21 @@ export default function App() {
       </Canvas>
 
       {/* --- HUD: ECHO INPUT --- */}
-      <div className="absolute bottom-6 md:bottom-10 left-1/2 -translate-x-1/2 z-20 w-[90%] sm:w-[400px]">
-        <form onSubmit={sendEcho} className="relative group">
-          {/* Input is circular */}
-          <input 
-            type="text"
-            placeholder="Broadcast to the void..."
-            value={echoInput}
-            onChange={(e) => setEchoInput(e.target.value)}
-            className="w-full bg-white/5 border-2 border-white/10 px-6 md:px-8 py-4 md:py-5 rounded-full text-[10px] md:text-[12px] text-white focus:border-indigo-500 focus:bg-white/10 outline-none text-center backdrop-blur-md transition-all placeholder:text-white/20 font-black uppercase tracking-widest"
-          />
-          <div className="absolute -inset-1 bg-gradient-to-r from-indigo-500 via-pink-500 to-yellow-500 rounded-full blur opacity-20 group-hover:opacity-40 transition-opacity -z-10" />
-          <button type="submit" className="hidden" />
-        </form>
-      </div>
+      {!isOpen && (
+        <div className="absolute bottom-28 md:bottom-10 left-1/2 -translate-x-1/2 z-20 w-[90%] sm:w-[320px]">
+          <form onSubmit={sendEcho} className="relative group">
+            <input 
+              type="text"
+              placeholder="Echo your presence..."
+              value={echoInput}
+              onChange={(e) => setEchoInput(e.target.value)}
+              className="w-full bg-white/5 border border-white/10 px-6 py-3 rounded-full text-[10px] text-white/60 focus:text-white focus:border-indigo-500/50 focus:bg-white/10 outline-none text-center backdrop-blur-md transition-all placeholder:text-white/20 font-black uppercase tracking-[2px]"
+            />
+            <div className="absolute -inset-0.5 bg-indigo-500/10 rounded-full blur group-hover:bg-indigo-500/20 transition-all -z-10" />
+            <button type="submit" className="hidden" />
+          </form>
+        </div>
+      )}
 
       {/* --- CUBE INTERFACE (THE MIND) --- */}
       <AnimatePresence>
@@ -2261,17 +2262,25 @@ export default function App() {
       </AnimatePresence>
 
       {/* --- HUD: INITIATE BUTTON --- */}
-      <div className="absolute bottom-10 left-1/2 -translate-x-1/2 z-40 pointer-events-none">
-        <button 
-          onClick={initiateNewProject}
-          disabled={!!isManifesting}
-          className="group relative px-10 py-5 bg-white text-black rounded-2xl font-black uppercase tracking-[5px] text-[11px] shadow-[0_20px_50px_rgba(255,255,255,0.2)] hover:shadow-[0_20px_80px_rgba(255,255,255,0.4)] hover:-translate-y-1 active:scale-95 transition-all flex items-center gap-4 border border-white overflow-hidden pointer-events-auto"
-        >
-          <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/0 via-indigo-500/10 to-indigo-500/0 -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-in-out" />
-          {isManifesting === 'new' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-          {isManifesting === 'new' ? 'Synthesizing...' : 'Manifest New Soul'}
-        </button>
-      </div>
+      {!isOpen && (
+        <div className="absolute bottom-8 right-8 md:bottom-12 md:right-12 z-40 pointer-events-none">
+          <button 
+            onClick={initiateNewProject}
+            disabled={!!isManifesting}
+            className="group relative h-16 w-16 md:h-20 md:w-20 bg-white text-black rounded-full font-black flex items-center justify-center shadow-[0_20px_50px_rgba(255,255,255,0.2)] hover:shadow-[0_20px_80px_rgba(255,255,255,0.4)] hover:-translate-y-2 active:scale-95 transition-all border border-white overflow-hidden pointer-events-auto"
+          >
+            <div className="absolute inset-0 bg-gradient-to-tr from-indigo-500/0 via-indigo-500/20 to-indigo-500/0 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+            {isManifesting === 'new' ? (
+              <Loader2 className="w-6 h-6 md:w-8 md:h-8 animate-spin" />
+            ) : (
+              <div className="flex flex-col items-center">
+                <Plus className="w-6 h-6 md:w-8 md:h-8" />
+                <span className="text-[7px] uppercase tracking-widest absolute -bottom-1 group-hover:bottom-2 opacity-0 group-hover:opacity-100 transition-all font-black">Manifest</span>
+              </div>
+            )}
+          </button>
+        </div>
+      )}
 
       <AnimatePresence>
         {activeModule && (
