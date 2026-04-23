@@ -1194,13 +1194,13 @@ export default function App() {
 
         Constraints:
         - Output ONLY the component code.
-        - The component must be named "App".
+        - The component MUST be exported as "export default function App() { ... }".
         - Use Tailwind CSS for all styling.
-        - IMPORTANT: Do NOT include any import statements.
-        - IMPORTANT: Do NOT redeclare hooks (useState, etc) or libraries (Motion, Recharts, LucideReact) as they are already mapped to the local scope.
-        - For icons, always use the <Icon name="IconName" /> component (e.g. <Icon name="Zap" />).
+        - CRITICAL: Do NOT include any import statements. The environment provides all necessary tools globally.
+        - CRITICAL: Do NOT redeclare hooks (useState, etc), or libraries like motion, Recharts, or d3. Just use them.
+        - For icons, always use the pre-mapped global components (e.g. <Zap />) or the <Icon name="IconName" /> helper.
         - The container should be transparent or dark to work with the Evolutive Cloud background.
-        - Return ONLY the code, no markdown formatting.
+        - Return ONLY the code, no markdown formatting outside of the code block if you must use one.
       `;
 
       if (apiQuota < 20) {
@@ -1209,7 +1209,12 @@ export default function App() {
         return;
       }
       const text = await callUnifiedAI(prompt);
-      const generatedCode = text.replace(/```jsx|```tsx|```javascript|```/g, '').trim();
+      
+      // Clean backticks and language identifiers meticulously
+      let generatedCode = text
+        .replace(/```[a-z]*\n?/gi, '')
+        .replace(/```/g, '')
+        .trim();
 
       if (!generatedCode) {
         throw new Error("The void returned no code. Manifestation failed.");

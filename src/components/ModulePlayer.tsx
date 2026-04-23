@@ -11,7 +11,15 @@ import {
   Zap, 
   ArrowRight,
   RefreshCw,
-  Code
+  Code,
+  FileJson,
+  FolderTree,
+  Settings,
+  ChevronRight,
+  ChevronDown,
+  Terminal,
+  Play,
+  Monitor
 } from "lucide-react";
 import { Suggestion, EvolutionVersion } from "../types";
 
@@ -27,29 +35,39 @@ export function ModulePlayer({
   onRefine?: (feedback: string) => Promise<string>
 }) {
   const [code, setCode] = useState(suggestion.manifested_code || "");
-  const [activePlayTab, setActivePlayTab] = useState<'chat' | 'code' | 'history'>('chat');
+  const [activeSideTab, setActiveSideTab] = useState<'files' | 'chat' | 'history' | 'settings'>('files');
+  const [isExplorerOpen, setIsExplorerOpen] = useState(true);
+  const [activeFile, setActiveFile] = useState('src/App.tsx');
+  const [showPreview, setShowPreview] = useState(true);
 
+  // Sync code if it changes externally
   useEffect(() => {
     if (suggestion.manifested_code && !code) {
       setCode(suggestion.manifested_code);
     }
   }, [suggestion.manifested_code]);
+
   const [isSaving, setIsSaving] = useState(false);
   const [refineInput, setRefineInput] = useState("");
   const [isRefining, setIsRefining] = useState(false);
   const [chatMessages, setChatMessages] = useState<{ role: 'user' | 'assistant', content: string }[]>(
-    suggestion.manifested_code ? [] : [{ role: 'user', content: `Manifesting: ${suggestion.content}` }]
+    suggestion.manifested_code ? [] : [{ role: 'user', content: `Initiating manifestation sequence for: ${suggestion.content}` }]
   );
+  
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   const cleanCode = useMemo(() => {
-    // We want to remove imports and export keywords but keep the actual logic
-    // AI often includes "import React from 'react'" which breaks UMD script style
-    return code
-      .replace(/import\s+[\s\S]*?from\s+['"].*?['"];?/g, '') // Remove imports multiline
-      .replace(/export\s+default\s+/g, '') // Remove export default
-      .replace(/export\s+/g, '') // Remove other exports
-      .trim();
+    if (!code) return "";
+    let processed = code.replace(/import\s+[\s\S]*?from\s+['"].*?['"];?/g, '');
+    processed = processed.replace(/import\s+['"].*?['"];?/g, '');
+    processed = processed.replace(/export\s+default\s+function\s+([a-zA-Z0-9_$]+)/g, 'function $1');
+    processed = processed.replace(/export\s+default\s+class\s+([a-zA-Z0-9_$]+)/g, 'class $1');
+    processed = processed.replace(/export\s+default\s+([a-zA-Z0-9_$]+);?/g, 'window.__MANIFESTED_APP__ = $1;');
+    if (processed.includes('export default')) {
+       processed = processed.replace(/export\s+default\s+/g, 'window.__MANIFESTED_APP__ = ');
+    }
+    processed = processed.replace(/\bexport\s+/g, '');
+    return processed.trim();
   }, [code]);
 
   const handleSave = async () => {
@@ -59,7 +77,6 @@ export function ModulePlayer({
       await onSave(code);
     } catch (err) {
       console.error("Save failed:", err);
-      alert("Failed to save changes to the collective mind.");
     } finally {
       setIsSaving(false);
     }
@@ -76,10 +93,10 @@ export function ModulePlayer({
       const newCode = await onRefine(currentInput);
       if (newCode) {
         setCode(newCode);
-        setChatMessages(prev => [...prev, { role: 'assistant', content: "Evolutionary path adjusted. Manifestation updated." }]);
+        setChatMessages(prev => [...prev, { role: 'assistant', content: "Neural architecture adjusted. Manifestation updated." }]);
       }
     } catch (err) {
-      setChatMessages(prev => [...prev, { role: 'assistant', content: "Neural bridge failed: " + (err as any).message }]);
+      setChatMessages(prev => [...prev, { role: 'assistant', content: "Synthesis error: " + (err as any).message }]);
     } finally {
       setIsRefining(false);
     }
@@ -91,7 +108,6 @@ export function ModulePlayer({
       <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <!-- UMD Libraries -->
         <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
         <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
         <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -105,14 +121,14 @@ export function ModulePlayer({
         
         <style>
           body { 
-            background: #020205; 
+            background: transparent;
             color: white; 
             margin: 0; 
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             min-height: 100vh;
             display: flex;
             flex-direction: column;
-            overflow-x: hidden;
+            overflow: hidden;
           }
           #root { flex: 1; display: flex; flex-direction: column; }
           .error-container {
@@ -124,104 +140,50 @@ export function ModulePlayer({
             margin: 20px;
             font-family: monospace;
             font-size: 13px;
-            line-height: 1.6;
           }
-          /* Custom scrollbar for preview */
-          ::-webkit-scrollbar { width: 8px; }
-          ::-webkit-scrollbar-track { background: transparent; }
+          ::-webkit-scrollbar { width: 6px; }
           ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
         </style>
       </head>
       <body>
-        <div id="root">
-           <div style="flex:1; display:flex; align-items:center; justify-content:center; color:rgba(255,255,255,0.1); font-size:10px; font-weight:900; letter-spacing:4px; text-transform:uppercase;">
-              Synthesizing Void...
-           </div>
-        </div>
-        
+        <div id="root"></div>
         <script type="text/babel">
-          (function() {
-            const originalConsoleError = console.error;
-            console.error = (...args) => {
-              if (args[0] && typeof args[0] === 'string' && args[0].includes('Warning:')) return;
-              originalConsoleError.apply(console, args);
-            };
-
+          (async function() {
             try {
-              // Map all dependencies to window scope for the evaled code
-              const { 
-                useState, useEffect, useMemo, useRef, useCallback, 
-                createContext, useContext, useReducer, useLayoutEffect,
-                memo, forwardRef, Fragment
-              } = window.React;
-              
-              const { motion, AnimatePresence, LayoutGroup } = window.Motion || {};
-              
-              const Recharts = window.Recharts || {};
-              const { 
-                LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-                BarChart, Bar, PieChart, Pie, Cell, Sector, ComposedChart, Scatter, ScatterChart, Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis
-              } = Recharts;
-              
-              const d3 = window.d3;
-              const confetti = window.confetti;
-              const LucideReact = window.LucideReact;
+              const { useState, useEffect, useMemo, useRef, useCallback } = window.React;
+              const { motion, AnimatePresence } = window.Motion || {};
+              const LucideReact = window.LucideReact || {};
+              const React = window.React;
+              const ReactDOM = window.ReactDOM;
 
-              // Smarter Icon Component: Handles case differences and invalid names
-              const Icon = ({ name, className, size = 20, ...props }) => {
-                if (!LucideReact) return <div style={{width: size, height: size}} className={className} />;
-                
-                // Try direct match, then camelCase, then PascalCase
-                let Component = LucideReact[name];
-                if (!Component) {
-                  const pascalName = name.charAt(0).toUpperCase() + name.slice(1);
-                  Component = LucideReact[pascalName];
-                }
-                
-                if (!Component) {
-                  // Final fallback: check for some common variations
-                  const mapped = { 'activity': LucideReact.Activity, 'zap': LucideReact.Zap, 'sparkles': LucideReact.Sparkles };
-                  Component = mapped[name ? name.toLowerCase() : ''];
-                }
+              Object.keys(LucideReact).forEach(key => { if (typeof LucideReact[key] === 'function' || typeof LucideReact[key] === 'object') window[key] = LucideReact[key]; });
 
-                return Component ? <Component size={size} className={className} {...props} /> : <div style={{width: size, height: size}} className={className} />;
+              const Icon = ({ name, ...props }) => {
+                let C = LucideReact[name] || LucideReact[name.charAt(0).toUpperCase() + name.slice(1)];
+                return C ? <C {...props} /> : null;
               };
+              window.Icon = Icon;
 
-              // User Logic Injection
               try {
                 ${cleanCode}
               } catch (evalErr) {
                 throw new Error("Logic Sync Failed: " + evalErr.message);
               }
 
-              // Check if App exists in any form (it might be constant, var, function)
-              let ComponentToRender = null;
-              if (typeof App !== 'undefined') ComponentToRender = App;
-              else if (typeof Manifestation !== 'undefined') ComponentToRender = Manifestation;
-              else if (typeof Main !== 'undefined') ComponentToRender = Main;
+              let AppComp = window.App || window.__MANIFESTED_APP__ || window.Manifestation || window.Main;
+              if (!AppComp) {
+                const keys = Object.keys(window).filter(k => /^[A-Z]/.test(k) && typeof window[k] === 'function' && !['React', 'ReactDOM', 'Recharts', 'Motion', 'LucideReact'].includes(k));
+                if (keys.length > 0) AppComp = window[keys[0]];
+              }
               
-              if (ComponentToRender) {
-                const root = ReactDOM.createRoot(document.getElementById('root'));
-                root.render(<ComponentToRender />);
+              if (AppComp) {
+                ReactDOM.createRoot(document.getElementById('root')).render(<AppComp />);
               } else {
-                // Try to find ANY function that looks like a component if App not found
-                const keys = Object.keys(window).filter(k => k.length > 2 && /^[A-Z]/.test(k) && typeof window[k] === 'function');
-                if (keys.length > 0) {
-                   const root = ReactDOM.createRoot(document.getElementById('root'));
-                   root.render(React.createElement(window[keys[0]]));
-                } else {
-                   throw new Error("Synchronicity Failure: No 'App' component defined. Ensure your code defines a component named 'App'.");
-                }
+                throw new Error("No 'App' component detected.");
               }
             } catch (err) {
-              console.error("Neural Execution Failure:", err);
-              document.getElementById('root').innerHTML = \`
-                <div class="error-container">
-                  <div style="font-weight:900; margin-bottom:12px; font-size:11px; letter-spacing:2px; color:#ff4f4f">NEURAL_EXECUTION_FAILURE</div>
-                  <div style="opacity:0.8">\${err.message}</div>
-                  <div style="margin-top:16px; opacity:0.3; font-size:10px">Trace: \${err.stack?.split('\\n')[1] || 'Internal Matrix'}</div>
-                </div>
-              \`;
+              console.error(err);
+              document.getElementById('root').innerHTML = \`<div class="error-container"><b>Execution Failure</b><br/>\${err.message}</div>\`;
             }
           })();
         </script>
@@ -234,259 +196,275 @@ export function ModulePlayer({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex flex-col bg-[#020205] text-white"
+      className="fixed inset-0 z-50 flex flex-col bg-[#050508] text-white overflow-hidden font-sans"
     >
-      {/* HEADER / TOOLBAR */}
-      <div className="h-16 md:h-20 border-b border-white/10 flex items-center justify-between px-6 bg-black/40 backdrop-blur-xl">
-        <div className="flex items-center gap-6">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-indigo-500/20 flex items-center justify-center border border-indigo-500/30">
-              <Sparkles className="w-5 h-5 text-indigo-400" />
+      {/* --- TOP BAR --- */}
+      <div className="h-14 border-b border-white/5 flex items-center justify-between px-4 bg-black/40 backdrop-blur-2xl shrink-0">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-indigo-500/20 flex items-center justify-center border border-indigo-500/30">
+              <Sparkles className="w-4 h-4 text-indigo-400" />
             </div>
-            <div>
-              <h1 className="text-xs font-black uppercase tracking-[4px] leading-none mb-1">Manifest_IDE</h1>
-              <p className="text-[9px] text-white/30 uppercase tracking-widest font-bold">Node Identity: {suggestion.id}</p>
+            <div className="hidden sm:block">
+              <h1 className="text-[10px] font-black uppercase tracking-[3px] leading-none mb-0.5">ManifestATION_STUDIO</h1>
+              <p className="text-[8px] text-white/30 uppercase tracking-[2px] font-bold">Rev: {suggestion.version || 1}.0</p>
             </div>
           </div>
           
-          <div className="h-8 w-px bg-white/10 hidden md:block" />
-
-          <div className="hidden md:flex items-center gap-2">
-            {[
-              { id: 'chat', label: 'Neural Refinement', icon: MessageCircle },
-              { id: 'code', label: 'Manual Logic', icon: Code },
-              { id: 'history', label: 'Evolutionary Registry', icon: History }
-            ].map(tab => (
-              <button 
-                key={tab.id}
-                onClick={() => setActivePlayTab(tab.id as any)}
-                className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-[2px] transition-all flex items-center gap-2 ${activePlayTab === tab.id ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/20' : 'text-white/40 hover:text-white hover:bg-white/5'}`}
-              >
-                <tab.icon className="w-3.5 h-3.5" />
-                {tab.label}
-              </button>
-            ))}
+          <div className="flex items-center gap-1 bg-white/5 p-1 rounded-lg ml-4">
+            <button 
+              onClick={() => setShowPreview(true)}
+              className={`px-4 py-1.5 rounded-md text-[9px] font-black uppercase tracking-widest transition-all ${showPreview ? 'bg-indigo-500 text-white shadow-lg' : 'text-white/40 hover:text-white'}`}
+            >
+              Preview
+            </button>
+            <button 
+              onClick={() => setShowPreview(false)}
+              className={`px-4 py-1.5 rounded-md text-[9px] font-black uppercase tracking-widest transition-all ${!showPreview ? 'bg-indigo-500 text-white shadow-lg' : 'text-white/40 hover:text-white'}`}
+            >
+              Code
+            </button>
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 px-4 py-2 bg-black/40 border border-white/5 rounded-xl">
-             <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-             <span className="text-[8px] font-black uppercase tracking-widest text-white/40">Neural Link Active</span>
-          </div>
-
+        <div className="flex items-center gap-3">
           <button 
             onClick={handleSave}
             disabled={isSaving || code === suggestion.manifested_code}
-            className={`px-6 h-10 md:h-12 rounded-xl text-[10px] font-black uppercase tracking-[3px] transition-all flex items-center gap-2 ${code === suggestion.manifested_code ? 'bg-white/5 text-white/20 border border-white/5' : 'bg-white text-black hover:bg-indigo-50 shadow-xl'}`}
+            className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase tracking-[2px] transition-all flex items-center gap-2 ${code === suggestion.manifested_code ? 'bg-white/5 text-white/20' : 'bg-white text-black hover:scale-105 active:scale-95'}`}
           >
-            {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Database className="w-3.5 h-3.5" />}
-            {isSaving ? 'Syncing...' : 'Commit to Cloud'}
+            {isSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Database className="w-3 h-3" />}
+            Commit
           </button>
-
           <button 
             onClick={onClose} 
-            className="w-10 h-10 md:w-12 md:h-12 flex items-center justify-center hover:bg-white/10 rounded-xl transition-colors text-white/40 hover:text-white border border-white/10"
+            className="w-9 h-9 flex items-center justify-center hover:bg-white/10 rounded-lg transition-all text-white/40 hover:text-white border border-white/10"
           >
-            <X className="w-6 h-6 md:w-7 md:h-7" />
+            <X className="w-5 h-5" />
           </button>
         </div>
       </div>
 
-      {/* WORKSPACE AREA */}
       <div className="flex-1 flex overflow-hidden">
-        {/* LEFT PANEL: INPUT / LOGIC */}
-        <div className="w-full md:w-[45%] flex flex-col border-r border-white/10 bg-[#080808]">
-          <div className="flex-1 overflow-hidden relative flex flex-col">
-            {activePlayTab === 'chat' && (
-              <div className="flex-1 flex flex-col">
-                <div className="flex-1 overflow-y-auto p-6 md:p-10 space-y-8 custom-scrollbar">
-                  <div className="flex flex-col items-center justify-center text-center space-y-4 max-w-sm mx-auto mb-10 opacity-20">
-                    <Zap className="w-12 h-12 text-indigo-400" />
-                    <div>
-                      <h3 className="text-xs font-black uppercase tracking-[4px] text-white">System: Refinement Interface</h3>
-                      <p className="text-[9px] leading-relaxed uppercase tracking-widest mt-2">Describe changes to the manifestation. The Neural Engine will rebuild the component logic while preserving your intent.</p>
-                    </div>
-                  </div>
+        {/* --- ACTIVITY BAR (SIDE) --- */}
+        <div className="w-14 border-r border-white/5 bg-[#020205] flex flex-col items-center py-4 gap-6 shrink-0">
+          {[
+            { id: 'files', icon: FolderTree, label: 'Files' },
+            { id: 'chat', icon: MessageCircle, label: 'AI' },
+            { id: 'history', icon: History, label: 'History' },
+            { id: 'settings', icon: Settings, label: 'Config' }
+          ].map(btn => (
+            <button 
+              key={btn.id}
+              onClick={() => {
+                setActiveSideTab(btn.id as any);
+                setIsExplorerOpen(true);
+              }}
+              className={`relative group flex items-center justify-center w-10 h-10 rounded-xl transition-all ${activeSideTab === btn.id ? 'bg-indigo-500/10 text-indigo-400' : 'text-white/20 hover:text-white/60'}`}
+            >
+              <btn.icon className="w-5 h-5" />
+              {activeSideTab === btn.id && (
+                <div className="absolute left-0 w-1 h-4 bg-indigo-500 rounded-r-full" />
+              )}
+              <div className="absolute left-16 px-3 py-1.5 bg-indigo-600 text-white text-[9px] font-black uppercase tracking-widest rounded-md opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50">
+                {btn.label}
+              </div>
+            </button>
+          ))}
+        </div>
 
-                  {chatMessages.map((msg, idx) => (
-                    <motion.div 
-                      initial={{ opacity: 0, x: msg.role === 'user' ? 20 : -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      key={idx} 
-                      className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                    >
-                      <div className={`max-w-[90%] p-5 rounded-2xl md:rounded-3xl text-[12px] leading-relaxed font-medium ${msg.role === 'user' ? 'bg-indigo-500 text-white rounded-tr-none' : 'bg-white/5 border border-white/10 text-white/80 rounded-tl-none shadow-xl'}`}>
-                        {msg.content}
-                      </div>
-                    </motion.div>
-                  ))}
-                  
-                  {isRefining && (
-                    <div className="flex justify-start">
-                      <div className="bg-white/5 border border-white/10 p-5 rounded-3xl rounded-tl-none flex items-center gap-4 shadow-2xl">
-                        <div className="relative">
-                          <Loader2 className="w-5 h-5 animate-spin text-indigo-400" />
-                          <div className="absolute inset-0 blur-sm bg-indigo-500/20 rounded-full animate-pulse" />
-                        </div>
-                        <div className="flex flex-col gap-1">
-                          <span className="text-[10px] font-black uppercase tracking-[3px] text-white">Synthesizing Logic...</span>
-                          <span className="text-[8px] uppercase tracking-widest text-white/30 italic">Rewriting the manifestation layer</span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
+        {/* --- SIDEBAR CONTENT (EXPLORER / CHAT) --- */}
+        <AnimatePresence>
+          {isExplorerOpen && (
+            <motion.div 
+              initial={{ width: 0, opacity: 0 }}
+              animate={{ width: 300, opacity: 1 }}
+              exit={{ width: 0, opacity: 0 }}
+              className="border-r border-white/5 bg-[#08080a] flex flex-col overflow-hidden shrink-0"
+            >
+              <div className="h-12 flex items-center justify-between px-4 border-b border-white/5 bg-white/5 shrink-0">
+                <span className="text-[10px] font-black uppercase tracking-[3px] text-white/60">
+                  {activeSideTab === 'files' ? 'Neural_Explorer' : activeSideTab.toUpperCase()}
+                </span>
+                <button onClick={() => setIsExplorerOpen(false)} className="text-white/20 hover:text-white">
+                  <ChevronDown className="w-4 h-4 rotate-90" />
+                </button>
+              </div>
 
-                <div className="p-6 md:p-8 bg-black/40 border-t border-white/5">
-                  <div className="max-w-3xl mx-auto relative group">
-                    <div className="absolute -inset-1 bg-indigo-500/10 blur-xl opacity-0 group-focus-within:opacity-100 transition-opacity" />
-                    <div className="relative flex gap-4 bg-white/5 border border-white/10 rounded-3xl p-2 pl-6 focus-within:border-indigo-500/50 transition-all focus-within:bg-white/10">
-                      <input 
-                        type="text" 
-                        value={refineInput}
-                        onChange={(e) => setRefineInput(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && handleRefine()}
-                        placeholder="Describe your next evolution..."
-                        className="flex-1 bg-transparent py-4 text-[13px] text-white outline-none font-medium placeholder:text-white/20"
-                      />
+              <div className="flex-1 overflow-y-auto no-scrollbar py-2">
+                {activeSideTab === 'files' && (
+                  <div className="px-2 space-y-1">
+                    <div className="flex items-center gap-2 px-2 py-1.5 text-white/40 text-[10px] items-center">
+                       <ChevronDown className="w-3 h-3" />
+                       <span className="font-bold uppercase tracking-widest">MANIFEST_ROOT</span>
+                    </div>
+                    <div className="ml-4 space-y-1">
+                      <div className="flex items-center gap-2 px-3 py-2 text-white/40 text-[9px] items-center">
+                         <ChevronDown className="w-3 h-3 text-indigo-500/50" />
+                         <span className="font-bold uppercase tracking-widest">src</span>
+                      </div>
                       <button 
-                        onClick={handleRefine}
-                        disabled={isRefining || !refineInput.trim()}
-                        className="w-14 h-14 bg-indigo-500 hover:bg-indigo-400 text-white rounded-2xl disabled:opacity-20 transition-all flex items-center justify-center shadow-lg shadow-indigo-500/20 active:scale-95"
+                        onClick={() => { setActiveFile('src/App.tsx'); setShowPreview(false); }}
+                        className={`w-full flex items-center gap-3 px-6 py-2 rounded-lg text-[10px] font-medium transition-all ${activeFile === 'src/App.tsx' ? 'bg-indigo-500/20 text-indigo-400' : 'text-white/40 hover:text-white hover:bg-white/5'}`}
                       >
-                        <ArrowRight className="w-6 h-6" />
+                        <Code className="w-3.5 h-3.5" />
+                        App.tsx
+                      </button>
+                      <button 
+                        onClick={() => { setActiveFile('metadata.json'); setShowPreview(false); }}
+                        className={`w-full flex items-center gap-3 px-6 py-2 rounded-lg text-[10px] font-medium transition-all ${activeFile === 'metadata.json' ? 'bg-indigo-500/20 text-indigo-400' : 'text-white/40 hover:text-white hover:bg-white/5'}`}
+                      >
+                        <FileJson className="w-3.5 h-3.5" />
+                        metadata.json
                       </button>
                     </div>
                   </div>
-                </div>
-              </div>
-            )}
+                )}
 
-            {activePlayTab === 'code' && (
-              <div className="flex-1 flex flex-col bg-[#050505]">
-                <div className="p-4 border-b border-white/5 flex items-center gap-3 bg-white/5">
-                   <div className="w-2 h-2 rounded-full bg-indigo-500" />
-                   <span className="text-[10px] font-black uppercase tracking-[3px] text-white/60">Source Controller</span>
-                </div>
-                <textarea 
-                  value={code}
-                  onChange={(e) => setCode(e.target.value)}
-                  spellCheck={false}
-                  className="flex-1 w-full h-full bg-transparent p-8 md:p-12 font-mono text-[13px] md:text-[14px] text-indigo-200/80 outline-none resize-none selection:bg-indigo-500/40 no-scrollbar leading-relaxed"
-                  placeholder="// Enter manifestation logic..."
-                />
-                <div className="p-4 border-t border-white/5 bg-black/40 text-[9px] text-white/20 uppercase tracking-[4px] font-black flex justify-between items-center px-10">
-                   <span>Rev.{suggestion.history?.length || 0}</span>
-                   <span className="italic">Manual interventions bypass neural gating</span>
-                </div>
-              </div>
-            )}
-
-            {activePlayTab === 'history' && (
-              <div className="flex-1 flex flex-col bg-[#080808] p-8 md:p-12 space-y-10 overflow-y-auto no-scrollbar">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 flex items-center justify-center border border-indigo-500/20">
-                      <History className="w-6 h-6 text-indigo-400" />
-                    </div>
-                    <div>
-                      <h2 className="text-xs font-black uppercase tracking-[5px] text-white">Evolutionary Registry</h2>
-                      <p className="text-[9px] uppercase tracking-widest text-white/30 mt-1 font-bold">Trace back the manifestation's ancestral forms</p>
-                    </div>
-                  </div>
-                </div>
-                
-                {!suggestion.history || suggestion.history.length === 0 ? (
-                  <div className="flex-1 flex flex-col items-center justify-center opacity-30 text-center space-y-4">
-                     <RefreshCw className="w-12 h-12 animate-pulse text-indigo-500" />
-                     <p className="text-[10px] uppercase tracking-[4px] font-black italic text-white/40">This soul has no previous manifestations</p>
-                  </div>
-                ) : (
-                  <div className="space-y-6">
-                    {suggestion.history.map((version, idx) => (
-                       <div key={idx} className="group bg-white/5 border border-white/10 rounded-3xl p-8 space-y-6 hover:bg-white/10 transition-all hover:border-indigo-500/30 shadow-xl">
-                          <div className="flex justify-between items-start">
-                             <div className="px-3 py-1 bg-white/10 rounded-lg text-[9px] font-mono text-indigo-400 tracking-tighter uppercase font-black">Gen_{suggestion.history!.length - idx}</div>
-                             <span className="text-[9px] text-white/40 uppercase tracking-widest font-black leading-none">{new Date(version.timestamp).toLocaleString()}</span>
+                {activeSideTab === 'chat' && (
+                  <div className="h-full flex flex-col p-4">
+                    <div className="flex-1 overflow-y-auto space-y-6 mb-4 custom-scrollbar pr-2">
+                      {chatMessages.map((msg, i) => (
+                        <div key={i} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+                          <div className={`max-w-[90%] p-4 rounded-2xl text-[11px] leading-relaxed ${msg.role === 'user' ? 'bg-indigo-600 text-white' : 'bg-white/5 border border-white/10 text-white/70 shadow-lg'}`}>
+                            {msg.content}
                           </div>
-                          <p className="text-[11px] text-white/70 italic uppercase tracking-wider leading-relaxed border-l-2 border-indigo-500/30 pl-6 group-hover:border-indigo-500 transition-all">"{version.prompt || 'Manual Intervention'}"</p>
-                          <button 
-                            onClick={() => setCode(version.code)}
-                            className="w-full py-4 rounded-2xl border border-white/10 text-[10px] font-black uppercase tracking-[4px] hover:bg-white hover:text-black transition-all hover:border-white shadow-2xl active:scale-[0.98]"
-                          >
-                            Restore Form
-                          </button>
-                       </div>
+                        </div>
+                      ))}
+                      {isRefining && (
+                        <div className="flex items-center gap-3 text-white/30 italic text-[10px]">
+                           <Loader2 className="w-3 h-3 animate-spin" />
+                           Synthesizing neural pathways...
+                        </div>
+                      )}
+                    </div>
+                    <div className="relative group">
+                       <input 
+                         type="text" 
+                         value={refineInput}
+                         onChange={(e) => setRefineInput(e.target.value)}
+                         onKeyDown={(e) => e.key === 'Enter' && handleRefine()}
+                         placeholder="Neural feedback..."
+                         className="w-full bg-white/5 border border-white/10 p-4 rounded-2xl text-[11px] outline-none group-focus-within:border-indigo-500/50 transition-all font-medium"
+                       />
+                       <button 
+                         onClick={handleRefine}
+                         className="absolute right-2 top-2 w-10 h-10 bg-indigo-500 text-white rounded-xl flex items-center justify-center hover:bg-indigo-400 transition-all"
+                       >
+                         <ArrowRight className="w-4 h-4" />
+                       </button>
+                    </div>
+                  </div>
+                )}
+
+                {activeSideTab === 'history' && (
+                  <div className="px-4 space-y-4">
+                    {suggestion.history?.map((v, i) => (
+                      <div key={i} className="bg-white/5 border border-white/5 rounded-xl p-4 space-y-3 hover:border-indigo-500/30 transition-all group">
+                         <div className="flex justify-between items-center text-[8px] font-black text-white/30 uppercase tracking-widest">
+                            <span>GEN_{suggestion.history!.length - i}</span>
+                            <span>{new Date(v.timestamp).toLocaleTimeString()}</span>
+                         </div>
+                         <p className="text-[10px] text-white/60 line-clamp-2 italic">"{v.prompt || 'Manual Edit'}"</p>
+                         <button 
+                           onClick={() => setCode(v.code)}
+                           className="w-full py-2 border border-white/10 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-white hover:text-black transition-all"
+                         >
+                           Restore
+                         </button>
+                      </div>
                     ))}
                   </div>
                 )}
               </div>
-            )}
-          </div>
-        </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-        {/* RIGHT PANEL: LIVE PREVIEW */}
-        <div className="flex-1 relative bg-black flex flex-col">
-          <div className="h-12 border-b border-white/10 flex items-center justify-between px-6 bg-white/5">
-             <div className="flex items-center gap-3">
-                <div className="w-2.5 h-2.5 rounded-full bg-indigo-500 blur-[2px]" />
-                <span className="text-[10px] font-black uppercase tracking-[4px] text-white">Live Manifestation View</span>
-             </div>
-             <div className="flex items-center gap-4 text-[9px] text-white/20 uppercase tracking-widest font-bold">
-               <span>Interactive Preview</span>
-               <div className="w-px h-3 bg-white/10" />
-               <span>Standard Sandbox</span>
-             </div>
-          </div>
-          
-          <div className="relative flex-1 bg-[#020205] overflow-hidden">
-             {!code && (
-               <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-[#020205] space-y-6">
-                 <div className="relative">
-                   <div className="absolute inset-0 blur-2xl bg-indigo-500/20 animate-pulse" />
-                   <Loader2 className="w-12 h-12 text-indigo-500 animate-spin relative z-10" />
+        {/* --- MAIN WORKSPACE --- */}
+        <div className="flex-1 flex flex-col md:flex-row overflow-hidden relative">
+           
+           {/* EDITOR AREA */}
+           <div className={`flex flex-col bg-[#050508] transition-all duration-500 ${showPreview ? 'w-0 md:w-1/2 opacity-0 md:opacity-100 hidden md:flex' : 'flex-1 opacity-100'}`}>
+              <div className="h-10 border-b border-white/5 flex items-center gap-px bg-black/20 shrink-0">
+                 <div className="h-full px-4 flex items-center gap-2 bg-white/5 border-r border-white/5">
+                    <Code className="w-3 h-3 text-indigo-400" />
+                    <span className="text-[10px] font-black uppercase tracking-widest text-indigo-100">{activeFile}</span>
                  </div>
-                 <div className="flex flex-col items-center gap-2">
-                    <span className="text-[10px] font-black uppercase tracking-[6px] text-white animate-pulse">Neural Synthesis in Progress</span>
-                    <span className="text-[8px] uppercase tracking-[3px] text-white/30 italic">Connecting to Collective Consciousness...</span>
+              </div>
+              <div className="flex-1 overflow-hidden relative">
+                {activeFile === 'src/App.tsx' ? (
+                  <textarea 
+                    value={code}
+                    onChange={(e) => setCode(e.target.value)}
+                    spellCheck={false}
+                    className="w-full h-full bg-transparent p-8 font-mono text-[13px] text-indigo-100/70 outline-none resize-none custom-scrollbar leading-relaxed"
+                  />
+                ) : (
+                  <div className="p-8 font-mono text-[12px] text-white/40 uppercase tracking-widest leading-relaxed">
+                     <FileJson className="w-8 h-8 mb-4 opacity-20" />
+                     {JSON.stringify({ 
+                       id: suggestion.id, 
+                       status: suggestion.status, 
+                       created_at: suggestion.created_at,
+                       content: suggestion.content
+                     }, null, 2)}
+                  </div>
+                )}
+              </div>
+              <div className="h-8 border-t border-white/5 bg-black/40 flex items-center justify-between px-6 text-[8px] font-black text-white/20 uppercase tracking-[3px]">
+                 <span>{activeFile.split('.').pop()?.toUpperCase() || 'PLAINTEXT'}</span>
+                 <span>Manifest Layer 1.0</span>
+              </div>
+           </div>
+
+           {/* PREVIEW AREA */}
+           <div className={`flex flex-col bg-[#020205] transition-all duration-500 ${showPreview ? 'flex-1' : 'w-0 md:w-0 opacity-0 overflow-hidden hidden md:flex'}`}>
+              <div className="h-10 border-b border-white/5 flex items-center justify-between px-6 bg-black/20 shrink-0">
+                 <div className="flex items-center gap-3">
+                   <Monitor className="w-3.5 h-3.5 text-indigo-400" />
+                   <span className="text-[10px] font-black uppercase tracking-widest text-white/40">Neural Preview</span>
                  </div>
-                 <div className="w-32 h-0.5 bg-white/5 rounded-full overflow-hidden">
-                    <motion.div 
-                      className="h-full bg-indigo-500" 
-                      animate={{ x: [-128, 128] }}
-                      transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
-                    />
+                 <div className="flex items-center gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                    <span className="text-[8px] font-black uppercase tracking-widest text-white/30">Stable</span>
                  </div>
-               </div>
-             )}
-             {/* THE ACTUAL PREVIEW FRAME */}
-             <iframe 
-               ref={iframeRef}
-               srcDoc={srcDoc}
-               className="w-full h-full border-none"
-               title="manifestation-player"
-               sandbox="allow-scripts allow-modals allow-forms allow-popups allow-same-origin"
-             />
-             
-             {/* FADE COVERS */}
-             <div className="absolute top-0 inset-x-0 h-4 bg-gradient-to-b from-[#020205] to-transparent pointer-events-none" />
-             <div className="absolute bottom-0 inset-x-0 h-4 bg-gradient-to-t from-[#020205] to-transparent pointer-events-none" />
-          </div>
-          
-          {/* HUD OVERLAY ON PREVIEW */}
-          <div className="absolute bottom-6 right-6 flex gap-2">
-             <button 
-               onClick={() => {
-                 if (iframeRef.current) {
-                   iframeRef.current.srcdoc = srcDoc; // Reload
-                 }
-               }}
-               className="p-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl transition-all text-white/40 hover:text-white"
-             >
-               <RefreshCw className="w-4 h-4" />
-             </button>
-          </div>
+              </div>
+              <div className="flex-1 relative group">
+                  <iframe 
+                    ref={iframeRef}
+                    srcDoc={srcDoc}
+                    className="w-full h-full border-none"
+                    title="manifestation-player"
+                    sandbox="allow-scripts allow-modals allow-forms allow-popups allow-same-origin"
+                  />
+                  {!code && (
+                    <div className="absolute inset-0 bg-[#020205] flex flex-col items-center justify-center p-10 text-center">
+                       <Loader2 className="w-10 h-10 text-indigo-500 animate-spin mb-6" />
+                       <span className="text-[10px] font-black uppercase tracking-[5px] text-white/40">Awaiting Synthesis</span>
+                    </div>
+                  )}
+
+                  {/* MINI HUD */}
+                  <div className="absolute bottom-6 right-6 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button 
+                       onClick={() => { if (iframeRef.current) iframeRef.current.srcdoc = srcDoc; }}
+                       className="p-3 bg-white/5 hover:bg-white/10 backdrop-blur-xl border border-white/10 rounded-xl transition-all text-white/40 hover:text-white"
+                    >
+                       <RefreshCw className="w-4 h-4" />
+                    </button>
+                  </div>
+              </div>
+              <div className="h-8 border-t border-white/5 bg-black/40 flex items-center px-6 gap-6 overflow-hidden">
+                 <div className="flex items-center gap-2 text-[8px] font-black text-white/20 uppercase tracking-widest shrink-0">
+                    <Terminal className="w-3 h-3" />
+                    <span>Neural Runtime</span>
+                 </div>
+                 <div className="flex-1 h-3 bg-white/5 rounded-full overflow-hidden flex items-center px-2">
+                    <div className="text-[7px] text-white/10 uppercase tracking-tighter truncate">Bootstrapping framework... Complete. Mapping dependencies... Complete. Executing soul logic...</div>
+                 </div>
+              </div>
+           </div>
         </div>
       </div>
     </motion.div>
