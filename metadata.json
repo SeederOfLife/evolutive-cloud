@@ -1,6 +1,13 @@
 {
-  "name": "Evolutive Cloud",
-  "description": "A democratic software ecosystem that evolves based on community suggestions and AI execution.",
-  "requestFramePermissions": [],
-  "majorCapabilities": []
+  "name": "Manifestation Studio",
+  "description": "An AI-powered co-creation space where collective ideas are manifested into functional software modules through democratic evolution.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "AI Code Generation",
+    "Real-time Collaboration",
+    "3D Spatial Interface"
+  ]
 }

@@ -27,13 +27,16 @@ if ((import.meta as any).env?.DEV) {
   logStatus('SUPABASE_ANON_KEY', supabaseAnonKey);
 }
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn("Supabase credentials missing. Evolutive Cloud is running in local/mock mode.");
-  console.info("Please ensure VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY (or NEXT_PUBLIC alternatives) are set in your environment.");
-} else {
-  console.log("Supabase client initialized successfully.");
+let supabaseInstance = null;
+try {
+  if (supabaseUrl && supabaseAnonKey) {
+    supabaseInstance = createClient(supabaseUrl, supabaseAnonKey);
+    console.log("Supabase client initialized successfully.");
+  } else {
+    console.warn("Supabase credentials missing. Evolutive Cloud is running in local/mock mode.");
+  }
+} catch (err) {
+  console.error("Critical error during Supabase initialization:", err);
 }
 
-export const supabase = supabaseUrl && supabaseAnonKey 
-  ? createClient(supabaseUrl, supabaseAnonKey) 
-  : null;
+export const supabase = supabaseInstance;

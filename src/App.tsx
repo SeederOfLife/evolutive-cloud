@@ -502,6 +502,8 @@ export default function App() {
     };
   }, []);
 
+  const [initStatus, setInitStatus] = useState<string>("Connecting to Neural Network...");
+
   // Initial fetch and Project setup
   useEffect(() => {
     let mounted = true;
@@ -513,11 +515,11 @@ export default function App() {
       try {
         if (!supabase) return;
         
-        console.log("Checking Project Config...");
+        setInitStatus("Synchronizing Registry...");
         const { data, error } = await supabase.from('suggestions').select('*').eq('status', 'system_config').maybeSingle();
         
         if (error) {
-          console.error("SyncProject Query Error (Status 400/406?):", error);
+          console.error("SyncProject Query Error:", error);
           return;
         }
 
@@ -553,30 +555,41 @@ export default function App() {
     };
 
     const init = async () => {
+      console.log("Starting Initialization sequence...");
+      
+      const safetyTimeout = setTimeout(() => {
+        if (mounted) {
+          console.warn("Initialization safety threshold reached. Forcing manifest.");
+          setIsInitializing(false);
+        }
+      }, 6000);
+
       if (!supabase) {
-        console.warn("Supabase not available. Running in offline/limited mode.");
-        setIsInitializing(false);
-        return;
-      }
-      try {
-        console.log("Initializing Evolution Link...");
-        // Safety timeout: Never leave the user on a white page for more than 5 seconds
-        const safetyTimeout = setTimeout(() => {
+        setInitStatus("Supabase Matrix Off-Bridge. Offline Mode Active.");
+        setTimeout(() => {
           if (mounted) {
-            console.warn("Initialization safety threshold reached. Forcing manifest.");
+            clearTimeout(safetyTimeout);
             setIsInitializing(false);
           }
-        }, 5000);
+        }, 1200);
+        return;
+      }
 
-        fetchSuggestions().catch(e => console.error("Fetch suggestions failed:", e));
-        await syncProject();
+      try {
+        setInitStatus("Synchronizing with Collective Registry...");
+        await Promise.all([
+          fetchSuggestions().catch(e => console.error("Suggestions sync failure:", e)),
+          syncProject().catch(e => console.error("Registry config failure:", e))
+        ]);
         
-        clearTimeout(safetyTimeout);
+        setInitStatus("Neural Link Established.");
       } catch (err) {
-        console.error("Initialization error:", err);
+        console.error("Initialization sequence interrupted:", err);
+        setInitStatus("Sync Interrupted. Retrying Link...");
       } finally {
         if (mounted) {
-          setTimeout(() => setIsInitializing(false), 500);
+          clearTimeout(safetyTimeout);
+          setTimeout(() => setIsInitializing(false), 800);
         }
       }
     };
@@ -1251,7 +1264,10 @@ export default function App() {
               <Loader2 className="w-16 h-16 text-indigo-500 animate-spin relative z-10" />
             </div>
             <h1 className="mt-12 text-2xl md:text-3xl font-black uppercase tracking-[10px] text-white">Neural Pulse</h1>
-            <p className="mt-4 text-[10px] md:text-sm text-indigo-400 font-bold uppercase tracking-[4px] animate-pulse">Syncing with Collective Mind...</p>
+            <p className="mt-4 text-[10px] md:text-xs text-indigo-400 font-bold uppercase tracking-[4px] animate-pulse h-4 truncate max-w-sm px-4">
+              {initStatus}
+            </p>
+            
             <div className="mt-20 w-48 h-0.5 bg-white/5 rounded-full overflow-hidden">
                <motion.div 
                  className="h-full bg-indigo-500"
@@ -1259,6 +1275,16 @@ export default function App() {
                  transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }}
                />
             </div>
+
+            <motion.button
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 3 }}
+              onClick={() => setIsInitializing(false)}
+              className="mt-10 px-6 py-2 border border-white/10 rounded-full text-[10px] font-black uppercase tracking-widest text-white/40 hover:text-white hover:border-white/40 transition-all"
+            >
+              Force Manifest Link
+            </motion.button>
           </motion.div>
         )}
       </AnimatePresence>
