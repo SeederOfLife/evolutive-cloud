@@ -90,7 +90,7 @@ export default function App() {
     user_id: boolean
   }>({ pledged_by: true, manifested_code: true, energy: true, parent_id: true, version: true, user_id: true });
   const [isLoading, setIsLoading] = useState(false);
-  const [isManifesting, setIsManifesting] = useState<number | null>(null);
+  const [isManifesting, setIsManifesting] = useState<number | string | null>(null);
   const [activeModule, setActiveModule] = useState<Suggestion | null>(null);
   const [isRepoOpen, setIsRepoOpen] = useState(false);
   const [activeUsersCount, setActiveUsersCount] = useState(1);
@@ -1114,6 +1114,39 @@ export default function App() {
     setEchoInput("");
   };
 
+  const initiateNewProject = async () => {
+    const promptValue = prompt("What do you want to manifest in this new Evolutionary Workspace?");
+    if (!promptValue || !supabase) return;
+
+    try {
+      setIsManifesting("new");
+      const { data: userData } = await supabase.auth.getUser();
+      
+      const newSuggestion = {
+        content: promptValue,
+        votes: 1,
+        energy: 10,
+        status: 'pending',
+        user_id: userData.user?.id,
+        manifested_code: ""
+      };
+
+      const { data, error } = await supabase.from('suggestions').insert(newSuggestion).select().single();
+      if (error) throw error;
+
+      setSuggestions(prev => [data, ...prev]);
+      setActiveModule(data); // OPEN IMMEDIATELY
+      
+      // Auto-trigger first manifestation
+      await manifestEvolution(data);
+      
+    } catch (err: any) {
+      console.error("Initiation Error:", err);
+      alert("Neural Bridge failed to initiate: " + err.message);
+    } finally {
+      setIsManifesting(null);
+    }
+  };
   const manifestEvolution = async (suggestion: Suggestion) => {
     if (isManifesting) return;
     
@@ -2200,6 +2233,19 @@ export default function App() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* --- HUD: INITIATE BUTTON --- */}
+      <div className="absolute bottom-10 left-1/2 -translate-x-1/2 z-40 pointer-events-none">
+        <button 
+          onClick={initiateNewProject}
+          disabled={!!isManifesting}
+          className="group relative px-10 py-5 bg-white text-black rounded-2xl font-black uppercase tracking-[5px] text-[11px] shadow-[0_20px_50px_rgba(255,255,255,0.2)] hover:shadow-[0_20px_80px_rgba(255,255,255,0.4)] hover:-translate-y-1 active:scale-95 transition-all flex items-center gap-4 border border-white overflow-hidden pointer-events-auto"
+        >
+          <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/0 via-indigo-500/10 to-indigo-500/0 -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-in-out" />
+          {isManifesting === 'new' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+          {isManifesting === 'new' ? 'Synthesizing...' : 'Manifest New Soul'}
+        </button>
+      </div>
 
       <AnimatePresence>
         {activeModule && (
