@@ -1,4 +1,10 @@
 
+export interface EvolutionVersion {
+  code: string;
+  timestamp: string;
+  prompt?: string;
+}
+
 export interface Suggestion {
   id: number;
   content: string;
@@ -12,6 +18,16 @@ export interface Suggestion {
   parent_id?: number | null; // For refinement iterations
   version?: number;
   is_deleted?: boolean;
+  history?: EvolutionVersion[];
+  chat_thread?: { role: 'user' | 'assistant' | 'system', content: string }[];
+}
+
+export interface AIConfig {
+  temperature: number;
+  topP: number;
+  topK: number;
+  maxTokens: number;
+  safetyThreshold: 'BLOCK_NONE' | 'BLOCK_LOW_AND_ABOVE' | 'BLOCK_MEDIUM_AND_ABOVE' | 'BLOCK_ONLY_HIGH';
 }
 
 export interface Advice {

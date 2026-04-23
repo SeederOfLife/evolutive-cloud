@@ -52,7 +52,9 @@ import {
   UserProfile, 
   VoidEcho, 
   EvolutionSnapshot, 
-  ProjectConfig 
+  ProjectConfig,
+  AIConfig,
+  EvolutionVersion
 } from "./types";
 import { EvolutionTree } from "./components/EvolutionTree";
 import { ModulePlayer } from "./components/ModulePlayer";
@@ -143,6 +145,33 @@ export default function App() {
       return {};
     }
   });
+
+  const [aiConfig, setAiConfig] = useState<AIConfig & { systemPrompt: string }>(() => {
+    try {
+      const saved = localStorage.getItem('soul_ai_config');
+      return saved ? JSON.parse(saved) : {
+        temperature: 0.7,
+        topP: 0.95,
+        topK: 40,
+        maxTokens: 4096,
+        safetyThreshold: 'BLOCK_NONE',
+        systemPrompt: "You are the Evolutive Cloud Manifestation Engine. Generate professional-grade, high-complexity interactive applications. Deep shadows, glassmorphism, responsive grids."
+      };
+    } catch {
+      return {
+        temperature: 0.7,
+        topP: 0.95,
+        topK: 40,
+        maxTokens: 4096,
+        safetyThreshold: 'BLOCK_NONE',
+        systemPrompt: "You are the Evolutive Cloud Manifestation Engine. Generate professional-grade, high-complexity interactive applications. Deep shadows, glassmorphism, responsive grids."
+      };
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem('soul_ai_config', JSON.stringify(aiConfig));
+  }, [aiConfig]);
 
   const userApiKey = useMemo(() => providerKeys[aiProvider] || "", [providerKeys, aiProvider]);
 
@@ -363,7 +392,13 @@ export default function App() {
         try {
           const response = await ai.models.generateContent({
             model: modelId,
-            contents: prompt
+            contents: [{ parts: [{ text: prompt }] }],
+            config: {
+              temperature: aiConfig.temperature,
+              topP: aiConfig.topP,
+              topK: aiConfig.topK,
+              maxOutputTokens: aiConfig.maxTokens,
+            }
           });
           
           const text = response.text;
@@ -375,7 +410,12 @@ export default function App() {
             console.warn("Primary model unavailable, falling back to gemini-3-flash-preview:", errText);
             const fallbackResponse = await ai.models.generateContent({
               model: "gemini-3-flash-preview",
-              contents: prompt
+              contents: [{ parts: [{ text: prompt }] }],
+              config: {
+                temperature: aiConfig.temperature,
+                topP: aiConfig.topP,
+                maxOutputTokens: aiConfig.maxTokens,
+              }
             });
             return fallbackResponse.text || "";
           }
@@ -393,6 +433,9 @@ export default function App() {
         const response = await client.chat.completions.create({
           model: selectedModel,
           messages: [{ role: "user", content: prompt }],
+          temperature: aiConfig.temperature,
+          top_p: aiConfig.topP,
+          max_tokens: aiConfig.maxTokens,
         });
         return response.choices[0].message.content || "";
       }
@@ -1078,8 +1121,7 @@ export default function App() {
       setIsManifesting(suggestion.id);
       
       const prompt = `
-        System: You are the Evolutive Cloud Manifestation Engine. 
-        Objective: Generate professional-grade, high-complexity interactive applications.
+        System: ${aiConfig.systemPrompt}
         Context: This app was requested by the community. ${suggestion.pledged_by?.length || 0} users supported this idea.
         
         Task: Create a beautiful, polished, and functionally complex React application for: "${suggestion.content}"
@@ -2009,16 +2051,91 @@ export default function App() {
                             </div>
                           )}
 
-                          <div className="p-6 bg-indigo-500/[0.03] border border-indigo-500/10 rounded-[2rem] space-y-4">
-                             <div className="flex items-center gap-3 text-indigo-400">
-                               <div className="p-1.5 rounded-lg bg-indigo-500/10"><Info className="w-3.5 h-3.5" /></div>
-                               <span className="text-[10px] font-black uppercase tracking-[4px]">Soul Connection Guide</span>
-                             </div>
-                             <div className="text-[9px] md:text-[10px] text-white/40 leading-relaxed uppercase tracking-widest space-y-3 font-medium">
-                                {aiProvider === 'google' && <p>Primary neural bridge. Built for Architectural manifest. Key at <a href="https://aistudio.google.com" target="_blank" className="text-indigo-400 underline">Google AI Studio</a>.</p>}
-                                {aiProvider === 'openai' && <p>Standard intelligence lattice. Production grade logic. Key at <a href="https://platform.openai.com" target="_blank" className="text-pink-400 underline">OpenAI Portal</a>.</p>}
-                                {aiProvider === 'anthropic' && <p>Claude 3.5 Sonnet support for human-centric manifests. Key at <a href="https://console.anthropic.com" target="_blank" className="text-yellow-400 underline">Anthropic Console</a>.</p>}
-                             </div>
+                          <div className="bg-black/20 p-8 rounded-[2.5rem] border border-white/5 space-y-8">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <div className="p-2 rounded-xl bg-orange-500/10 text-orange-400">
+                                  <DraftingCompass className="w-4 h-4" />
+                                </div>
+                                <label className="text-[10px] font-black uppercase tracking-[3px] text-white/60">Advanced Parameters</label>
+                              </div>
+                              <span className="text-[10px] font-mono text-white/20">STUDIO CONTROLS</span>
+                            </div>
+
+                            <div className="space-y-4">
+                              <div className="flex justify-between items-center px-1">
+                                <span className="text-[9px] font-black uppercase tracking-widest text-white/40">Neural Directive (System Prompt)</span>
+                                <span className="text-[8px] font-mono text-white/20 italic">Global System Instructions</span>
+                              </div>
+                              <textarea 
+                                value={aiConfig.systemPrompt}
+                                onChange={(e) => setAiConfig(prev => ({ ...prev, systemPrompt: e.target.value }))}
+                                className="w-full h-24 bg-black/40 border border-white/10 rounded-2xl px-5 py-4 text-[11px] text-white/80 outline-none focus:border-orange-500/50 transition-all font-mono no-scrollbar resize-none"
+                                placeholder="Set the core identity and rules for manifestations..."
+                              />
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-4 border-t border-white/5">
+                              <div className="space-y-4">
+                                <div className="flex justify-between items-center px-1">
+                                  <span className="text-[9px] font-black uppercase tracking-widest text-white/40">Temperature</span>
+                                  <span className="text-[10px] font-mono text-orange-400">{aiConfig.temperature.toFixed(2)}</span>
+                                </div>
+                                <input 
+                                  type="range" min="0" max="2" step="0.05"
+                                  value={aiConfig.temperature}
+                                  onChange={(e) => setAiConfig(prev => ({ ...prev, temperature: parseFloat(e.target.value) }))}
+                                  className="w-full accent-orange-500 h-1 bg-white/10 rounded-full appearance-none cursor-pointer"
+                                />
+                                <div className="flex justify-between text-[8px] text-white/20 font-black uppercase">
+                                  <span>Precise</span>
+                                  <span>Creative</span>
+                                </div>
+                              </div>
+
+                              <div className="space-y-4">
+                                <div className="flex justify-between items-center px-1">
+                                  <span className="text-[9px] font-black uppercase tracking-widest text-white/40">Max Tokens</span>
+                                  <span className="text-[10px] font-mono text-indigo-400">{aiConfig.maxTokens}</span>
+                                </div>
+                                <input 
+                                  type="range" min="128" max="128000" step="128"
+                                  value={aiConfig.maxTokens}
+                                  onChange={(e) => setAiConfig(prev => ({ ...prev, maxTokens: parseInt(e.target.value) }))}
+                                  className="w-full accent-indigo-500 h-1 bg-white/10 rounded-full appearance-none cursor-pointer"
+                                />
+                              </div>
+
+                              <div className="space-y-4">
+                                <div className="flex justify-between items-center px-1">
+                                  <span className="text-[9px] font-black uppercase tracking-widest text-white/40">Top P</span>
+                                  <span className="text-[10px] font-mono text-pink-400">{aiConfig.topP.toFixed(2)}</span>
+                                </div>
+                                <input 
+                                  type="range" min="0" max="1" step="0.01"
+                                  value={aiConfig.topP}
+                                  onChange={(e) => setAiConfig(prev => ({ ...prev, topP: parseFloat(e.target.value) }))}
+                                  className="w-full accent-pink-500 h-1 bg-white/10 rounded-full appearance-none cursor-pointer"
+                                />
+                              </div>
+
+                              <div className="space-y-4">
+                                <div className="flex justify-between items-center px-1">
+                                  <span className="text-[9px] font-black uppercase tracking-widest text-white/40">Safety Filters</span>
+                                  <span className="text-[10px] font-mono text-green-400">{aiConfig.safetyThreshold.replace('BLOCK_', '')}</span>
+                                </div>
+                                <select 
+                                  value={aiConfig.safetyThreshold}
+                                  onChange={(e) => setAiConfig(prev => ({ ...prev, safetyThreshold: e.target.value as any }))}
+                                  className="w-full bg-black/40 border border-white/5 rounded-2xl py-3 px-4 text-[10px] text-white/60 outline-none focus:border-green-500/30 transition-all uppercase font-black"
+                                >
+                                  <option value="BLOCK_NONE">Block None</option>
+                                  <option value="BLOCK_LOW_AND_ABOVE">Low & Above</option>
+                                  <option value="BLOCK_MEDIUM_AND_ABOVE">Medium & Above</option>
+                                  <option value="BLOCK_ONLY_HIGH">High Only</option>
+                                </select>
+                              </div>
+                            </div>
                           </div>
 
                           <div className="flex items-center justify-between px-2">
@@ -2089,19 +2206,84 @@ export default function App() {
           <ModulePlayer 
             suggestion={activeModule} 
             onClose={() => setActiveModule(null)} 
+            onRefine={async (feedback) => {
+              const refinePrompt = `
+                System: ${aiConfig.systemPrompt}
+                Objective: Update the existing "App" component based on user feedback.
+                
+                Current Code:
+                ${activeModule.manifested_code}
+                
+                User Feedback:
+                "${feedback}"
+                
+                Instructions:
+                - Return the ENTIRE updated React component named "App".
+                - Maintain the existing libraries (Motion, Recharts, etc.) and global scope.
+                - DO NOT include imports or redundant declarations.
+                - Focus on high-quality, polished code.
+                - Return ONLY the code.
+              `;
+              
+              const newCode = await callUnifiedAI(refinePrompt);
+              
+              // Push to local history and sync
+              if (newCode && supabase) {
+                const newVersion: EvolutionVersion = {
+                  code: activeModule.manifested_code || "",
+                  timestamp: new Date().toISOString(),
+                  prompt: feedback
+                };
+                
+                const updatedHistory = [newVersion, ...(activeModule.history || [])];
+                const updatePayload: any = { history: updatedHistory, manifested_code: newCode };
+                
+                // Fallback for schema
+                if (!dbFeatures.version) {
+                  const meta = activeModule.content.startsWith('JSON:') ? JSON.parse(activeModule.content.substring(5)) : { text: activeModule.content };
+                  meta.history = updatedHistory;
+                  meta.manifested_code = newCode;
+                  updatePayload.content = 'JSON:' + JSON.stringify(meta);
+                  delete updatePayload.history;
+                  delete updatePayload.manifested_code;
+                }
+
+                await supabase.from('suggestions').update(updatePayload).eq('id', activeModule.id);
+                setSuggestions(prev => prev.map(s => s.id === activeModule.id ? { ...s, manifested_code: newCode, history: updatedHistory } : s));
+                setActiveModule(prev => prev ? { ...prev, manifested_code: newCode, history: updatedHistory } : null);
+              }
+              
+              return newCode;
+            }}
             onSave={async (newCode) => {
               if (!supabase) return;
-              const updatePayload: any = {};
-              if (dbFeatures.manifested_code) {
-                updatePayload.manifested_code = newCode;
-              } else {
+              
+              const newVersion: EvolutionVersion = {
+                code: activeModule.manifested_code || "",
+                timestamp: new Date().toISOString(),
+                prompt: "Manual Revision"
+              };
+              
+              const updatedHistory = [newVersion, ...(activeModule.history || [])];
+              const updatePayload: any = { 
+                manifested_code: newCode,
+                history: updatedHistory
+              };
+
+              if (!dbFeatures.manifested_code) {
                 const meta = activeModule.content.startsWith('JSON:') ? JSON.parse(activeModule.content.substring(5)) : { text: activeModule.content };
                 meta.manifested_code = newCode;
+                meta.history = updatedHistory;
                 updatePayload.content = 'JSON:' + JSON.stringify(meta);
+                delete updatePayload.manifested_code;
+                delete updatePayload.history;
               }
+
               const { error } = await supabase.from('suggestions').update(updatePayload).eq('id', activeModule.id);
               if (error) throw error;
-              setSuggestions(prev => prev.map(s => s.id === activeModule.id ? { ...s, manifested_code: newCode } : s));
+              
+              setSuggestions(prev => prev.map(s => s.id === activeModule.id ? { ...s, manifested_code: newCode, history: updatedHistory } : s));
+              setActiveModule(prev => prev ? { ...prev, manifested_code: newCode, history: updatedHistory } : null);
             }}
           />
         )}
