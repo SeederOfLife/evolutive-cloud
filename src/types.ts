@@ -12,7 +12,7 @@ export interface Suggestion {
   energy: number; // 0 to 100
   status: string;
   user_id?: string;
-  manifested_code?: string;
+  built_code?: string;
   created_at?: string;
   pledged_by?: string[]; // user ids
   parent_id?: number | null; // For refinement iterations
@@ -46,7 +46,7 @@ export interface UserProfile {
   personal_api_key?: string;
 }
 
-export interface VoidEcho {
+export interface SystemMessage {
   id: string;
   userId: string;
   text: string;
@@ -57,12 +57,12 @@ export interface VoidEcho {
 
 export interface EvolutionSnapshot {
   id: string;
-  manifested_at: string;
+  built_at: string;
   count: number;
 }
 
 export interface ProjectConfig {
   creator_id: string;
   is_finalized: boolean;
-  epoch_name: string;
+  project_name: string;
 }

@@ -50,7 +50,7 @@ import {
   Suggestion, 
   Advice, 
   UserProfile, 
-  VoidEcho, 
+  SystemMessage, 
   EvolutionSnapshot, 
   ProjectConfig,
   AIConfig,
@@ -78,25 +78,25 @@ import { EvolutiveSeed, ModuleNode, Nebula } from "./components/ThreeWorld";
 
 export default function App() {
   const [isOpen, setIsOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'mind' | 'identity' | 'evolution'>('mind');
+  const [activeTab, setActiveTab] = useState<'library' | 'identity' | 'evolution'>('library');
   const [input, setInput] = useState("");
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [dbFeatures, setDbFeatures] = useState<{ 
     pledged_by: boolean, 
-    manifested_code: boolean,
+    built_code: boolean,
     energy: boolean,
     parent_id: boolean,
     version: boolean,
     user_id: boolean
-  }>({ pledged_by: true, manifested_code: true, energy: true, parent_id: true, version: true, user_id: true });
+  }>({ pledged_by: true, built_code: true, energy: true, parent_id: true, version: true, user_id: true });
   const [isLoading, setIsLoading] = useState(false);
-  const [isManifesting, setIsManifesting] = useState<number | string | null>(null);
+  const [isBuilding, setIsBuilding] = useState<number | string | null>(null);
   const [activeModule, setActiveModule] = useState<Suggestion | null>(null);
   const [isRepoOpen, setIsRepoOpen] = useState(false);
   const [activeUsersCount, setActiveUsersCount] = useState(1);
   const [presenceData, setPresenceData] = useState<Record<string, any>>({});
-  const [echoes, setEchoes] = useState<VoidEcho[]>([]);
-  const [echoInput, setEchoInput] = useState("");
+  const [systemMessages, setSystemMessages] = useState<SystemMessage[]>([]);
+  const [messageInput, setMessageInput] = useState("");
   const [isInitializing, setIsInitializing] = useState(true);
   const channelRef = useRef<any>(null);
   const isSyncing = useRef(false);
@@ -107,12 +107,12 @@ export default function App() {
   
   const [selectedModel, setSelectedModel] = useState(() => {
     try {
-      return localStorage.getItem('soul_model') || "gemini-1.5-flash";
+      return localStorage.getItem('app_model') || "gemini-1.5-flash";
     } catch { return "gemini-1.5-flash"; }
   });
   const [aiProvider, setAiProvider] = useState<'google' | 'openai' | 'anthropic' | 'custom' | 'web-llm' | 'gemini-nano' | 'mlc-mobile'>(() => {
     try {
-      return (localStorage.getItem('soul_provider') as any) || "google";
+      return (localStorage.getItem('app_provider') as any) || "google";
     } catch { return "google"; }
   });
 
@@ -127,16 +127,16 @@ export default function App() {
     if (providers[aiProvider] && !providers[aiProvider].includes(selectedModel)) {
       setSelectedModel(providers[aiProvider][0]);
     }
-    localStorage.setItem('soul_provider', aiProvider);
+    localStorage.setItem('app_provider', aiProvider);
   }, [aiProvider]);
 
   useEffect(() => {
-    localStorage.setItem('soul_model', selectedModel);
+    localStorage.setItem('app_model', selectedModel);
   }, [selectedModel]);
 
   const [providerKeys, setProviderKeys] = useState<Record<string, string>>(() => {
     try {
-      const saved = localStorage.getItem('soul_nexus_keys');
+      const saved = localStorage.getItem('app_hub_keys');
       const legacy = localStorage.getItem('evolutive_energy_key');
       const initial = saved ? JSON.parse(saved) : {};
       if (legacy && !initial.google) initial.google = legacy;
@@ -148,14 +148,14 @@ export default function App() {
 
   const [aiConfig, setAiConfig] = useState<AIConfig & { systemPrompt: string }>(() => {
     try {
-      const saved = localStorage.getItem('soul_ai_config');
+      const saved = localStorage.getItem('app_ai_config');
       return saved ? JSON.parse(saved) : {
         temperature: 0.7,
         topP: 0.95,
         topK: 40,
         maxTokens: 4096,
         safetyThreshold: 'BLOCK_NONE',
-        systemPrompt: "You are the Evolutive Cloud Manifestation Engine. Generate professional-grade, high-complexity interactive applications. Deep shadows, glassmorphism, responsive grids."
+        systemPrompt: "You are the Evolutionary Reactive Engine. Generate professional-grade, high-complexity interactive applications. Deep shadows, modern UI, responsive grids."
       };
     } catch {
       return {
@@ -164,13 +164,13 @@ export default function App() {
         topK: 40,
         maxTokens: 4096,
         safetyThreshold: 'BLOCK_NONE',
-        systemPrompt: "You are the Evolutive Cloud Manifestation Engine. Generate professional-grade, high-complexity interactive applications. Deep shadows, glassmorphism, responsive grids."
+        systemPrompt: "You are the Evolutionary Reactive Engine. Generate professional-grade, high-complexity interactive applications. Deep shadows, modern UI, responsive grids."
       };
     }
   });
 
   useEffect(() => {
-    localStorage.setItem('soul_ai_config', JSON.stringify(aiConfig));
+    localStorage.setItem('app_ai_config', JSON.stringify(aiConfig));
   }, [aiConfig]);
 
   const userApiKey = useMemo(() => providerKeys[aiProvider] || "", [providerKeys, aiProvider]);
@@ -196,11 +196,11 @@ export default function App() {
              try {
                 const cloudKeys = JSON.parse(data.personal_api_key);
                 setProviderKeys(prev => ({ ...prev, ...cloudKeys }));
-                localStorage.setItem('soul_nexus_keys', JSON.stringify({ ...providerKeys, ...cloudKeys }));
+                localStorage.setItem('app_hub_keys', JSON.stringify({ ...providerKeys, ...cloudKeys }));
              } catch {
                 // If it's a legacy single string key
                 setProviderKeys(prev => ({ ...prev, google: data.personal_api_key }));
-                localStorage.setItem('soul_nexus_keys', JSON.stringify({ ...providerKeys, google: data.personal_api_key }));
+                localStorage.setItem('app_hub_keys', JSON.stringify({ ...providerKeys, google: data.personal_api_key }));
              }
           }
         } else {
@@ -217,7 +217,7 @@ export default function App() {
   const saveApiKeyToAccount = async (key: string, provider: string = aiProvider) => {
     const newKeys = { ...providerKeys, [provider]: key };
     setProviderKeys(newKeys);
-    localStorage.setItem('soul_nexus_keys', JSON.stringify(newKeys));
+    localStorage.setItem('app_hub_keys', JSON.stringify(newKeys));
     if (provider === 'google') localStorage.setItem('evolutive_energy_key', key);
 
     if (session && supabase) {
@@ -237,23 +237,42 @@ export default function App() {
   // New Evolutionary States
   const [isFinalized, setIsFinalized] = useState(false);
   const [apiQuota, setApiQuota] = useState(() => {
-    const saved = localStorage.getItem('soul_quota');
+    const saved = localStorage.getItem('app_quota');
     return saved ? parseInt(saved) : 100;
   });
 
   useEffect(() => {
-    localStorage.setItem('soul_quota', apiQuota.toString());
+    localStorage.setItem('app_quota', apiQuota.toString());
   }, [apiQuota]);
   const [creatorId, setCreatorId] = useState<string | null>(null);
   const [advice, setAdvice] = useState<Advice[]>([]);
   const [isRefining, setIsRefining] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [filterType, setFilterType] = useState<'all' | 'manifested' | 'pending' | 'mine'>('all');
+  const [filterType, setFilterType] = useState<'all' | 'built' | 'pending' | 'mine'>('all');
   const [customEndpoint, setCustomEndpoint] = useState(() => {
-    return localStorage.getItem('soul_custom_endpoint') || "";
+    return localStorage.getItem('app_custom_endpoint') || "";
   });
   const [webLlmProgress, setWebLlmProgress] = useState<string>("");
   const webLlmEngineRef = useRef<webllm.MLCEngine | null>(null);
+
+  const unwrapSuggestion = useCallback((s: Suggestion): Suggestion => {
+    if (s.content && s.content.startsWith('JSON:')) {
+      try {
+        const meta = JSON.parse(s.content.substring(5));
+        return { 
+          ...s, 
+          ...meta, 
+          content: meta.text || s.content,
+          // Ensure we don't accidentally override ID or other system fields
+          id: s.id,
+          status: s.status || meta.status
+        };
+      } catch(e) {
+        return s;
+      }
+    }
+    return s;
+  }, []);
 
   // AI Nexus Health Monitoring
   const [providerHealth, setProviderHealth] = useState<Record<string, { status: 'online' | 'offline' | 'checking' | null, ping: number | null, tokens: string | null }>>({});
@@ -302,9 +321,9 @@ export default function App() {
   };
 
   useEffect(() => {
-    localStorage.setItem('soul_model', selectedModel);
-    localStorage.setItem('soul_provider', aiProvider);
-    localStorage.setItem('soul_custom_endpoint', customEndpoint);
+    localStorage.setItem('app_model', selectedModel);
+    localStorage.setItem('app_provider', aiProvider);
+    localStorage.setItem('app_custom_endpoint', customEndpoint);
   }, [selectedModel, aiProvider, customEndpoint]);
 
   // Derive ghosts from presence
@@ -316,17 +335,17 @@ export default function App() {
       .filter((p: any) => p.x !== undefined && p.y !== undefined);
   }, [presenceData, session]);
 
-  const soulRank = useMemo(() => {
-    if (!session?.user?.id) return { title: "Unidentified", color: "#ffffff", level: 0 };
+  const appRank = useMemo(() => {
+    if (!session?.user?.id) return { title: "Guest", color: "#ffffff", level: 0 };
     const myCreations = suggestions.filter(s => s.user_id === session.user.id);
-    const manifests = myCreations.filter(s => s.status === 'manifested').length;
-    const totalEco = myCreations.reduce((acc, curr) => acc + (curr.votes || 0), 0);
+    const builds = myCreations.filter(s => s.status === 'built').length;
+    const totalVotes = myCreations.reduce((acc, curr) => acc + (curr.votes || 0), 0);
     
-    if (manifests >= 5) return { title: "Grand Architect", color: "#6366f1", level: 4 };
-    if (manifests >= 2) return { title: "Aether Weaver", color: "#ec4899", level: 3 };
-    if (totalEco >= 10) return { title: "Echo Master", color: "#f59e0b", level: 2 };
-    if (myCreations.length >= 1) return { title: "Idea Planter", color: "#10b981", level: 1 };
-    return { title: "Void Wanderer", color: "#94a3b8", level: 0 };
+    if (builds >= 5) return { title: "Grand Architect", color: "#6366f1", level: 4 };
+    if (builds >= 2) return { title: "Senior Builder", color: "#ec4899", level: 3 };
+    if (totalVotes >= 10) return { title: "Idea Master", color: "#f59e0b", level: 2 };
+    if (myCreations.length >= 1) return { title: "Junior Builder", color: "#10b981", level: 1 };
+    return { title: "New Member", color: "#94a3b8", level: 0 };
   }, [suggestions, session]);
 
   // Unified AI Bridge
@@ -348,7 +367,7 @@ export default function App() {
 
       if (aiProvider === 'web-llm') {
         if (!webLlmEngineRef.current) {
-          setWebLlmProgress("Wakeing Browser Soul...");
+          setWebLlmProgress("Wakeing AI Engine...");
           const engine = new webllm.MLCEngine();
           engine.setInitProgressCallback((report) => setWebLlmProgress(report.text));
           await engine.reload(selectedModel || "Llama-3-8B-Instruct-v0.1-q4f32_1-MLC");
@@ -373,14 +392,14 @@ export default function App() {
         return response.choices[0].message.content || "";
       }
 
-      if (!googleKey && aiProvider === 'google') throw new Error("No Google Energy Source Found.");
+      if (!googleKey && aiProvider === 'google') throw new Error("No Google API Key Found.");
       if (!activeKey && (aiProvider === 'openai' || aiProvider === 'anthropic' || aiProvider === 'custom')) {
          if (aiProvider !== 'custom') throw new Error(`No ${aiProvider.toUpperCase()} Key Found.`);
       }
 
       if (aiProvider === 'google') {
         const keyToUse = googleKey;
-        if (!keyToUse) throw new Error("No Google Energy Source Found. Ensure your API Key is set in the Account tab.");
+        if (!keyToUse) throw new Error("No Google API Key Found. Ensure your API Key is set in the Account tab.");
         
         const ai = new GoogleGenAI({ apiKey: keyToUse });
         // Safety: Ensure the model is valid for Google
@@ -402,7 +421,7 @@ export default function App() {
           });
           
           const text = response.text;
-          if (!text) throw new Error("The Oracle returned an empty response.");
+          if (!text) throw new Error("The AI Engine returned an empty response.");
           return text;
         } catch (e: any) {
           const errText = e.message || String(e);
@@ -460,7 +479,7 @@ export default function App() {
         return data.content[0].text;
       }
 
-      throw new Error("Soul Link Provider Disconnected.");
+      throw new Error("AI Provider Disconnected.");
     } catch (err: any) {
       const msg = err.message || String(err);
       if (msg.includes('connection error') || msg.includes('Failed to fetch')) {
@@ -492,7 +511,7 @@ export default function App() {
       setSession(session);
       if (!session) {
         setProviderKeys({});
-        localStorage.removeItem('soul_nexus_keys');
+        localStorage.removeItem('app_nexus_keys');
         localStorage.removeItem('evolutive_energy_key');
       }
     });
@@ -502,7 +521,7 @@ export default function App() {
     };
   }, []);
 
-  const [initStatus, setInitStatus] = useState<string>("Connecting to Neural Network...");
+  const [initStatus, setInitStatus] = useState<string>("Connecting to System Network...");
 
   // Initial fetch and Project setup
   useEffect(() => {
@@ -540,7 +559,7 @@ export default function App() {
           const config: ProjectConfig = {
             creator_id: session.user.id,
             is_finalized: false,
-            epoch_name: "The Genesis"
+            project_name: "Initial Phase"
           };
           await supabase.from('suggestions').insert([{
             content: JSON.stringify(config),
@@ -559,7 +578,7 @@ export default function App() {
       
       const safetyTimeout = setTimeout(() => {
         if (mounted) {
-          console.warn("Initialization safety threshold reached. Forcing manifest.");
+          console.warn("Initialization safety threshold reached. Forcing interface boot.");
           setIsInitializing(false);
         }
       }, 6000);
@@ -576,13 +595,13 @@ export default function App() {
       }
 
       try {
-        setInitStatus("Synchronizing with Collective Registry...");
+        setInitStatus("Synchronizing with Global Registry...");
         await Promise.all([
           fetchSuggestions().catch(e => console.error("Suggestions sync failure:", e)),
           syncProject().catch(e => console.error("Registry config failure:", e))
         ]);
         
-        setInitStatus("Neural Link Established.");
+        setInitStatus("System Link Established.");
       } catch (err) {
         console.error("Initialization sequence interrupted:", err);
         setInitStatus("Sync Interrupted. Retrying Link...");
@@ -597,9 +616,9 @@ export default function App() {
     init();
     
     if (supabase) {
-      // Real-time listener for suggestions and presence and echoes
+      // Real-time listener for suggestions and presence and system messages
       if (!channelRef.current) {
-        channelRef.current = supabase.channel('void-sync');
+        channelRef.current = supabase.channel('system-sync');
 
         channelRef.current
           .on(
@@ -635,8 +654,8 @@ export default function App() {
             setPresenceData(state);
             setActiveUsersCount(Object.keys(state).length);
           })
-          .on('broadcast', { event: 'echo' }, ({ payload }: any) => {
-            setEchoes(prev => [...prev, payload].slice(-10));
+          .on('broadcast', { event: 'message' }, ({ payload }: any) => {
+            setSystemMessages(prev => [...prev, payload].slice(-10));
           })
           .on('broadcast', { event: 'advice' }, ({ payload }: any) => {
             setAdvice(prev => [...prev, payload]);
@@ -651,9 +670,9 @@ export default function App() {
           });
       }
 
-      // Clear old echoes
+      // Clear old messages
       const interval = setInterval(() => {
-        setEchoes(prev => prev.filter(e => Date.now() - e.createdAt < 5000));
+        setSystemMessages(prev => prev.filter(e => Date.now() - e.createdAt < 5000));
       }, 1000);
 
       const handleMouseMove = (e: MouseEvent) => {
@@ -712,7 +731,7 @@ export default function App() {
         
         // Category Filter
         let matchesCategory = true;
-        if (filterType === 'manifested') matchesCategory = s.status === 'manifested';
+        if (filterType === 'built') matchesCategory = s.status === 'built';
         if (filterType === 'pending') matchesCategory = s.status === 'pending';
         if (filterType === 'mine') matchesCategory = s.user_id === session?.user?.id;
         
@@ -726,10 +745,10 @@ export default function App() {
     
     try {
       const prompt = `
-        System: You are the Evolutive Cloud Refinement Engine.
+        System: You are the Evolutionary Reactive Engine.
         Original Request: "${suggestion.content}"
         Refinement Request: "${refinementPrompt}"
-        Original Code: ${suggestion.manifested_code}
+        Original Code: ${suggestion.built_code}
         
         Task: Modify the original code based on the new feedback.
         Complexity Level: Professional / High Complexity.
@@ -755,7 +774,7 @@ export default function App() {
       `;
 
       if (apiQuota < 10) {
-        alert("Soul Capacity too low for refinement. Wait for recharge.");
+        alert("Build Capacity too low for update. Wait for recharge.");
         setIsRefining(null);
         return;
       }
@@ -763,27 +782,27 @@ export default function App() {
       const generatedCode = text.replace(/```jsx|```tsx|```javascript|```/g, '').trim();
 
       if (!generatedCode) {
-        throw new Error("The consciousness returned an empty manifestation. Try refining your request.");
+        throw new Error("The system returned an empty application structure. Try refining your request.");
       }
 
       if (supabase) {
         // Create a new version of the app
         const insertData: any = { 
           content: `Improved version of: ${suggestion.content} (${refinementPrompt})`,
-          status: 'manifested',
+          status: 'built',
           votes: 0,
           energy: 100,
         };
 
-        if (dbFeatures.manifested_code) {
-          insertData.manifested_code = generatedCode;
+        if (dbFeatures.built_code) {
+          insertData.built_code = generatedCode;
         } else {
           insertData.content = 'JSON:' + JSON.stringify({
             text: insertData.content,
             status: insertData.status,
             votes: insertData.votes,
             energy: insertData.energy,
-            manifested_code: generatedCode
+            built_code: generatedCode
           });
         }
 
@@ -800,8 +819,8 @@ export default function App() {
           content: `Refinement of ${suggestion.id}`, 
           votes: 0, 
           energy: 100, 
-          status: 'manifested', 
-          manifested_code: generatedCode,
+          status: 'built', 
+          built_code: generatedCode,
           parent_id: suggestion.id 
         }, ...suggestions]);
       }
@@ -817,7 +836,7 @@ export default function App() {
     if (!content.trim() || !session) return;
     try {
       // In a real app we might have an 'advice' table. 
-      // For this demo, we'll store it as a broadcast echo if table isn't ready,
+      // For this demo, we'll store it as a broadcast message if table isn't ready,
       // or just simulate local state update for others.
       // But let's try to use a broadcast event specifically for advice.
     const channel = channelRef.current;
@@ -875,12 +894,13 @@ export default function App() {
 
       if (error) throw error;
       if (data) {
-        setSuggestions(data);
+        const unwrapped = data.map(unwrapSuggestion);
+        setSuggestions(unwrapped);
         if (data.length > 0) {
           const columns = Object.keys(data[0]);
           setDbFeatures({
             pledged_by: columns.includes('pledged_by'),
-            manifested_code: columns.includes('manifested_code'),
+            built_code: columns.includes('built_code'),
             energy: columns.includes('energy'),
             parent_id: columns.includes('parent_id'),
             version: columns.includes('version'),
@@ -924,25 +944,25 @@ export default function App() {
   const handleSuggest = async () => {
     if (!input.trim()) return;
     if (apiQuota < 5) {
-      alert("Soul Capacity depleted. Wait for the consciousness to recharge.");
+      alert("Build Capacity depleted. Wait for the system to recharge.");
       return;
     }
 
     const rawInput = input.trim();
     setInput("");
-    setIsManifesting(0);
+    setIsBuilding(0);
     
     try {
-      const prompt = `Refine this app idea into a clear, concise one-sentence manifestation prompt. Keep it mystical and technical.
+      const prompt = `Refine this app idea into a clear, concise one-sentence description. Keep it technical and direct.
         Original: "${rawInput}"
-        Manifestation:`;
+        Refined:`;
 
       let content = rawInput;
       try {
         const text = await callUnifiedAI(prompt);
         content = text.trim() || rawInput;
       } catch (aiErr) {
-        console.warn("Consciousness Refinement Link failed (Connection error?). Resting on raw intent.", aiErr);
+        console.warn("System Refinement Link failed (Connection error?). Resting on raw intent.", aiErr);
         // We use the raw input if the AI refinement fails to prevent blocking the user
       }
 
@@ -975,14 +995,14 @@ export default function App() {
       if (error) throw error;
       setApiQuota(prev => Math.max(0, prev - 5));
       if (data) {
-        setSuggestions([data[0], ...suggestions]);
+        setSuggestions([unwrapSuggestion(data[0]), ...suggestions]);
       }
     } catch (err: any) {
       console.error("Error planting intent:", err);
       const errorMsg = err.message || (typeof err === 'object' ? JSON.stringify(err) : String(err));
-      alert(`Manifestation Link Failure: ${errorMsg}`);
+      alert(`System Link Failure: ${errorMsg}`);
     } finally {
-      setIsManifesting(null);
+      setIsBuilding(null);
     }
   };
 
@@ -1004,76 +1024,65 @@ export default function App() {
     const key = userApiKey || (isCreator ? process.env.GEMINI_API_KEY : null);
     if (!session || !key || !supabase) {
       if (!key && !userApiKey) {
-        alert("Please set your Energy Key in the Account tab to power manifestations.");
+        alert("Please set your API Key in the Account tab to power builds.");
         setActiveTab('identity');
       }
       return;
     }
     if (isRefining) return;
     
-    // Schema-aware data extraction
-    let pledgedBy = s.pledged_by || [];
-    let currentEnergy = s.energy || 0;
-
-    if (s.content.startsWith('JSON:')) {
-      try {
-        const meta = JSON.parse(s.content.substring(5));
-        pledgedBy = meta.pledged_by || pledgedBy;
-        currentEnergy = meta.energy || currentEnergy;
-      } catch(e) {}
-    }
+    // Simplified data extraction from unwrapped suggestion
+    const pledgedBy = s.pledged_by || [];
+    const currentEnergy = s.energy || 0;
 
     const hasPledged = pledgedBy.includes(session.user.id);
     const newEnergy = Math.min(100, currentEnergy + (isCreator ? 100 : 25));
-    const shouldManifest = newEnergy >= 100;
+    const shouldBuild = newEnergy >= 100;
 
     try {
       setIsRefining(s.id);
       const newPledgedBy = hasPledged ? pledgedBy : [...pledgedBy, session.user.id];
       
-      let manifestedCode = s.manifested_code;
+      let builtCode = s.built_code;
       let newStatus = s.status;
 
-      if (shouldManifest && s.status === 'pending') {
-        const prompt = `Create a functional, professional React component titled "App" for this idea: ${s.content.startsWith('JSON:') ? JSON.parse(s.content.substring(5)).text : s.content}. 
+      if (shouldBuild && s.status === 'pending') {
+        const prompt = `Create a functional, professional React component titled "App" for this idea: ${s.content}. 
         Use Tailwind CSS. Return ONLY the code, no markdown wrappers. Include animations using framer-motion (window.Motion). 
         Assume you have access to: window.React, window.Motion, window.Recharts, window.d3, window.confetti, window.lucide.`;
         
         const result = await callUnifiedAI(prompt);
-        manifestedCode = result.replace(/```jsx|```tsx|```javascript|```/g, '').trim();
-        newStatus = 'manifested';
+        builtCode = result.replace(/```jsx|```tsx|```javascript|```/g, '').trim();
+        newStatus = 'built';
       }
 
       const updateData: any = { status: newStatus };
-      if (manifestedCode && dbFeatures.manifested_code) updateData.manifested_code = manifestedCode;
+      if (builtCode && dbFeatures.built_code) updateData.built_code = builtCode;
       
       // Only include fields that exist in DB
       if (dbFeatures.energy) updateData.energy = newEnergy;
       if (dbFeatures.pledged_by) updateData.pledged_by = newPledgedBy;
 
       // Wrap missing fields into content
-      if (!dbFeatures.energy || !dbFeatures.pledged_by || !dbFeatures.manifested_code) {
-        const meta = s.content.startsWith('JSON:') ? JSON.parse(s.content.substring(5)) : { text: s.content };
-        if (!dbFeatures.energy) meta.energy = newEnergy;
-        if (!dbFeatures.pledged_by) meta.pledged_by = newPledgedBy;
-        if (!dbFeatures.manifested_code && manifestedCode) meta.manifested_code = manifestedCode;
+      if (!dbFeatures.energy || !dbFeatures.pledged_by || !dbFeatures.built_code) {
+        const meta = { text: s.content, energy: newEnergy, pledged_by: newPledgedBy, built_code: builtCode };
         updateData.content = 'JSON:' + JSON.stringify(meta);
       }
       
       const { error: updateError } = await supabase.from('suggestions').update(updateData).eq('id', s.id);
       if (updateError) throw updateError;
       
-      if (shouldManifest) {
+      if (shouldBuild) {
         setApiQuota(prev => Math.max(0, prev - 10));
         // Update local state for immediate launch
-        const updatedS = { ...s, status: 'manifested' as const, manifested_code: manifestedCode };
+        const updatedS = { ...s, status: 'built' as const, built_code: builtCode };
         setSuggestions(prev => prev.map(p => p.id === s.id ? updatedS : p));
         setActiveModule(updatedS);
       }
     } catch (err: any) {
-      console.error("Error during manifestation cycle:", err);
+      console.error("Error during build cycle:", err);
       const errMsg = err.message || String(err);
-      alert(`The consciousness bridge flickered: ${errMsg}\n\nPlease verify your API key and internet connection.`);
+      alert(`The system bridge flickered: ${errMsg}\n\nPlease verify your API key and internet connection.`);
     } finally {
       setIsRefining(null);
     }
@@ -1105,14 +1114,14 @@ export default function App() {
     }
   };
 
-  const sendEcho = (e: React.FormEvent) => {
+  const sendMessage = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!echoInput.trim() || !supabase || !channelRef.current) return;
+    if (!messageInput.trim() || !supabase || !channelRef.current) return;
     
-    const newEcho: VoidEcho = {
+    const newMessage: SystemMessage = {
       id: Math.random().toString(36),
       userId: session?.user.id || 'anonymous',
-      text: echoInput.trim(),
+      text: messageInput.trim(),
       x: Math.random() * window.innerWidth,
       y: Math.random() * window.innerHeight,
       createdAt: Date.now()
@@ -1120,19 +1129,19 @@ export default function App() {
 
     channelRef.current.send({
       type: 'broadcast',
-      event: 'echo',
-      payload: newEcho
+      event: 'message',
+      payload: newMessage
     });
 
-    setEchoInput("");
+    setMessageInput("");
   };
 
   const initiateNewProject = async () => {
-    const promptValue = prompt("What do you want to manifest in this new Evolutionary Workspace?");
+    const promptValue = prompt("What do you want to build in this new Evolutionary Workspace?");
     if (!promptValue || !supabase) return;
 
     try {
-      setIsManifesting("new");
+      setIsBuilding("new");
       const { data: userData } = await supabase.auth.getUser();
       
       const newSuggestion = {
@@ -1141,7 +1150,7 @@ export default function App() {
         energy: 10,
         status: 'pending',
         user_id: userData.user?.id,
-        manifested_code: ""
+        built_code: ""
       };
 
       const { data, error } = await supabase.from('suggestions').insert(newSuggestion).select().single();
@@ -1150,21 +1159,21 @@ export default function App() {
       setSuggestions(prev => [data, ...prev]);
       setActiveModule(data); // OPEN IMMEDIATELY
       
-      // Auto-trigger first manifestation
-      await manifestEvolution(data);
+      // Auto-trigger first build
+      await buildEvolution(data);
       
     } catch (err: any) {
       console.error("Initiation Error:", err);
-      alert("Neural Bridge failed to initiate: " + err.message);
+      alert("AI Bridge failed to initiate: " + err.message);
     } finally {
-      setIsManifesting(null);
+      setIsBuilding(null);
     }
   };
-  const manifestEvolution = async (suggestion: Suggestion) => {
-    if (isManifesting) return;
+  const buildEvolution = async (suggestion: Suggestion) => {
+    if (isBuilding) return;
     
     try {
-      setIsManifesting(suggestion.id);
+      setIsBuilding(suggestion.id);
       
       const prompt = `
         System: ${aiConfig.systemPrompt}
@@ -1182,8 +1191,8 @@ export default function App() {
         - window.LucideReact (Standard icons available via the <Icon name="..." /> helper component which is pre-defined.)
 
         Design Style:
-        - Modern SaaS / Dark Laboratory aesthetic.
-        - Deep shadows, glassmorphism, responsive grids.
+        - Modern SaaS / Technical Lab aesthetic.
+        - Deep shadows, modern UI, responsive grids.
         - Interactive elements with feedback (hover transitions, active scales).
         - Multi-section layouts (e.g. Header, Sidebar, Dashboard Grid) if appropriate.
 
@@ -1199,13 +1208,13 @@ export default function App() {
         - CRITICAL: Do NOT include any import statements. The environment provides all necessary tools globally.
         - CRITICAL: Do NOT redeclare hooks (useState, etc), or libraries like motion, Recharts, or d3. Just use them.
         - For icons, always use the pre-mapped global components (e.g. <Zap />) or the <Icon name="IconName" /> helper.
-        - The container should be transparent or dark to work with the Evolutive Cloud background.
+        - The container should be transparent or dark.
         - Return ONLY the code, no markdown formatting outside of the code block if you must use one.
       `;
 
       if (apiQuota < 20) {
-        alert("Soul Capacity too low for manifestation. Wait for recharge.");
-        setIsManifesting(null);
+        alert("Build capacity too low for building. Wait for recharge.");
+        setIsBuilding(null);
         return;
       }
       const text = await callUnifiedAI(prompt);
@@ -1217,18 +1226,18 @@ export default function App() {
         .trim();
 
       if (!generatedCode) {
-        throw new Error("The void returned no code. Manifestation failed.");
+        throw new Error("The system returned no code. Build failed.");
       }
 
       if (supabase) {
-        const updateData: any = { status: 'manifested' };
+        const updateData: any = { status: 'built' };
         
-        if (dbFeatures.manifested_code) {
-          updateData.manifested_code = generatedCode;
+        if (dbFeatures.built_code) {
+          updateData.built_code = generatedCode;
         } else {
           const meta = suggestion.content.startsWith('JSON:') ? JSON.parse(suggestion.content.substring(5)) : { text: suggestion.content };
-          meta.manifested_code = generatedCode;
-          meta.status = 'manifested';
+          meta.built_code = generatedCode;
+          meta.status = 'built';
           updateData.content = 'JSON:' + JSON.stringify(meta);
         }
 
@@ -1241,16 +1250,16 @@ export default function App() {
       }
 
       setApiQuota(prev => Math.max(0, prev - 15));
-      const updatedSuggestion = { ...suggestion, status: 'manifested' as const, manifested_code: generatedCode };
+      const updatedSuggestion = { ...suggestion, status: 'built' as const, built_code: generatedCode };
       setSuggestions(suggestions.map(s => s.id === suggestion.id ? updatedSuggestion : s));
       setActiveModule(updatedSuggestion);
 
     } catch (err: any) {
       console.error("Generation failure:", err);
       const errMsg = err.message || String(err);
-      alert(`Manifestation failed: ${errMsg}`);
+      alert(`App build failed: ${errMsg}`);
     } finally {
-      setIsManifesting(null);
+      setIsBuilding(null);
     }
   };
 
@@ -1268,7 +1277,7 @@ export default function App() {
               <div className="absolute -inset-10 bg-indigo-500/20 blur-[60px] rounded-full animate-pulse" />
               <Loader2 className="w-16 h-16 text-indigo-500 animate-spin relative z-10" />
             </div>
-            <h1 className="mt-12 text-2xl md:text-3xl font-black uppercase tracking-[10px] text-white">Neural Pulse</h1>
+            <h1 className="mt-12 text-2xl md:text-3xl font-black uppercase tracking-[10px] text-white">System Boot</h1>
             <p className="mt-4 text-[10px] md:text-xs text-indigo-400 font-bold uppercase tracking-[4px] animate-pulse h-4 truncate max-w-sm px-4">
               {initStatus}
             </p>
@@ -1288,33 +1297,33 @@ export default function App() {
               onClick={() => setIsInitializing(false)}
               className="mt-10 px-6 py-2 border border-white/10 rounded-full text-[10px] font-black uppercase tracking-widest text-white/40 hover:text-white hover:border-white/40 transition-all"
             >
-              Force Manifest Link
+              Enter System
             </motion.button>
           </motion.div>
         )}
       </AnimatePresence>
       
       {/* --- BACKGROUND BLOBS & GLOW --- */}
-      <div className="void-glow" />
+      <div className="bg-gradient-to-br from-indigo-500/5 to-transparent absolute inset-0 pointer-events-none" />
       <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-indigo-900/10 rounded-full blur-[120px] pointer-events-none -z-10 animate-pulse" />
       <div className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] bg-pink-900/5 rounded-full blur-[150px] pointer-events-none -z-10" />
       <div className="absolute top-1/2 right-0 w-[400px] h-[400px] bg-blue-900/5 rounded-full blur-[150px] pointer-events-none -z-10" />
       
       {/* --- HUD LAYER --- */}
-      {/* --- VOID ECHOES LAYER --- */}
+      {/* --- SYSTEM MESSAGES --- */}
       <AnimatePresence>
-        {echoes.map((echo) => (
+        {systemMessages.map((msg) => (
           <motion.div
-            key={echo.id}
+            key={msg.id}
             initial={{ opacity: 0, scale: 0.5, y: 0 }}
             animate={{ opacity: 1, scale: 1, y: -50 }}
             exit={{ opacity: 0, scale: 1.5, y: -100 }}
             className="fixed z-50 pointer-events-none"
-            style={{ left: echo.x, top: echo.y }}
+            style={{ left: msg.x, top: msg.y }}
           >
             <div className="bg-indigo-900/40 border-2 border-indigo-400 backdrop-blur-md px-5 py-3 rounded-none shadow-[4px_4px_0px_#818cf8]">
-              <span className="text-[12px] font-black text-white tracking-[2px] uppercase">{echo.text}</span>
-              <div className="text-[9px] text-indigo-300 font-bold uppercase mt-1 border-t border-indigo-500/30 pt-1">Echo Confirmed</div>
+              <span className="text-[12px] font-black text-white tracking-[2px] uppercase">{msg.text}</span>
+              <div className="text-[9px] text-indigo-300 font-bold uppercase mt-1 border-t border-indigo-500/30 pt-1">Msg. Sent</div>
             </div>
           </motion.div>
         ))}
@@ -1343,11 +1352,11 @@ export default function App() {
 
       <header className="absolute top-6 left-6 md:top-10 md:left-10 z-10 pointer-events-none">
         <h1 className="text-[32px] md:text-[64px] font-[900] tracking-[-1px] md:tracking-[-2px] leading-[0.9] text-white/15 uppercase">
-          EVOLUTIVE<br />CLOUD
+          EVOLUTIONARY<br />HUB
         </h1>
             <div className="mt-2 flex flex-col gap-1 md:gap-2">
           <div className="text-[8px] md:text-[11px] tracking-[2px] md:tracking-[4px] text-indigo-400 uppercase font-bold">
-            Evolutive Cloud . Online
+            Evolutionary Hub . Online
           </div>
           <div className="flex flex-wrap items-center gap-2 md:gap-3">
             <div className="flex items-center gap-1 text-[8px] md:text-[9px] text-white/40 uppercase tracking-widest font-mono">
@@ -1388,7 +1397,7 @@ export default function App() {
           className="w-12 h-20 md:w-14 md:h-24 bg-white/5 backdrop-blur-xl border border-white/10 rounded-full flex flex-col items-center justify-center gap-2 md:gap-3 hover:bg-white/10 hover:border-indigo-500/50 transition-all group pointer-events-auto shadow-2xl"
         >
           <Database className="w-4 h-4 md:w-5 md:h-5 text-indigo-400 group-hover:scale-125 transition-transform" />
-          <span className="[writing-mode:vertical-lr] text-[7px] md:text-[8px] font-black uppercase tracking-[2px] md:tracking-[3px] text-white/40 group-hover:text-white transition-colors">Manifests</span>
+          <span className="[writing-mode:vertical-lr] text-[7px] md:text-[8px] font-black uppercase tracking-[2px] md:tracking-[3px] text-white/40 group-hover:text-white transition-colors">Builds</span>
         </button>
       </div>
 
@@ -1424,14 +1433,14 @@ export default function App() {
               </div>
 
               <div className="flex-1 overflow-y-auto p-3 md:p-4 custom-scrollbar space-y-4">
-                {displaySuggestions.filter(s => s.status === 'manifested').length === 0 && (
+                {displaySuggestions.filter(s => s.status === 'built').length === 0 && (
                   <div className="h-40 flex flex-col items-center justify-center text-center opacity-20">
                     <History className="w-10 h-10 mb-4" />
-                    <p className="text-[10px] uppercase font-black tracking-widest leading-loose">No manifestations<br/>yet recorded in this epoch.</p>
+                    <p className="text-[10px] uppercase font-black tracking-widest leading-loose">No builds<br/>yet recorded in this epoch.</p>
                   </div>
                 )}
                 {displaySuggestions
-                  .filter(s => s.status === 'manifested')
+                  .filter(s => s.status === 'built')
                   .sort((a, b) => b.id - a.id)
                   .map((s) => {
                     let title = s.content;
@@ -1447,13 +1456,13 @@ export default function App() {
                       >
                         <div className="flex items-center justify-between">
                           <span className="text-[10px] font-mono text-indigo-400/60 font-bold">NODE_{s.id}</span>
-                          <span className="text-[8px] uppercase tracking-widest text-white/20 font-black">Manifested</span>
+                          <span className="text-[8px] uppercase tracking-widest text-white/20 font-black">Built</span>
                         </div>
                         <h3 className="text-[13px] font-bold text-white/90 leading-relaxed italic line-clamp-2">"{title}"</h3>
                         <div className="flex gap-2">
                           <button 
                             onClick={() => {
-                              if (s.manifested_code) {
+                              if (s.built_code) {
                                 setActiveModule(s as any);
                                 setIsRepoOpen(false);
                               }
@@ -1464,7 +1473,7 @@ export default function App() {
                           </button>
                           <button 
                             onClick={() => {
-                              if (s.manifested_code) {
+                              if (s.built_code) {
                                 // Just a preview of the prompt/id
                                 console.log(s);
                               }
@@ -1498,9 +1507,9 @@ export default function App() {
         <EvolutiveSeed onClick={() => setIsOpen(true)} isOpen={isOpen} />
         <Nebula />
         
-        {/* Manifested App Nodes */}
+        {/* Global App Nodes */}
         {suggestions
-          .filter(s => s.status === 'manifested' && s.manifested_code)
+          .filter(s => s.status === 'built' && s.built_code)
           .map(s => (
             <ModuleNode 
               key={s.id} 
@@ -1513,15 +1522,15 @@ export default function App() {
         <OrbitControls enableZoom={false} enablePan={false} maxPolarAngle={Math.PI / 1.5} minPolarAngle={Math.PI / 3} />
       </Canvas>
 
-      {/* --- HUD: ECHO INPUT --- */}
+      {/* --- HUD: UPDATE INPUT --- */}
       {!isOpen && (
         <div className="absolute bottom-28 md:bottom-10 left-1/2 -translate-x-1/2 z-20 w-[90%] sm:w-[320px]">
-          <form onSubmit={sendEcho} className="relative group">
+          <form onSubmit={sendMessage} className="relative group">
             <input 
               type="text"
-              placeholder="Echo your presence..."
-              value={echoInput}
-              onChange={(e) => setEchoInput(e.target.value)}
+              placeholder="Post a thought..."
+              value={messageInput}
+              onChange={(e) => setMessageInput(e.target.value)}
               className="w-full bg-white/5 border border-white/10 px-6 py-3 rounded-full text-[10px] text-white/60 focus:text-white focus:border-indigo-500/50 focus:bg-white/10 outline-none text-center backdrop-blur-md transition-all placeholder:text-white/20 font-black uppercase tracking-[2px]"
             />
             <div className="absolute -inset-0.5 bg-indigo-500/10 rounded-full blur group-hover:bg-indigo-500/20 transition-all -z-10" />
@@ -1530,7 +1539,7 @@ export default function App() {
         </div>
       )}
 
-      {/* --- CUBE INTERFACE (THE MIND) --- */}
+      {/* --- SYSTEM INTERFACE (THE LIBRARY) --- */}
       <AnimatePresence>
         {isOpen && (
           <motion.div 
@@ -1539,17 +1548,17 @@ export default function App() {
             exit={{ opacity: 0, y: 40 }}
             className="fixed inset-0 m-auto w-full h-full md:w-[90vw] md:h-[85vh] bg-[#050510]/95 backdrop-blur-2xl border-none md:border-2 md:border-white/10 flex flex-col z-50 shadow-[0_0_100px_rgba(0,0,0,0.8)] overflow-hidden rounded-none md:rounded-none"
           >
-            {/* Mind Panel is a Cubic Structure (Cubic/Sharp) */}
+            {/* Dashboard Panel */}
             <div className="flex flex-col md:flex-row border-b border-white/10 p-4 md:p-6 shrink-0 bg-white/5 items-center justify-between gap-4">
               <div className="flex flex-col md:flex-row items-center gap-4 md:gap-10 w-full md:w-auto">
                     <div className="flex gap-6 md:gap-12 overflow-x-auto w-full md:w-auto px-2 md:px-0 no-scrollbar">
-                  {['mind', 'evolution', 'identity'].map((tab) => (
+                  {['library', 'evolution', 'identity'].map((tab) => (
                     <button 
                       key={tab}
                       onClick={() => setActiveTab(tab as any)}
                       className={`text-[10px] md:text-[12px] font-black uppercase tracking-[3px] md:tracking-[6px] transition-all relative py-2 whitespace-nowrap ${activeTab === tab ? 'text-white' : 'text-white/20'}`}
                     >
-                      {tab === 'mind' ? 'Shared' : tab === 'evolution' ? 'Evolution' : 'Account'}
+                      {tab === 'library' ? 'Hub' : tab === 'evolution' ? 'Evolution' : 'Account'}
                       {activeTab === tab && <motion.div layoutId="tab" className="absolute -bottom-1 left-0 w-full h-[2px] md:h-[3px] bg-gradient-to-r from-indigo-500 via-pink-500 to-yellow-500" />}
                     </button>
                   ))}
@@ -1574,7 +1583,7 @@ export default function App() {
                       />
                     </div>
                     <span className="text-[8px] md:text-[10px] font-black text-white/40 tracking-widest uppercase">
-                      SOUL <span className="text-white/80">{apiQuota}%</span>
+                      BUILD CAPACITY <span className="text-white/80">{apiQuota}%</span>
                     </span>
                   </div>
                 </div>
@@ -1584,7 +1593,7 @@ export default function App() {
 
             {/* Suggestions Root - Scrollable */}
             <div className="flex-1 overflow-y-auto bg-black/40 custom-scrollbar">
-              {activeTab === 'mind' ? (
+              {activeTab === 'library' ? (
                 <div className="max-w-6xl mx-auto p-6">
                   {/* Search and Filters */}
                   <div className="flex flex-col md:flex-row gap-6 mb-8 items-center justify-between">
@@ -1592,7 +1601,7 @@ export default function App() {
                       <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20 group-focus-within:text-indigo-400 transition-colors" />
                       <input 
                         type="text" 
-                        placeholder="Search the void..." 
+                        placeholder="Search the library..." 
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         className="w-full bg-white/5 border border-white/10 rounded-full py-3 pl-12 pr-6 text-[11px] text-white focus:border-indigo-500 focus:bg-white/10 outline-none transition-all uppercase tracking-widest font-black"
@@ -1600,10 +1609,10 @@ export default function App() {
                     </div>
                     
                     <div className="flex gap-2 p-1 bg-white/5 rounded-full border border-white/10 shrink-0">
-                      {(['all', 'manifested', 'pending', 'mine'] as const).map((type) => (
+                      {(['all', 'built', 'pending', 'mine'] as const).map((type) => (
                         <button 
                           key={type}
-                          onClick={() => setFilterType(type)}
+                          onClick={() => setFilterType(type as any)}
                           className={`px-4 py-2 rounded-full text-[9px] font-black uppercase tracking-widest transition-all ${filterType === type ? 'bg-indigo-500 text-white shadow-[0_0_20px_rgba(99,102,241,0.4)]' : 'text-white/40 hover:text-white'}`}
                         >
                           {type}
@@ -1614,7 +1623,7 @@ export default function App() {
 
                   {/* Explorer Header */}
                   <div className="hidden md:grid grid-cols-[1fr_120px_100px_160px] gap-4 px-6 py-3 border-b border-white/10 text-[10px] uppercase tracking-[0.2em] font-black text-white/30 mb-4">
-                    <div className="flex items-center gap-2 italic"><Box className="w-3 h-3" /> Idea / Manifestation</div>
+                    <div className="flex items-center gap-2 italic"><Box className="w-3 h-3" /> Idea / Application</div>
                     <div className="text-center">Complexity</div>
                     <div className="text-center">Status</div>
                     <div className="text-right">Operations</div>
@@ -1623,22 +1632,11 @@ export default function App() {
                   <div className="flex flex-col gap-3">
                   {displaySuggestions.length === 0 && (
                     <div className="py-12 md:py-20 text-center border-2 border-dashed border-white/5 rounded-[1.5rem] md:rounded-[2rem]">
-                      <p className="text-white/20 italic tracking-widest text-[10px] md:text-xs uppercase px-6">The collective mind is currently silent. Awaiting a spark...</p>
+                      <p className="text-white/20 italic tracking-widest text-[10px] md:text-xs uppercase px-6">The global library is currently empty. Awaiting an idea...</p>
                     </div>
                   )}
                   {displaySuggestions.map((s, idx) => {
-                    let processedS = { ...s };
-                    let displayContent = s.content;
-
-                    if (s.content.startsWith('JSON:')) {
-                      try {
-                        const meta = JSON.parse(s.content.substring(5));
-                        displayContent = meta.text || "Untitled Idea";
-                        processedS = { ...s, ...meta };
-                      } catch(e) {}
-                    }
-
-                    const isApp = !!processedS.manifested_code;
+                    const isApp = s.status === 'built';
 
                     return (
                       <motion.div 
@@ -1656,13 +1654,13 @@ export default function App() {
                             </div>
                             <div className="overflow-hidden flex-1">
                               <h3 className="text-white font-bold text-xs md:text-sm truncate group-hover:text-indigo-300 transition-colors">
-                                {displayContent}
+                                {s.content}
                               </h3>
                               <div className="text-[8px] md:text-[10px] text-white/20 uppercase tracking-widest mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
                                 <span className={isApp ? 'text-indigo-500' : ''}>#{s.id}</span> 
                                 <span className="hidden md:inline w-1 h-1 rounded-full bg-white/10" />
-                                <span>{isApp ? `Version v${processedS.version || 1}` : 'Proposal Draft'}</span>
-                                {(processedS.pledged_by || []).length > 0 && (
+                                <span>{isApp ? `Version v${s.version || 1}` : 'Proposal Draft'}</span>
+                                {(s.pledged_by || []).length > 0 && (
                                   <>
                                     <span className="w-1 h-1 rounded-full bg-white/10" />
                                     <span className="flex items-center gap-1 text-yellow-500/50"><Zap className="w-2 md:w-2.5 h-2 md:h-2.5 fill-current" /> Supported</span>
@@ -1677,12 +1675,12 @@ export default function App() {
                              <div className="w-full bg-white/5 h-1 rounded-full overflow-hidden">
                                <motion.div 
                                  initial={{ width: 0 }}
-                                 animate={{ width: `${processedS.energy || 0}%` }}
+                                 animate={{ width: `${s.energy || 0}%` }}
                                  className="h-full bg-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.5)]"
                                />
                              </div>
                              <span className="text-[7px] md:text-[9px] font-mono text-white/40 tracking-tighter uppercase whitespace-nowrap">
-                               {processedS.votes || 0} Votes / {processedS.energy || 0}% Power
+                               {s.votes || 0} Votes / {s.energy || 0}% Power
                              </span>
                           </div>
 
@@ -1693,7 +1691,7 @@ export default function App() {
                                ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' 
                                : 'bg-white/5 text-white/30 border-white/10'
                              }`}>
-                               {processedS.status}
+                               {s.status}
                              </div>
                           </div>
 
@@ -1701,7 +1699,7 @@ export default function App() {
                           <div className="flex justify-end gap-2 md:pr-2 mt-2 md:mt-0 pt-2 md:pt-0 border-t md:border-t-0 border-white/5">
                             {isApp ? (
                               <>
-                                <button onClick={() => setActiveModule(processedS as any)} className="flex-1 md:flex-none p-2 md:p-2.5 rounded-lg bg-white text-black hover:scale-105 md:hover:scale-110 active:scale-95 transition-all flex items-center justify-center gap-2 group/launch" title="Launch App">
+                                <button onClick={() => setActiveModule(s)} className="flex-1 md:flex-none p-2 md:p-2.5 rounded-lg bg-white text-black hover:scale-105 md:hover:scale-110 active:scale-95 transition-all flex items-center justify-center gap-2 group/launch" title="Launch App">
                                   <Play className="w-3.5 md:w-4 h-3.5 md:h-4 fill-current group-hover/launch:animate-pulse" />
                                   <span className="text-[9px] font-black uppercase tracking-widest">Execute</span>
                                 </button>
@@ -1709,7 +1707,7 @@ export default function App() {
                                   <button 
                                     onClick={() => {
                                       const prompt = window.prompt("Suggest an evolution for this app:");
-                                      if (prompt) handleRefine(processedS, prompt);
+                                      if (prompt) handleRefine(s, prompt);
                                     }}
                                     disabled={!!isRefining}
                                     className="p-2 md:p-2.5 rounded-lg border border-white/10 text-white/60 hover:bg-white hover:text-black transition-all disabled:opacity-20 flex items-center justify-center gap-2"
@@ -1719,24 +1717,13 @@ export default function App() {
                                     <span className="text-[9px] uppercase font-black tracking-widest md:hidden">Evolve</span>
                                   </button>
                                 )}
-                                <button 
-                                  onClick={() => {
-                                    const msg = window.prompt("Ask for a professional review (Comment will be pinned):");
-                                    if (msg) postAdvice(s.id, msg);
-                                  }}
-                                  className="p-2 md:p-2.5 rounded-lg border border-indigo-500/20 text-indigo-400 hover:bg-indigo-500 hover:text-white transition-all flex items-center justify-center gap-2"
-                                  title="Request Review"
-                                >
-                                  <MessageSquare className="w-3.5 md:w-4 h-3.5 md:h-4" />
-                                  <span className="text-[9px] uppercase font-black tracking-widest md:hidden">Review</span>
-                                </button>
                               </>
                             ) : (
-                              processedS.status === 'pending' && (
+                              s.status === 'pending' && (
                                 <>
                                   {!isCreator && (
                                     <button 
-                                      onClick={() => handleVote(s.id, processedS.votes)}
+                                      onClick={() => handleVote(s.id, s.votes)}
                                       className="flex-1 md:flex-none p-2 md:p-2.5 rounded-lg border border-white/10 text-white/40 hover:border-white hover:text-white transition-all hover:bg-white/5 flex items-center justify-center gap-2"
                                       title="Upvote"
                                     >
@@ -1745,14 +1732,14 @@ export default function App() {
                                     </button>
                                   )}
                                   <button 
-                                    onClick={() => handlePledge(processedS)}
+                                    onClick={() => handlePledge(s)}
                                     disabled={!!isRefining || (!isCreator && !userApiKey)}
                                     className={`flex-1 md:flex-none p-2 md:p-2.5 rounded-lg border flex items-center justify-center transition-all gap-2 relative ${
                                       isCreator 
                                       ? 'bg-gradient-to-r from-indigo-600 to-indigo-800 border-indigo-500 text-white hover:scale-105 shadow-[0_0_20px_rgba(79,70,229,0.3)]' 
                                       : 'bg-white/5 border-white/10 text-yellow-500/50 hover:bg-yellow-500 hover:text-black'
                                     }`}
-                                    title={isCreator ? "Manifest Immediately" : "Manifest with Energy"}
+                                    title={isCreator ? "Build Immediately" : "Build with Power"}
                                   >
                                     {isRefining === s.id ? (
                                       <Loader2 className="w-3.5 md:w-4 h-3.5 md:h-4 animate-spin" />
@@ -1762,7 +1749,7 @@ export default function App() {
                                       <Sparkles className="w-3.5 md:w-4 h-3.5 md:h-4" />
                                     )}
                                     <span className="text-[9px] font-black uppercase tracking-widest">
-                                      {isRefining === s.id ? 'Manifesting...' : isCreator ? 'Manifest Now' : 'Power-Up'}
+                                      {isRefining === s.id ? 'Building...' : isCreator ? 'Build Now' : 'Power-Up'}
                                     </span>
                                     
                                     {isCreator && !isRefining && (
@@ -1776,18 +1763,18 @@ export default function App() {
                               )
                             )}
 
-                            {(isCreator || (processedS.user_id && session?.user?.id && processedS.user_id === session.user.id)) && (
-                              <button 
-                                onClick={() => {
-                                  if (window.confirm("This action is irreversible. Delete from collective memory?")) {
-                                    handleDeleteSuggestion(s.id);
-                                  }
-                                }}
-                                className="p-2 md:p-2.5 rounded-lg border border-pink-500/10 text-pink-500/20 hover:bg-pink-500 hover:text-white hover:border-pink-500 transition-all"
-                                title="Delete Forever"
-                              >
-                                <Trash2 className="w-3.5 md:w-4 h-3.5 md:h-4" />
-                              </button>
+                            {(isCreator || (s.user_id && session?.user?.id && s.user_id === session.user.id)) && (
+                                  <button 
+                                    onClick={() => {
+                                      if (window.confirm("This action is irreversible. Delete permanently?")) {
+                                        handleDeleteSuggestion(s.id);
+                                      }
+                                    }}
+                                    className="p-2 md:p-2.5 rounded-lg border border-pink-500/10 text-pink-500/20 hover:bg-pink-500 hover:text-white hover:border-pink-500 transition-all"
+                                    title="Delete Forever"
+                                  >
+                                    <Trash2 className="w-3.5 md:w-4 h-3.5 md:h-4" />
+                                  </button>
                             )}
                           </div>
                         </div>
@@ -1814,6 +1801,7 @@ export default function App() {
                   suggestions={suggestions} 
                   onSelect={(s) => {
                     console.log("Selected evolution node:", s);
+                    setActiveModule(s);
                   }} 
                 />
               ) : (
@@ -1905,7 +1893,7 @@ export default function App() {
                         <div className="w-24 h-24 rounded-full overflow-hidden mx-auto border-4 border-indigo-500/50 shadow-[0_0_30px_rgba(99,102,241,0.3)] relative z-10 bg-black">
                           <img 
                             src={session.user.user_metadata.avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${session.user.email}`} 
-                            alt="Soul Avatar"
+                            alt="Profile Avatar"
                             referrerPolicy="no-referrer"
                             className="w-full h-full object-cover"
                           />
@@ -1923,15 +1911,15 @@ export default function App() {
                          <div className="flex flex-col items-center gap-2">
                           <div 
                             className="px-6 py-1.5 rounded-full text-[10px] font-black uppercase tracking-[4px] inline-block shadow-lg border"
-                            style={{ backgroundColor: `${soulRank.color}20`, color: soulRank.color, borderColor: `${soulRank.color}40` }}
+                            style={{ backgroundColor: `${appRank.color}20`, color: appRank.color, borderColor: `${appRank.color}40` }}
                           >
-                            {soulRank.title}
+                            {appRank.title}
                           </div>
                           <div className="flex gap-1 justify-center">
                             {[...Array(5)].map((_, i) => (
                               <div 
                                 key={i} 
-                                className={`w-2 h-2 rounded-full ${i < soulRank.level ? 'bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.8)]' : 'bg-white/10'}`} 
+                                className={`w-2 h-2 rounded-full ${i < appRank.level ? 'bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.8)]' : 'bg-white/10'}`} 
                               />
                             ))}
                           </div>
@@ -1940,19 +1928,19 @@ export default function App() {
 
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 md:gap-6 max-w-lg mx-auto">
                         <div className="p-4 md:p-6 bg-white/[0.03] border border-white/5 rounded-2xl md:rounded-3xl group">
-                          <div className="text-[8px] md:text-[10px] text-white/20 uppercase tracking-widest font-black mb-1 md:mb-2 group-hover:text-indigo-400 transition-colors text-center md:text-left">Shared</div>
+                          <div className="text-[8px] md:text-[10px] text-white/20 uppercase tracking-widest font-black mb-1 md:mb-2 group-hover:text-indigo-400 transition-colors text-center md:text-left">Ideas</div>
                           <div className="text-xl md:text-2xl text-white font-black tracking-tighter text-center md:text-left">
                             {suggestions.filter(s => s.user_id === session.user.id).length}
                           </div>
                         </div>
                         <div className="p-4 md:p-6 bg-white/[0.03] border border-white/5 rounded-2xl md:rounded-3xl group">
-                          <div className="text-[8px] md:text-[10px] text-white/20 uppercase tracking-widest font-black mb-1 md:mb-2 group-hover:text-pink-400 transition-colors text-center md:text-left">Manifests</div>
+                          <div className="text-[8px] md:text-[10px] text-white/20 uppercase tracking-widest font-black mb-1 md:mb-2 group-hover:text-pink-400 transition-colors text-center md:text-left">Builds</div>
                           <div className="text-xl md:text-2xl text-white font-black tracking-tighter text-center md:text-left">
-                            {suggestions.filter(s => s.user_id === session.user.id && s.status === 'manifested').length}
+                            {suggestions.filter(s => s.user_id === session.user.id && s.status === 'built').length}
                           </div>
                         </div>
                         <div className="p-4 md:p-6 bg-white/[0.03] border border-white/5 rounded-2xl md:rounded-3xl group">
-                          <div className="text-[8px] md:text-[10px] text-white/20 uppercase tracking-widest font-black mb-1 md:mb-2 group-hover:text-yellow-400 transition-colors text-center md:text-left">Soul Power</div>
+                          <div className="text-[8px] md:text-[10px] text-white/20 uppercase tracking-widest font-black mb-1 md:mb-2 group-hover:text-yellow-400 transition-colors text-center md:text-left">Build Power</div>
                           <div className="text-xl md:text-2xl text-white font-black tracking-tighter text-center md:text-left">
                             {suggestions.filter(s => s.user_id === session.user.id).reduce((acc, curr) => acc + (curr.votes || 0), 0)}
                           </div>
@@ -1962,8 +1950,8 @@ export default function App() {
                       <div className="bg-white/[0.03] p-4 md:p-8 rounded-[2rem] md:rounded-[3rem] border border-white/5 space-y-8 text-left">
                         <div className="flex items-center justify-between border-b border-white/5 pb-4">
                           <div className="space-y-1">
-                            <h4 className="text-[10px] font-black uppercase tracking-[4px] text-white">AI Nexus</h4>
-                            <p className="text-[8px] text-white/30 uppercase tracking-widest font-medium">Switch & Monitor Evolution Bridges</p>
+                            <h4 className="text-[10px] font-black uppercase tracking-[4px] text-white">AI Hub</h4>
+                            <p className="text-[8px] text-white/30 uppercase tracking-widest font-medium">Switch & Monitor System Integrations</p>
                           </div>
                           <div className="flex gap-2">
                             {(['google', 'openai', 'anthropic', 'custom', 'web-llm', 'gemini-nano', 'mlc-mobile'] as const).map((p) => (
@@ -2129,14 +2117,14 @@ export default function App() {
 
                             <div className="space-y-4">
                               <div className="flex justify-between items-center px-1">
-                                <span className="text-[9px] font-black uppercase tracking-widest text-white/40">Neural Directive (System Prompt)</span>
+                                <span className="text-[9px] font-black uppercase tracking-widest text-white/40">AI Directive (System Prompt)</span>
                                 <span className="text-[8px] font-mono text-white/20 italic">Global System Instructions</span>
                               </div>
                               <textarea 
                                 value={aiConfig.systemPrompt}
                                 onChange={(e) => setAiConfig(prev => ({ ...prev, systemPrompt: e.target.value }))}
                                 className="w-full h-24 bg-black/40 border border-white/10 rounded-2xl px-5 py-4 text-[11px] text-white/80 outline-none focus:border-orange-500/50 transition-all font-mono no-scrollbar resize-none"
-                                placeholder="Set the core identity and rules for manifestations..."
+                                placeholder="Set the core identity and rules for projects..."
                               />
                             </div>
 
@@ -2234,7 +2222,7 @@ export default function App() {
 
             {/* Intent Input area (Cubic Structure) */}
             <div className="p-4 md:p-10 border-t border-white/10 shrink-0 bg-white/10">
-              {activeTab === 'mind' ? (
+              {activeTab === 'library' ? (
                 <div className="flex flex-col gap-4 md:gap-6 max-w-4xl mx-auto">
                   {!canSuggest && (
                     <div className="text-center px-4">
@@ -2248,7 +2236,7 @@ export default function App() {
                       value={input}
                       onChange={(e) => setInput(e.target.value)}
                       onKeyDown={(e) => e.key === 'Enter' && canSuggest && handleSuggest()}
-                      placeholder="Manifest an idea..."
+                      placeholder="Build an idea..."
                       className="flex-1 bg-white/5 border-2 border-white/10 px-6 md:px-8 py-4 md:py-6 rounded-full text-xs md:text-sm text-white focus:outline-none focus:border-indigo-500 placeholder:text-white/10 font-black uppercase tracking-[2px] md:tracking-[4px] text-center"
                     />
                     <button 
@@ -2271,16 +2259,16 @@ export default function App() {
         <div className="absolute bottom-8 right-8 md:bottom-12 md:right-12 z-40 pointer-events-none">
           <button 
             onClick={initiateNewProject}
-            disabled={!!isManifesting}
+            disabled={!!isBuilding}
             className="group relative h-16 w-16 md:h-20 md:w-20 bg-white text-black rounded-full font-black flex items-center justify-center shadow-[0_20px_50px_rgba(255,255,255,0.2)] hover:shadow-[0_20px_80px_rgba(255,255,255,0.4)] hover:-translate-y-2 active:scale-95 transition-all border border-white overflow-hidden pointer-events-auto"
           >
             <div className="absolute inset-0 bg-gradient-to-tr from-indigo-500/0 via-indigo-500/20 to-indigo-500/0 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-            {isManifesting === 'new' ? (
+            {isBuilding === 'new' ? (
               <Loader2 className="w-6 h-6 md:w-8 md:h-8 animate-spin" />
             ) : (
               <div className="flex flex-col items-center">
                 <Plus className="w-6 h-6 md:w-8 md:h-8" />
-                <span className="text-[7px] uppercase tracking-widest absolute -bottom-1 group-hover:bottom-2 opacity-0 group-hover:opacity-100 transition-all font-black">Manifest</span>
+                <span className="text-[7px] uppercase tracking-widest absolute -bottom-1 group-hover:bottom-2 opacity-0 group-hover:opacity-100 transition-all font-black">Create</span>
               </div>
             )}
           </button>
@@ -2298,7 +2286,7 @@ export default function App() {
                 Objective: Update the existing "App" component based on user feedback.
                 
                 Current Code:
-                ${activeModule.manifested_code}
+                ${activeModule.built_code}
                 
                 User Feedback:
                 "${feedback}"
@@ -2316,27 +2304,27 @@ export default function App() {
               // Push to local history and sync
               if (newCode && supabase) {
                 const newVersion: EvolutionVersion = {
-                  code: activeModule.manifested_code || "",
+                  code: activeModule.built_code || "",
                   timestamp: new Date().toISOString(),
                   prompt: feedback
                 };
                 
                 const updatedHistory = [newVersion, ...(activeModule.history || [])];
-                const updatePayload: any = { history: updatedHistory, manifested_code: newCode };
+                const updatePayload: any = { history: updatedHistory, built_code: newCode };
                 
                 // Fallback for schema
                 if (!dbFeatures.version) {
                   const meta = activeModule.content.startsWith('JSON:') ? JSON.parse(activeModule.content.substring(5)) : { text: activeModule.content };
                   meta.history = updatedHistory;
-                  meta.manifested_code = newCode;
+                  meta.built_code = newCode;
                   updatePayload.content = 'JSON:' + JSON.stringify(meta);
                   delete updatePayload.history;
-                  delete updatePayload.manifested_code;
+                  delete updatePayload.built_code;
                 }
 
                 await supabase.from('suggestions').update(updatePayload).eq('id', activeModule.id);
-                setSuggestions(prev => prev.map(s => s.id === activeModule.id ? { ...s, manifested_code: newCode, history: updatedHistory } : s));
-                setActiveModule(prev => prev ? { ...prev, manifested_code: newCode, history: updatedHistory } : null);
+                setSuggestions(prev => prev.map(s => s.id === activeModule.id ? { ...s, built_code: newCode, history: updatedHistory } : s));
+                setActiveModule(prev => prev ? { ...prev, built_code: newCode, history: updatedHistory } : null);
               }
               
               return newCode;
@@ -2345,31 +2333,31 @@ export default function App() {
               if (!supabase) return;
               
               const newVersion: EvolutionVersion = {
-                code: activeModule.manifested_code || "",
+                code: activeModule.built_code || "",
                 timestamp: new Date().toISOString(),
                 prompt: "Manual Revision"
               };
               
               const updatedHistory = [newVersion, ...(activeModule.history || [])];
               const updatePayload: any = { 
-                manifested_code: newCode,
+                built_code: newCode,
                 history: updatedHistory
               };
 
-              if (!dbFeatures.manifested_code) {
+              if (!dbFeatures.built_code) {
                 const meta = activeModule.content.startsWith('JSON:') ? JSON.parse(activeModule.content.substring(5)) : { text: activeModule.content };
-                meta.manifested_code = newCode;
+                meta.built_code = newCode;
                 meta.history = updatedHistory;
                 updatePayload.content = 'JSON:' + JSON.stringify(meta);
-                delete updatePayload.manifested_code;
+                delete updatePayload.built_code;
                 delete updatePayload.history;
               }
 
               const { error } = await supabase.from('suggestions').update(updatePayload).eq('id', activeModule.id);
               if (error) throw error;
               
-              setSuggestions(prev => prev.map(s => s.id === activeModule.id ? { ...s, manifested_code: newCode, history: updatedHistory } : s));
-              setActiveModule(prev => prev ? { ...prev, manifested_code: newCode, history: updatedHistory } : null);
+              setSuggestions(prev => prev.map(s => s.id === activeModule.id ? { ...s, built_code: newCode, history: updatedHistory } : s));
+              setActiveModule(prev => prev ? { ...prev, built_code: newCode, history: updatedHistory } : null);
             }}
           />
         )}
