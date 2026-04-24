@@ -119,6 +119,7 @@ export function ModulePlayer({
         <script src="https://unpkg.com/framer-motion@10.16.4/dist/framer-motion.js"></script>
         <script src="https://unpkg.com/recharts/umd/Recharts.min.js"></script>
         <script src="https://unpkg.com/d3@7"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.170.0/three.min.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
         
         <style>
@@ -157,6 +158,7 @@ export function ModulePlayer({
               const LucideReact = window.LucideReact || {};
               const React = window.React;
               const ReactDOM = window.ReactDOM;
+              const THREE = window.THREE;
 
               Object.keys(LucideReact).forEach(key => { if (typeof LucideReact[key] === 'function' || typeof LucideReact[key] === 'object') window[key] = LucideReact[key]; });
 
@@ -167,13 +169,19 @@ export function ModulePlayer({
               window.Icon = Icon;
 
               try {
-                // Use JSON.stringify to safely inject the code string
+                // Synchronously transpile and execute the code using Babel
                 const scriptBody = ${JSON.stringify(cleanCode)};
+                const transpiled = Babel.transform(scriptBody, { 
+                  presets: ['react'],
+                  filename: 'built-app.js'
+                }).code;
                 
                 const scriptNode = document.createElement('script');
-                scriptNode.type = 'text/babel';
-                scriptNode.text = scriptBody;
+                scriptNode.text = transpiled;
                 document.body.appendChild(scriptNode);
+                
+                // Allow a tiny microtask break for any immediate execution side effects
+                await new Promise(r => setTimeout(r, 0));
               } catch (evalErr) {
                 console.error("Evaluation Error:", evalErr);
                 throw new Error("System Sync Failed: " + evalErr.message);
