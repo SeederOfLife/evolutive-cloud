@@ -97,6 +97,7 @@ export default function App() {
   const [presenceData, setPresenceData] = useState<Record<string, any>>({});
   const [systemMessages, setSystemMessages] = useState<SystemMessage[]>([]);
   const [messageInput, setMessageInput] = useState("");
+  const [viewMode, setViewMode] = useState<'all' | 'mine'>('all');
   const [isInitializing, setIsInitializing] = useState(true);
   const channelRef = useRef<any>(null);
   const isSyncing = useRef(false);
@@ -265,6 +266,7 @@ export default function App() {
           content: meta.text || s.content,
           // Ensure we don't accidentally override ID or other system fields
           id: s.id,
+          user_id: s.user_id || meta.user_id,
           status: s.status || meta.status
         };
       } catch(e) {
@@ -792,6 +794,7 @@ export default function App() {
           status: 'built',
           votes: 0,
           energy: 100,
+          user_id: session?.user?.id || null
         };
 
         if (dbFeatures.built_code) {
@@ -879,6 +882,12 @@ export default function App() {
     return () => clearInterval(timer);
   }, []);
 
+  useEffect(() => {
+    if (session?.user?.id) {
+       setFilterType('mine');
+    }
+  }, [session]);
+
   const fetchSuggestions = async () => {
     if (!supabase) {
       setSuggestions([]);
@@ -935,6 +944,25 @@ export default function App() {
       }
     } catch (err: any) {
       console.error("Auth Exception:", err);
+      setAuthError(err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleGoogleAuth = async () => {
+    if (!supabase) return;
+    setIsLoading(true);
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: window.location.origin
+        }
+      });
+      if (error) throw error;
+    } catch (err: any) {
+      console.error("Google Auth Error:", err);
       setAuthError(err.message);
     } finally {
       setIsLoading(false);
@@ -1094,23 +1122,33 @@ export default function App() {
       return;
     }
     
+    setIsLoading(true);
     try {
+      // Find the suggestion to check ownership again locally for safety
+      const target = suggestions.find(s => s.id === id);
+      if (target && target.user_id && session?.user?.id && target.user_id !== session.user.id && !isCreator) {
+        throw new Error("Ownership validation failed. You are not the creator of this module.");
+      }
+
       // Direct Hard Delete
       const { error } = await supabase.from('suggestions').delete().eq('id', id);
       
       if (error) {
-        console.warn("Hard delete denied. Likely RLS policy mismatch:", error.message);
-        // Fallback: try soft delete if delete is prohibited but update is allowed
+        console.warn("Delete restriction encountered:", error.message);
+        // Fallback: try soft delete if delete is prohibited by RLS but update is allowed
         const { error: updateError } = await supabase.from('suggestions').update({ status: 'deleted' }).eq('id', id);
         if (updateError) {
-          throw new Error(`Delete failed: ${error.message} | Soft fallback failed: ${updateError.message}`);
+          throw new Error(`Insufficient Permissions: ${error.message}`);
         }
       }
       
       setSuggestions(prev => prev.filter(s => s.id !== id));
+      if (activeModule?.id === id) setActiveModule(null);
     } catch (err: any) {
       console.error("Deletion Error:", err);
-      alert(`Critical System Failure: ${err.message || 'Access Denied. Are you the creator?'}`);
+      alert(err.message || "Access Denied. Ensure you are signed in and own this project.");
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -1764,6 +1802,13 @@ export default function App() {
                             )}
 
                             {(isCreator || (s.user_id && session?.user?.id && s.user_id === session.user.id)) && (
+                                <div className="flex gap-2">
+                                  {s.user_id === session?.user?.id && (
+                                    <div className="px-3 py-2 bg-indigo-500/10 border border-indigo-500/20 rounded-lg flex items-center gap-1.5" title="This is your creation">
+                                      <CircleUser className="w-3 h-3 text-indigo-400" />
+                                      <span className="text-[8px] font-black uppercase text-indigo-400 tracking-wider">Me</span>
+                                    </div>
+                                  )}
                                   <button 
                                     onClick={() => {
                                       if (window.confirm("This action is irreversible. Delete permanently?")) {
@@ -1775,6 +1820,7 @@ export default function App() {
                                   >
                                     <Trash2 className="w-3.5 md:w-4 h-3.5 md:h-4" />
                                   </button>
+                                </div>
                             )}
                           </div>
                         </div>
@@ -1848,6 +1894,19 @@ export default function App() {
                           className="w-full py-5 bg-white text-black text-[11px] font-black uppercase tracking-[4px] rounded-full hover:bg-indigo-300 transition-all shadow-xl"
                         >
                           {isSignUp ? "Create Account" : "Log In"}
+                        </button>
+
+                        <button 
+                          onClick={handleGoogleAuth}
+                          className="w-full py-5 bg-[#4285F4] text-white text-[11px] font-black uppercase tracking-[4px] rounded-full hover:bg-[#357abd] transition-all shadow-xl flex items-center justify-center gap-3"
+                        >
+                          <svg className="w-4 h-4" viewBox="0 0 24 24">
+                            <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                            <path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                            <path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" />
+                            <path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+                          </svg>
+                          Continue with Google
                         </button>
 
                         <button 
@@ -2224,7 +2283,15 @@ export default function App() {
             <div className="p-4 md:p-10 border-t border-white/10 shrink-0 bg-white/10">
               {activeTab === 'library' ? (
                 <div className="flex flex-col gap-4 md:gap-6 max-w-4xl mx-auto">
-                  {!canSuggest && (
+                  {!session && (
+                    <div className="text-center px-4 animate-pulse">
+                      <p className="text-[8px] md:text-[10px] font-black text-white/30 uppercase tracking-[4px] bg-white/5 py-2 border border-white/5 rounded-full flex items-center justify-center gap-2">
+                         <Lock className="w-2.5 h-2.5" />
+                         Guest Mode: Ideas will not be linked to your account. <span className="text-indigo-400 cursor-pointer hover:underline" onClick={() => setActiveTab('identity')}>Sign in</span>
+                      </p>
+                    </div>
+                  )}
+                  {!canSuggest && session && (
                     <div className="text-center px-4">
                       <p className="text-[8px] md:text-[10px] font-black text-yellow-500 uppercase tracking-widest bg-yellow-500/10 py-2 border border-yellow-500/30 rounded-full italic">
                         Access Restricted: Waiting for Master Bridge Sync
