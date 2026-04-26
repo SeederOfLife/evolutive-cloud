@@ -88,18 +88,23 @@ export function ModuleNode({ suggestion, onRun }: { suggestion: Suggestion, onRu
   );
 }
 
-export function Nebula({ count = 3000 }) {
+export function Nebula({ count = 4000 }) {
   const timeRef = useRef(0);
+  const groupRef = useRef<THREE.Group>(null!);
+  
   const circleTexture = useMemo(() => {
     const canvas = document.createElement('canvas');
     canvas.width = 64;
     canvas.height = 64;
     const ctx = canvas.getContext('2d');
     if (ctx) {
-      ctx.beginPath();
-      ctx.arc(32, 32, 30, 0, Math.PI * 2);
-      ctx.fillStyle = '#ffffff';
-      ctx.fill();
+      const gradient = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+      gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
+      gradient.addColorStop(0.2, 'rgba(255, 255, 255, 0.8)');
+      gradient.addColorStop(0.5, 'rgba(99, 102, 241, 0.2)');
+      gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, 64, 64);
     }
     return new THREE.CanvasTexture(canvas);
   }, []);
@@ -108,17 +113,21 @@ export function Nebula({ count = 3000 }) {
     const p = new Float32Array(count * 3);
     const c = new Float32Array(count * 3);
     const palette = [
-      new THREE.Color("#ff006e"),
-      new THREE.Color("#3a86ff"),
-      new THREE.Color("#fb5607"),
-      new THREE.Color("#ffbe0b"),
-      new THREE.Color("#8338ec"),
+      new THREE.Color("#6366f1"),
+      new THREE.Color("#818cf8"),
+      new THREE.Color("#4f46e5"),
+      new THREE.Color("#c084fc"),
+      new THREE.Color("#2dd4bf"),
     ];
 
     for (let i = 0; i < count; i++) {
-      p[i * 3] = (Math.random() - 0.5) * 50;
-      p[i * 3 + 1] = (Math.random() - 0.5) * 50;
-      p[i * 3 + 2] = (Math.random() - 0.5) * 50;
+      const r = 10 + Math.random() * 40;
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(2 * Math.random() - 1);
+      
+      p[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+      p[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+      p[i * 3 + 2] = r * Math.cos(phi);
       
       const col = palette[Math.floor(Math.random() * palette.length)];
       c[i * 3] = col.r;
@@ -130,39 +139,43 @@ export function Nebula({ count = 3000 }) {
 
   const matRef = useRef<THREE.PointsMaterial>(null!);
   useFrame((state, delta) => {
-    if (!matRef.current) return;
+    if (!matRef.current || !groupRef.current) return;
     timeRef.current += delta;
     const time = timeRef.current;
-    matRef.current.size = 0.1 + Math.sin(time * 0.5) * 0.05;
+    matRef.current.size = 0.15 + Math.sin(time * 0.3) * 0.05;
+    groupRef.current.rotation.y = time * 0.03;
+    groupRef.current.rotation.z = Math.sin(time * 0.1) * 0.1;
   });
 
   return (
-    <points>
-      <bufferGeometry>
-        <bufferAttribute
-          attach="attributes-position"
-          count={points.length / 3}
-          array={points}
-          itemSize={3}
+    <group ref={groupRef}>
+      <points>
+        <bufferGeometry>
+          <bufferAttribute
+            attach="attributes-position"
+            count={points.length / 3}
+            array={points}
+            itemSize={3}
+          />
+          <bufferAttribute
+            attach="attributes-color"
+            count={colors.length / 3}
+            array={colors}
+            itemSize={3}
+          />
+        </bufferGeometry>
+        <pointsMaterial
+          ref={matRef}
+          size={0.2}
+          vertexColors
+          transparent
+          map={circleTexture}
+          opacity={0.4}
+          sizeAttenuation
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
         />
-        <bufferAttribute
-          attach="attributes-color"
-          count={colors.length / 3}
-          array={colors}
-          itemSize={3}
-        />
-      </bufferGeometry>
-      <pointsMaterial
-        ref={matRef}
-        size={0.15}
-        vertexColors
-        transparent
-        map={circleTexture}
-        opacity={0.6}
-        sizeAttenuation
-        blending={THREE.AdditiveBlending}
-        depthWrite={false}
-      />
-    </points>
+      </points>
+    </group>
   );
 }

@@ -99,6 +99,25 @@ export default function App() {
   const [messageInput, setMessageInput] = useState("");
   const [viewMode, setViewMode] = useState<'all' | 'mine'>('all');
   const [isInitializing, setIsInitializing] = useState(true);
+  const [isManifesting, setIsManifesting] = useState(false);
+  const [diagnostics, setDiagnostics] = useState({
+    synapses: 4096,
+    connectivity: 99.8,
+    entropy: 0.12,
+    load: 12.4
+  });
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setDiagnostics(prev => ({
+        synapses: 4000 + Math.floor(Math.random() * 200),
+        connectivity: 99 + Math.random(),
+        entropy: Math.max(0, prev.entropy + (Math.random() - 0.5) * 0.01),
+        load: 10 + Math.random() * 20
+      }));
+    }, 3000);
+    return () => clearInterval(interval);
+  }, []);
   const channelRef = useRef<any>(null);
   const isSyncing = useRef(false);
 
@@ -404,44 +423,23 @@ export default function App() {
         if (!keyToUse) throw new Error("No Google API Key Found. Ensure your API Key is set in the Account tab.");
         
         const ai = new GoogleGenAI({ apiKey: keyToUse });
-        // Safety: Ensure the model is valid for Google
         let modelId = selectedModel;
-        if (!modelId.startsWith('gemini-')) {
-          modelId = "gemini-3-flash-preview"; // Fallback to stable model
-        }
+        if (!modelId.startsWith('gemini-')) modelId = "gemini-3-flash-preview"; 
         
-        try {
-          const response = await ai.models.generateContent({
-            model: modelId,
-            contents: [{ parts: [{ text: prompt }] }],
-            config: {
-              temperature: aiConfig.temperature,
-              topP: aiConfig.topP,
-              topK: aiConfig.topK,
-              maxOutputTokens: aiConfig.maxTokens,
-            }
-          });
-          
-          const text = response.text;
-          if (!text) throw new Error("The AI Engine returned an empty response.");
-          return text;
-        } catch (e: any) {
-          const errText = e.message || String(e);
-          if (errText.includes('404') || errText.toLowerCase().includes('not found') || errText.includes('503')) {
-            console.warn("Primary model unavailable, falling back to gemini-3-flash-preview:", errText);
-            const fallbackResponse = await ai.models.generateContent({
-              model: "gemini-3-flash-preview",
-              contents: [{ parts: [{ text: prompt }] }],
-              config: {
-                temperature: aiConfig.temperature,
-                topP: aiConfig.topP,
-                maxOutputTokens: aiConfig.maxTokens,
-              }
-            });
-            return fallbackResponse.text || "";
+        const response = await ai.models.generateContent({
+          model: modelId,
+          contents: prompt,
+          config: {
+            temperature: aiConfig.temperature,
+            topP: aiConfig.topP,
+            topK: aiConfig.topK,
+            maxOutputTokens: aiConfig.maxTokens,
           }
-          throw e;
-        }
+        });
+
+        const text = response.text;
+        if (!text) throw new Error("The AI Engine returned an empty response.");
+        return text;
       }
 
       if (aiProvider === 'openai' || aiProvider === 'custom') {
@@ -583,7 +581,7 @@ export default function App() {
           console.warn("Initialization safety threshold reached. Forcing interface boot.");
           setIsInitializing(false);
         }
-      }, 6000);
+      }, 4000);
 
       if (!supabase) {
         setInitStatus("Supabase Matrix Off-Bridge. Offline Mode Active.");
@@ -740,6 +738,14 @@ export default function App() {
         return matchesSearch && matchesCategory;
       });
   }, [suggestions, searchQuery, filterType, session]);
+
+  const neuralStatus = useMemo(() => {
+    if (isManifesting) return "MANIFESTING";
+    if (isBuilding) return "SYNTHESIZING";
+    if (isRefining) return "REFINING";
+    if (isLoading) return "EXTRACTING";
+    return "IDLE";
+  }, [isManifesting, isBuilding, isRefining, isLoading]);
 
   const handleRefine = async (suggestion: Suggestion, refinementPrompt: string) => {
     if (!refinementPrompt.trim() || isRefining) return;
@@ -979,6 +985,7 @@ export default function App() {
     const rawInput = input.trim();
     setInput("");
     setIsBuilding(0);
+    setIsManifesting(true);
     
     try {
       const prompt = `Refine this app idea into a clear, concise one-sentence description. Keep it technical and direct.
@@ -1049,14 +1056,16 @@ export default function App() {
   };
 
   const handlePledge = async (s: Suggestion) => {
-    const key = userApiKey || (isCreator ? process.env.GEMINI_API_KEY : null);
-    if (!session || !key || !supabase) {
-      if (!key && !userApiKey) {
-        alert("Please set your API Key in the Account tab to power builds.");
-        setActiveTab('identity');
+      setIsManifesting(true);
+      const key = userApiKey || (isCreator ? process.env.GEMINI_API_KEY : null);
+      if (!session || !key || !supabase) {
+        if (!key && !userApiKey) {
+          alert("Please set your API Key in the Account tab to power builds.");
+          setActiveTab('identity');
+        }
+        setIsManifesting(false);
+        return;
       }
-      return;
-    }
     if (isRefining) return;
     
     // Simplified data extraction from unwrapped suggestion
@@ -1113,6 +1122,7 @@ export default function App() {
       alert(`The system bridge flickered: ${errMsg}\n\nPlease verify your API key and internet connection.`);
     } finally {
       setIsRefining(null);
+      setIsManifesting(false);
     }
   };
 
@@ -1255,6 +1265,7 @@ export default function App() {
         setIsBuilding(null);
         return;
       }
+      setIsManifesting(true);
       const text = await callUnifiedAI(prompt);
       
       // Clean backticks and language identifiers meticulously
@@ -1291,6 +1302,7 @@ export default function App() {
       const updatedSuggestion = { ...suggestion, status: 'built' as const, built_code: generatedCode };
       setSuggestions(suggestions.map(s => s.id === suggestion.id ? updatedSuggestion : s));
       setActiveModule(updatedSuggestion);
+      setIsManifesting(false);
 
     } catch (err: any) {
       console.error("Generation failure:", err);
@@ -1298,6 +1310,7 @@ export default function App() {
       alert(`App build failed: ${errMsg}`);
     } finally {
       setIsBuilding(null);
+      setIsManifesting(false);
     }
   };
 
@@ -1308,35 +1321,97 @@ export default function App() {
           <motion.div 
             initial={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 1 }}
+            transition={{ duration: 0.8 }}
             className="fixed inset-0 z-[200] bg-[#020208] flex flex-col items-center justify-center p-6 text-center"
           >
             <div className="relative">
-              <div className="absolute -inset-10 bg-indigo-500/20 blur-[60px] rounded-full animate-pulse" />
-              <Loader2 className="w-16 h-16 text-indigo-500 animate-spin relative z-10" />
+              <motion.div 
+                animate={{ rotate: 360, scale: [1, 1.1, 1] }} 
+                transition={{ duration: 10, repeat: Infinity, ease: "linear" }}
+                className="w-64 h-64 border-2 border-indigo-500/10 rounded-full flex items-center justify-center"
+              >
+                <div className="w-2 h-2 bg-indigo-500 rounded-full blur-[4px]" />
+              </motion.div>
+              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                 <motion.div 
+                    animate={{ opacity: [0.3, 1, 0.3] }}
+                    transition={{ duration: 2, repeat: Infinity }}
+                    className="text-white font-black text-[12px] tracking-[15px] uppercase ml-[15px]"
+                  >
+                   Engine
+                 </motion.div>
+                 <div className="text-[9px] text-white/20 font-mono tracking-widest mt-2 uppercase">REBIRTH_ IN_ PROGRESS</div>
+              </div>
             </div>
-            <h1 className="mt-12 text-2xl md:text-3xl font-black uppercase tracking-[10px] text-white">System Boot</h1>
-            <p className="mt-4 text-[10px] md:text-xs text-indigo-400 font-bold uppercase tracking-[4px] animate-pulse h-4 truncate max-w-sm px-4">
-              {initStatus}
-            </p>
             
-            <div className="mt-20 w-48 h-0.5 bg-white/5 rounded-full overflow-hidden">
-               <motion.div 
-                 className="h-full bg-indigo-500"
-                 animate={{ x: [-200, 200] }}
-                 transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }}
-               />
-            </div>
-
             <motion.button
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              transition={{ delay: 3 }}
+              transition={{ delay: 0.5 }}
               onClick={() => setIsInitializing(false)}
-              className="mt-10 px-6 py-2 border border-white/10 rounded-full text-[10px] font-black uppercase tracking-widest text-white/40 hover:text-white hover:border-white/40 transition-all"
+              className="mt-20 px-8 py-3 bg-indigo-500 text-white text-[10px] font-black uppercase tracking-[5px] rounded-full hover:bg-indigo-400 transition-all shadow-[0_0_30px_rgba(99,102,241,0.5)]"
             >
-              Enter System
+              Enter Interface
             </motion.button>
+          </motion.div>
+        )}
+
+        {isManifesting && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[90] bg-[#050510]/95 backdrop-blur-[120px] flex flex-col items-center justify-center p-10 overflow-hidden"
+          >
+            {/* Neural Background Effect */}
+            <div className="absolute inset-0 pointer-events-none opacity-20">
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(99,102,241,0.2)_0%,transparent_70%)] animate-pulse" />
+              <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-40 mix-blend-overlay" />
+            </div>
+
+            <div className="max-w-md w-full text-center space-y-16 relative z-10">
+              <div className="relative">
+                <div className="relative h-1 w-full bg-white/5 rounded-full overflow-hidden">
+                  <motion.div 
+                    initial={{ width: "0%" }}
+                    animate={{ width: "100%" }}
+                    transition={{ duration: 12, ease: "easeInOut" }}
+                    className="absolute h-full bg-gradient-to-r from-indigo-500 via-pink-500 to-indigo-500"
+                  />
+                </div>
+                {/* Micro-sparkles along the progress bar */}
+                <motion.div 
+                  animate={{ x: ["0%", "100%"] }}
+                  transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                  className="absolute top-0 w-20 h-full bg-white/40 blur-[4px]"
+                />
+              </div>
+
+              <div className="space-y-6">
+                <motion.h2 
+                  animate={{ letterSpacing: ["15px", "22px", "15px"] }}
+                  transition={{ duration: 4, repeat: Infinity }}
+                  className="text-2xl md:text-3xl font-black uppercase tracking-[20px] text-white ml-[20px]"
+                >
+                  Manifesting
+                </motion.h2>
+                
+                <div className="flex flex-col gap-3">
+                   <p className="text-[11px] text-indigo-400 font-mono uppercase tracking-[6px] animate-pulse">Neural Path Integration in progress</p>
+                   <div className="flex justify-center gap-1">
+                      {[1,2,3,4,5].map(i => (
+                        <motion.div 
+                          key={i}
+                          animate={{ height: [4, 12, 4], opacity: [0.2, 1, 0.2] }}
+                          transition={{ duration: 1, repeat: Infinity, delay: i * 0.15 }}
+                          className="w-1 bg-white/30 rounded-full"
+                        />
+                      ))}
+                   </div>
+                   <p className="text-[9px] text-white/30 font-mono uppercase tracking-widest mt-4">Structural integrity: {(diagnostics.connectivity).toFixed(1)}%</p>
+                </div>
+              </div>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -1348,6 +1423,34 @@ export default function App() {
       <div className="absolute top-1/2 right-0 w-[400px] h-[400px] bg-blue-900/5 rounded-full blur-[150px] pointer-events-none -z-10" />
       
       {/* --- HUD LAYER --- */}
+      <div className="fixed top-0 left-0 right-0 z-[100] px-6 py-4 flex items-center justify-between pointer-events-none">
+        <div className="flex items-center gap-4 pointer-events-auto">
+          <div className="w-10 h-10 bg-indigo-500 rounded-full flex items-center justify-center shadow-[0_0_20px_rgba(99,102,241,0.4)]">
+             <Activity className="w-5 h-5 text-white animate-pulse" />
+          </div>
+          <div className="hidden md:block">
+            <h1 className="text-[10px] font-black uppercase tracking-[4px] text-white">Engine_Manifest</h1>
+            <div className="flex items-center gap-2">
+               <div className={`w-1.5 h-1.5 rounded-full ${neuralStatus !== 'IDLE' ? 'bg-green-500 animate-pulse' : 'bg-white/20'}`} />
+               <span className="text-[8px] font-mono text-white/40 uppercase tracking-widest">{neuralStatus}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 pointer-events-auto">
+          {neuralStatus !== 'IDLE' && (
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="px-4 py-2 bg-indigo-500/10 border border-indigo-500/30 rounded-full flex items-center gap-3 backdrop-blur-md"
+            >
+               <Loader2 className="w-3 h-3 text-indigo-400 animate-spin" />
+               <span className="text-[9px] font-black text-indigo-400 uppercase tracking-widest">{neuralStatus}</span>
+            </motion.div>
+          )}
+        </div>
+      </div>
+
       {/* --- SYSTEM MESSAGES --- */}
       <AnimatePresence>
         {systemMessages.map((msg) => (
@@ -1771,15 +1874,15 @@ export default function App() {
                                   )}
                                   <button 
                                     onClick={() => handlePledge(s)}
-                                    disabled={!!isRefining || (!isCreator && !userApiKey)}
-                                    className={`flex-1 md:flex-none p-2 md:p-2.5 rounded-lg border flex items-center justify-center transition-all gap-2 relative ${
+                                    disabled={!!isRefining || !!isBuilding || (!isCreator && !userApiKey)}
+                                    className={`flex-1 md:flex-none p-2 md:p-2.5 rounded-lg border flex items-center justify-center transition-all gap-2 relative overflow-hidden group/pledge ${
                                       isCreator 
                                       ? 'bg-gradient-to-r from-indigo-600 to-indigo-800 border-indigo-500 text-white hover:scale-105 shadow-[0_0_20px_rgba(79,70,229,0.3)]' 
-                                      : 'bg-white/5 border-white/10 text-yellow-500/50 hover:bg-yellow-500 hover:text-black'
+                                      : 'bg-white/5 border-white/10 text-yellow-500/50 hover:bg-indigo-500 hover:text-white hover:border-indigo-500'
                                     }`}
-                                    title={isCreator ? "Build Immediately" : "Build with Power"}
+                                    title={isCreator ? "Manifest Module" : "Manifest with Your Power"}
                                   >
-                                    {isRefining === s.id ? (
+                                    {(isRefining === s.id || isBuilding === s.id) ? (
                                       <Loader2 className="w-3.5 md:w-4 h-3.5 md:h-4 animate-spin" />
                                     ) : isCreator ? (
                                       <Zap className="w-3.5 md:w-4 h-3.5 md:h-4 fill-current animate-pulse text-yellow-400" />
@@ -1787,10 +1890,18 @@ export default function App() {
                                       <Sparkles className="w-3.5 md:w-4 h-3.5 md:h-4" />
                                     )}
                                     <span className="text-[9px] font-black uppercase tracking-widest">
-                                      {isRefining === s.id ? 'Building...' : isCreator ? 'Build Now' : 'Power-Up'}
+                                      {isRefining === s.id || isBuilding === s.id ? 'Manifesting...' : isCreator ? 'Manifest Now' : 'Power-Up'}
                                     </span>
+
+                                    {(isRefining === s.id || isBuilding === s.id) && (
+                                      <motion.div 
+                                        className="absolute inset-0 bg-white/20"
+                                        animate={{ x: ["-100%", "100%"] }}
+                                        transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                                      />
+                                    )}
                                     
-                                    {isCreator && !isRefining && (
+                                    {isCreator && !isRefining && !isBuilding && (
                                       <div className="absolute -top-1 -right-1 flex h-2 w-2">
                                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
                                         <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
@@ -1995,9 +2106,38 @@ export default function App() {
                         <div className="p-4 md:p-6 bg-white/[0.03] border border-white/5 rounded-2xl md:rounded-3xl group">
                           <div className="text-[8px] md:text-[10px] text-white/20 uppercase tracking-widest font-black mb-1 md:mb-2 group-hover:text-pink-400 transition-colors text-center md:text-left">Builds</div>
                           <div className="text-xl md:text-2xl text-white font-black tracking-tighter text-center md:text-left">
-                            {suggestions.filter(s => s.user_id === session.user.id && s.status === 'built').length}
-                          </div>
-                        </div>
+                      {suggestions.filter(s => s.user_id === session.user.id && s.status === 'built').length}
+                    </div>
+                  </div>
+                  
+                  {/* System Diagnostics */}
+                  <div className="col-span-1 md:col-span-2 p-4 md:p-6 bg-indigo-500/[0.05] border border-indigo-500/20 rounded-2xl md:rounded-3xl">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="text-[8px] md:text-[10px] text-indigo-400 uppercase tracking-widest font-black">Neural Diagnostics</div>
+                      <div className="flex gap-2">
+                        <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                        <div className="text-[10px] text-green-500 font-mono">ONLINE</div>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div>
+                        <div className="text-[8px] text-white/20 uppercase mb-1">Synapses</div>
+                        <div className="text-sm font-mono text-white/80">{diagnostics.synapses}</div>
+                      </div>
+                      <div>
+                        <div className="text-[8px] text-white/20 uppercase mb-1">Connectivity</div>
+                        <div className="text-sm font-mono text-white/80">{diagnostics.connectivity.toFixed(1)}%</div>
+                      </div>
+                      <div>
+                        <div className="text-[8px] text-white/20 uppercase mb-1">Entropy</div>
+                        <div className="text-sm font-mono text-white/80">{diagnostics.entropy.toFixed(3)}</div>
+                      </div>
+                      <div>
+                        <div className="text-[8px] text-white/20 uppercase mb-1">System Load</div>
+                        <div className="text-sm font-mono text-white/80">{diagnostics.load.toFixed(1)}%</div>
+                      </div>
+                    </div>
+                  </div>
                         <div className="p-4 md:p-6 bg-white/[0.03] border border-white/5 rounded-2xl md:rounded-3xl group">
                           <div className="text-[8px] md:text-[10px] text-white/20 uppercase tracking-widest font-black mb-1 md:mb-2 group-hover:text-yellow-400 transition-colors text-center md:text-left">Build Power</div>
                           <div className="text-xl md:text-2xl text-white font-black tracking-tighter text-center md:text-left">
@@ -2303,15 +2443,27 @@ export default function App() {
                       value={input}
                       onChange={(e) => setInput(e.target.value)}
                       onKeyDown={(e) => e.key === 'Enter' && canSuggest && handleSuggest()}
-                      placeholder="Build an idea..."
+                      placeholder="Manifest an idea..."
                       className="flex-1 bg-white/5 border-2 border-white/10 px-6 md:px-8 py-4 md:py-6 rounded-full text-xs md:text-sm text-white focus:outline-none focus:border-indigo-500 placeholder:text-white/10 font-black uppercase tracking-[2px] md:tracking-[4px] text-center"
                     />
                     <button 
                       onClick={handleSuggest}
-                      disabled={!canSuggest}
-                      className="w-14 h-14 md:w-20 md:h-20 shrink-0 rounded-full bg-white text-black flex items-center justify-center transition-all hover:scale-105 active:scale-95 shadow-2xl hover:bg-indigo-500 hover:text-white disabled:opacity-50"
+                      disabled={!canSuggest || isLoading}
+                      className={`relative w-14 h-14 md:w-20 md:h-20 shrink-0 rounded-full bg-white text-black flex items-center justify-center transition-all hover:scale-105 active:scale-95 shadow-2xl hover:bg-indigo-500 hover:text-white disabled:opacity-50 overflow-hidden group`}
                     >
-                      <Plus className="w-6 md:w-10 h-6 md:h-10 font-bold" />
+                      {isLoading ? (
+                        <Loader2 className="w-6 md:w-10 h-6 md:h-10 animate-spin text-indigo-500" />
+                      ) : (
+                        <Plus className="w-6 md:w-10 h-6 md:h-10 font-bold group-hover:rotate-90 transition-transform" />
+                      )}
+                      
+                      {isLoading && (
+                        <motion.div 
+                          className="absolute inset-0 bg-indigo-500/10"
+                          animate={{ opacity: [0, 0.5, 0] }}
+                          transition={{ duration: 1.5, repeat: Infinity }}
+                        />
+                      )}
                     </button>
                   </div>
                 </div>

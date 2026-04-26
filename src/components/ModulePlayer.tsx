@@ -124,14 +124,14 @@ export function ModulePlayer({
         
         <style>
           body { 
-            background: transparent;
+            background: #050508;
             color: white; 
             margin: 0; 
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             min-height: 100vh;
             display: flex;
             flex-direction: column;
-            overflow: hidden;
+            overflow: auto;
           }
           #root { flex: 1; display: flex; flex-direction: column; }
           .error-container {
@@ -143,6 +143,8 @@ export function ModulePlayer({
             margin: 20px;
             font-family: monospace;
             font-size: 13px;
+            word-break: break-all;
+            white-space: pre-wrap;
           }
           ::-webkit-scrollbar { width: 6px; }
           ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
@@ -150,57 +152,111 @@ export function ModulePlayer({
       </head>
       <body>
         <div id="root"></div>
-        <script type="text/babel">
+        <script>
           (async function() {
+            const rootElement = document.getElementById('root');
+            const reportError = (msg, stack) => {
+              console.error("Evolution Error:", msg, stack);
+              rootElement.innerHTML = [
+                '<div class="error-container">',
+                '<div style="font-weight: 800; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px; color: #f87171;">Evolution Failure</div>',
+                '<div style="opacity: 0.8; margin-bottom: 12px;">' + msg + '</div>',
+                stack ? '<pre style="font-size: 10px; opacity: 0.5; overflow: auto; max-height: 200px;">' + stack + '</pre>' : '',
+                '<div style="margin-top: 16px; font-size: 10px; color: #6366f1; text-transform: uppercase; font-weight: 800; cursor: pointer;" onclick="window.location.reload()">Re-attempting interface sync...</div>',
+                '</div>'
+              ].join("");
+            };
+
+            window.onerror = (msg, url, line, col, error) => {
+              reportError(msg, error?.stack);
+              return false;
+            };
+
             try {
+              // Poll for dependencies with a timeout
+              const start = Date.now();
+              while ((!window.Babel || !window.React || !window.ReactDOM) && Date.now() - start < 5000) {
+                await new Promise(r => setTimeout(r, 100));
+              }
+
+              if (!window.Babel || !window.React || !window.ReactDOM) {
+                throw new Error("Neural Bridge Timeout: Essential libraries failed to materialize.");
+              }
+
               const { useState, useEffect, useMemo, useRef, useCallback } = window.React;
-              const { motion, AnimatePresence } = window.Motion || {};
               const LucideReact = window.LucideReact || {};
               const React = window.React;
               const ReactDOM = window.ReactDOM;
               const THREE = window.THREE;
+              const Motion = window.Motion || window.framerMotion || {};
+              
+              // Map Framer Motion correctly
+              window.motion = Motion.motion || Motion;
+              window.AnimatePresence = Motion.AnimatePresence;
 
-              Object.keys(LucideReact).forEach(key => { if (typeof LucideReact[key] === 'function' || typeof LucideReact[key] === 'object') window[key] = LucideReact[key]; });
-
-              const Icon = ({ name, ...props }) => {
-                let C = LucideReact[name] || LucideReact[name.charAt(0).toUpperCase() + name.slice(1)];
-                return C ? <C {...props} /> : null;
+              // Expose Lucide icons globally
+              Object.keys(LucideReact).forEach(key => { 
+                if (typeof LucideReact[key] === 'function' || typeof LucideReact[key] === 'object') {
+                  window[key] = LucideReact[key]; 
+                }
+              });
+              
+              window.Icon = ({ name, ...props }) => {
+                const IconComp = LucideReact[name] || LucideReact[name.charAt(0).toUpperCase() + name.slice(1)];
+                return IconComp ? React.createElement(IconComp, props) : null;
               };
-              window.Icon = Icon;
+
+              const scriptBody = ${JSON.stringify(cleanCode)};
+              if (!scriptBody || scriptBody.length < 10) {
+                rootElement.innerHTML = '<div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; opacity: 0.2; text-transform: uppercase; letter-spacing: 10px; font-weight: 900;">Awaiting Manifestation</div>';
+                return;
+              }
 
               try {
-                // Synchronously transpile and execute the code using Babel
-                const scriptBody = ${JSON.stringify(cleanCode)};
+                console.log("Transpiling logic...");
+                console.log("Script Body Length:", scriptBody.length);
+                
                 const transpiled = Babel.transform(scriptBody, { 
-                  presets: ['react'],
-                  filename: 'built-app.js'
+                  presets: ['env', 'react', 'typescript'],
+                  filename: 'built-app.tsx'
                 }).code;
                 
+                console.log("Transpilation successful. Injecting...");
                 const scriptNode = document.createElement('script');
                 scriptNode.text = transpiled;
                 document.body.appendChild(scriptNode);
-                
-                // Allow a tiny microtask break for any immediate execution side effects
-                await new Promise(r => setTimeout(r, 0));
-              } catch (evalErr) {
-                console.error("Evaluation Error:", evalErr);
-                throw new Error("System Sync Failed: " + evalErr.message);
+              } catch (transpileErr) {
+                throw new Error("Transpilation Entropy: " + transpileErr.message);
               }
 
+              // Let the script register components
+              await new Promise(r => setTimeout(r, 50));
+
+              console.log("Locating App component...");
               let AppComp = window.App || window.__BUILT_APP__ || window.Main || window.BuiltApp;
               if (!AppComp) {
-                const keys = Object.keys(window).filter(k => /^[A-Z]/.test(k) && typeof window[k] === 'function' && !['React', 'ReactDOM', 'Recharts', 'Motion', 'LucideReact'].includes(k));
-                if (keys.length > 0) AppComp = window[keys[0]];
+                const detected = Object.keys(window).find(k => 
+                  /^[A-Z]/.test(k) && 
+                  typeof window[k] === 'function' && 
+                  !['React', 'ReactDOM', 'Recharts', 'Motion', 'LucideReact', 'Babel', 'THREE', 'Icon'].includes(k) &&
+                  !k.startsWith('_')
+                );
+                if (detected) {
+                  console.log("Detected possible component:", detected);
+                  AppComp = window[detected];
+                }
               }
               
               if (AppComp) {
-                ReactDOM.createRoot(document.getElementById('root')).render(<AppComp />);
+                console.log("Rendering App component...");
+                const root = ReactDOM.createRoot(rootElement);
+                root.render(React.createElement(AppComp));
+                console.log("Manifestation complete.");
               } else {
-                throw new Error("No App component found in the built code.");
+                throw new Error("No architectural anchor (App component) manifested. Ensure your code defines 'export default function App() {}' or a global 'App' function.");
               }
             } catch (err) {
-              console.error(err);
-              document.getElementById('root').innerHTML = \`<div class="error-container"><b>Execution Failure</b><br/>\${err.message}</div>\`;
+              reportError(err.message, err.stack);
             }
           })();
         </script>

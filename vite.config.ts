@@ -19,6 +19,18 @@ export default defineConfig(({mode}) => {
         '@': path.resolve(__dirname, '.'),
       },
     },
+    optimizeDeps: {
+      exclude: [
+        'lucide-react', 
+        'motion', 
+        'motion/react', 
+        'framer-motion', 
+        '@google/genai',
+        'three',
+        '@react-three/fiber',
+        '@react-three/drei'
+      ],
+    },
     server: {
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
       // Do not modifyâfile watching is disabled to prevent flickering during agent edits.
