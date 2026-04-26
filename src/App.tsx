@@ -42,6 +42,7 @@ import {
   CircleUser
 } from "lucide-react";
 import { User } from "firebase/auth";
+import { GoogleGenAI } from "@google/genai";
 import { 
   collection, 
   onSnapshot, 
