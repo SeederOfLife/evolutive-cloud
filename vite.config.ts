@@ -17,17 +17,14 @@ export default defineConfig(({mode}) => {
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),
+        'use-sync-external-store/shim/with-selector': 'use-sync-external-store/shim/with-selector.js',
       },
     },
     optimizeDeps: {
-      force: true,
-      include: [
-        'react', 
-        'react-dom', 
-        'lucide-react', 
-        'motion/react',
-        'use-sync-external-store/shim/with-selector'
-      ],
+      include: ['use-sync-external-store/shim/with-selector'],
+    },
+    commonjsOptions: {
+      transformMixedEsModules: true,
     },
     server: {
       // HMR is disabled in AI Studio via DISABLE_HMR env var.

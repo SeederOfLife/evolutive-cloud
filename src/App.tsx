@@ -786,12 +786,15 @@ export default function App() {
         Task: Modify the original code based on the new feedback.
         Complexity Level: Professional / High Complexity.
         Available Libraries:
-        - window.React (useState, useEffect, etc.)
-        - window.Motion (Framer Motion: use "motion" and "AnimatePresence" directly from scope. DO NOT redeclare them.)
-        - window.Recharts (Standard charts available in scope: LineChart, BarChart, ResponsiveContainer, etc. DO NOT redeclare them.)
-        - window.d3 (d3 available in scope.)
-        - window.confetti (confetti available in scope.)
-        - window.lucide (React Icons: Use like <Zap />, <Activity />, etc. Pre-destructured from window.lucide.)
+        - window.React (Standard hooks: useState, useEffect, etc. are available. DO NOT import React.)
+        - window.Motion (Framer Motion: use "motion" and "AnimatePresence" directly from global scope. DO NOT redeclare them.)
+        - window.Recharts (Standard charts available: LineChart, BarChart, AreaChart, PieChart, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer.)
+        - window.lucide (React Icons: Use standard components like <Zap />, <Activity />, <Check />, etc. They are pre-imported into your scope.)
+
+        Design Guidance:
+        - Return ONLY the function body for a component named "App".
+        - Use Tailwind CSS for 100% of styling.
+        - Ensure all icons used are valid Lucide icons.
 
         Design Guidance:
         - Create professional, polished UI patterns (dashboards, landing pages, interactive labs).

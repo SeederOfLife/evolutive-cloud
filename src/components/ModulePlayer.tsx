@@ -110,12 +110,12 @@ export function ModulePlayer({
       <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <script crossorigin="anonymous" src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-        <script crossorigin="anonymous" src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+        <script crossorigin="anonymous" src="https://unpkg.com/react@18.2.0/umd/react.production.min.js"></script>
+        <script crossorigin="anonymous" src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
         <script crossorigin="anonymous" src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
         <script src="https://cdn.tailwindcss.com"></script>
-        <script crossorigin="anonymous" src="https://unpkg.com/lucide-react@0.453.0/dist/umd/lucide-react.js"></script>
-        <script crossorigin="anonymous" src="https://unpkg.com/framer-motion@11.11.11/dist/framer-motion.js"></script>
+        <script crossorigin="anonymous" src="https://unpkg.com/lucide-react@0.453.0/dist/umd/lucide-react.min.js"></script>
+        <script crossorigin="anonymous" src="https://unpkg.com/framer-motion@10.16.4/dist/framer-motion.js"></script>
         <script crossorigin="anonymous" src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"></script>
         <script crossorigin="anonymous" src="https://unpkg.com/d3@7"></script>
         <script crossorigin="anonymous" src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.170.0/three.min.js"></script>
@@ -210,6 +210,8 @@ export function ModulePlayer({
               Object.keys(LucideReact).forEach(key => { 
                 if (typeof LucideReact[key] === 'function' || typeof LucideReact[key] === 'object') {
                   window[key] = LucideReact[key]; 
+                  // Also expose lowercase version if AI uses it (less common but safe)
+                  if (!window[key.toLowerCase()]) window[key.toLowerCase()] = LucideReact[key];
                 }
               });
               
@@ -245,7 +247,7 @@ export function ModulePlayer({
               await new Promise(r => setTimeout(r, 50));
 
               console.log("Locating App component...");
-              let AppComp = window.App || window.__BUILT_APP__ || window.Main || window.BuiltApp;
+              let AppComp = window.__BUILT_APP__ || window.App || window.Main || window.BuiltApp;
               
               if (!AppComp || typeof AppComp !== 'function') {
                 if (window.exports && typeof window.exports.default === 'function') {
@@ -259,15 +261,16 @@ export function ModulePlayer({
                 }
               }
 
+              // Final detection heuristic
               if (!AppComp || typeof AppComp !== 'function') {
                 const detected = Object.keys(window).find(k => 
                   /^[A-Z]/.test(k) && 
                   typeof window[k] === 'function' && 
-                  !['React', 'ReactDOM', 'Recharts', 'Motion', 'LucideReact', 'Babel', 'THREE', 'Icon'].includes(k) &&
+                  !['React', 'ReactDOM', 'Recharts', 'Motion', 'LucideReact', 'Babel', 'THREE', 'Icon', 'AppComp'].includes(k) &&
                   !k.startsWith('_')
                 );
                 if (detected) {
-                  console.log("Detected possible component:", detected);
+                  console.log("Detected possible component via heuristic:", detected);
                   AppComp = window[detected];
                 }
               }
