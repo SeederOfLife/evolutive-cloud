@@ -100,6 +100,31 @@ export default function App() {
   const [viewMode, setViewMode] = useState<'all' | 'mine'>('all');
   const [isInitializing, setIsInitializing] = useState(true);
   const [isManifesting, setIsManifesting] = useState(false);
+  // Expose libraries to window for ModulePlayer
+  useEffect(() => {
+    const w = window as any;
+    w.React = React;
+    w.ReactDOM = {
+      createRoot: (container: HTMLElement) => (window as any).ReactDOMClient.createRoot(container),
+      render: (element: any, container: HTMLElement) => {
+        const root = (window as any).ReactDOMClient.createRoot(container);
+        root.render(element);
+      }
+    };
+    // Note: We need to import the client version of ReactDOM for modern React
+    import('react-dom/client').then(m => {
+      w.ReactDOMClient = m;
+    });
+    
+    w.Motion = { motion, AnimatePresence };
+    w.LucideReact = { 
+      ChevronUp, MessageSquare, Plus, X, Search, Activity, Database, Zap, Play, Eye, Code, 
+      Sparkles, Loader2, Users, Lock, Unlock, History, MessageCircle, RefreshCw, Info, 
+      Trash2, GitBranch, Box, Layout, DraftingCompass, LogOut, ShieldCheck, Key, Cpu, Globe, CircleUser 
+    };
+    w.THREE = THREE;
+  }, []);
+
   const [diagnostics, setDiagnostics] = useState({
     synapses: 4096,
     connectivity: 99.8,

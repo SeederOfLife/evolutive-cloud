@@ -20,16 +20,7 @@ export default defineConfig(({mode}) => {
       },
     },
     optimizeDeps: {
-      exclude: [
-        'lucide-react', 
-        'motion', 
-        'motion/react', 
-        'framer-motion', 
-        '@google/genai',
-        'three',
-        '@react-three/fiber',
-        '@react-three/drei'
-      ],
+      include: ['use-sync-external-store/shim/with-selector'],
     },
     server: {
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
