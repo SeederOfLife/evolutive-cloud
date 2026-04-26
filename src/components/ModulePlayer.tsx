@@ -60,8 +60,8 @@ export function ModulePlayer({
     if (!code) return "";
     let processed = code.replace(/import\s+[\s\S]*?from\s+(['"]).*?\1;?/g, '');
     processed = processed.replace(/import\s+(['"]).*?\1;?/g, '');
-    processed = processed.replace(/export\s+default\s+function\s+([a-zA-Z0-9_$]+)/g, 'function $1');
-    processed = processed.replace(/export\s+default\s+class\s+([a-zA-Z0-9_$]+)/g, 'class $1');
+    processed = processed.replace(/export\s+default\s+function\s+([a-zA-Z0-9_$]+)/g, 'window.__BUILT_APP__ = function $1');
+    processed = processed.replace(/export\s+default\s+class\s+([a-zA-Z0-9_$]+)/g, 'window.__BUILT_APP__ = class $1');
     processed = processed.replace(/export\s+default\s+([a-zA-Z0-9_$]+);?/g, 'window.__BUILT_APP__ = $1;');
     if (processed.includes('export default')) {
        processed = processed.replace(/export\s+default\s+/g, 'window.__BUILT_APP__ = ');
@@ -153,6 +153,9 @@ export function ModulePlayer({
         <div id="root"></div>
         <script>
           (async function() {
+            // Save initial window keys to filter later
+            const initialKeys = new Set(Object.keys(window));
+            
             const rootElement = document.getElementById('root');
             const reportError = (msg, stack) => {
               console.error("Evolution Error:", msg, stack);
@@ -228,8 +231,6 @@ export function ModulePlayer({
 
               try {
                 console.log("Transpiling logic...");
-                console.log("Script Body Length:", scriptBody.length);
-                
                 const transpiled = Babel.transform(scriptBody, { 
                   presets: ['env', 'react', 'typescript'],
                   filename: 'built-app.tsx'
@@ -264,9 +265,11 @@ export function ModulePlayer({
               // Final detection heuristic
               if (!AppComp || typeof AppComp !== 'function') {
                 const detected = Object.keys(window).find(k => 
+                  !initialKeys.has(k) &&
                   /^[A-Z]/.test(k) && 
                   typeof window[k] === 'function' && 
                   !['React', 'ReactDOM', 'Recharts', 'Motion', 'LucideReact', 'Babel', 'THREE', 'Icon', 'AppComp'].includes(k) &&
+                  !LucideReact[k] &&
                   !k.startsWith('_')
                 );
                 if (detected) {
@@ -287,6 +290,7 @@ export function ModulePlayer({
               reportError(err.message, err.stack);
             }
           })();
+
         </script>
       </body>
     </html>
