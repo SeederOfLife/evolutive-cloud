@@ -42,6 +42,56 @@ import {
   CircleUser
 } from "lucide-react";
 import { User } from "firebase/auth";
+import OpenAI from "openai";
+import * as webllm from "@mlc-ai/web-llm";
+
+
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId?: string | null;
+    email?: string | null;
+    emailVerified?: boolean | null;
+    isAnonymous?: boolean | null;
+    tenantId?: string | null;
+    providerInfo?: {
+      providerId?: string | null;
+      email?: string | null;
+    }[];
+  }
+}
+
+const handleFirestoreError = (error: unknown, operationType: OperationType, path: string | null, currentAuth: any) => {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: currentAuth?.currentUser?.uid,
+      email: currentAuth?.currentUser?.email,
+      emailVerified: currentAuth?.currentUser?.emailVerified,
+      isAnonymous: currentAuth?.currentUser?.isAnonymous,
+      tenantId: currentAuth?.currentUser?.tenantId,
+      providerInfo: currentAuth?.currentUser?.providerData?.map((provider: any) => ({
+        providerId: provider.providerId,
+        email: provider.email,
+      })) || []
+    },
+    operationType,
+    path
+  }
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+};
 import { GoogleGenAI } from "@google/genai";
 import { 
   collection, 
@@ -123,6 +173,8 @@ export default function App() {
   const [viewMode, setViewMode] = useState<'all' | 'mine'>('all');
   const [isInitializing, setIsInitializing] = useState(true);
   const [isManifesting, setIsManifesting] = useState(false);
+  const [isRateLimited, setIsRateLimited] = useState(false);
+  const [rateLimitCountdown, setRateLimitCountdown] = useState(0);
   // Expose libraries to window for ModulePlayer
   useEffect(() => {
     const w = window as any;
@@ -189,7 +241,9 @@ export default function App() {
     const providers: Record<string, string[]> = {
       google: ['gemini-3-flash-preview', 'gemini-3.1-pro-preview'],
       openai: ['gpt-4o', 'gpt-4o-mini', 'o1-preview'],
-      anthropic: ['claude-3-5-sonnet-20240620', 'claude-3-opus-20240229']
+      anthropic: ['claude-3-5-sonnet-20240620', 'claude-3-opus-20240229'],
+      'web-llm': ['Llama-3-8B-Instruct-v0.1-q4f32_1-MLC', 'Phi-3-mini-4k-instruct-q4f16_1-MLC', 'Gemma-2b-it-q4f16_1-MLC', 'Mistral-7B-Instruct-v0.2-q4f16_1-MLC'],
+      'gemini-nano': ['built-in']
     };
 
     if (providers[aiProvider] && !providers[aiProvider].includes(selectedModel)) {
@@ -413,122 +467,151 @@ export default function App() {
 
   // Unified AI Bridge
   const callUnifiedAI = async (prompt: string): Promise<string> => {
-    try {
-      const activeKey = providerKeys[aiProvider] || "";
-      const googleKey = providerKeys['google'] || (typeof process !== 'undefined' && process.env ? process.env.GEMINI_API_KEY : undefined);
-      
-      // Offline / Specialized Mobile Handlers
-      if (aiProvider === 'gemini-nano') {
-        const w = window as any;
-        if (!w.ai || !w.ai.assistant) {
-          throw new Error("Gemini Nano not detected. Ensure 'AI Test' is enabled in your Android Chrome flags (chrome://flags/#optimization-guide-on-device-model).");
-        }
-        const aiSession = await w.ai.assistant.create();
-        const result = await aiSession.prompt(prompt);
-        return result;
-      }
-
-      if (aiProvider === 'web-llm') {
-        if (!webLlmEngineRef.current) {
-          setWebLlmProgress("Wakeing AI Engine...");
-          const engine = new webllm.MLCEngine();
-          engine.setInitProgressCallback((report) => setWebLlmProgress(report.text));
-          await engine.reload(selectedModel || "Llama-3-8B-Instruct-v0.1-q4f32_1-MLC");
-          webLlmEngineRef.current = engine;
-        }
-        const response = await webLlmEngineRef.current.chat.completions.create({
-          messages: [{ role: "user", content: prompt }]
-        });
-        return response.choices[0].message.content || "";
-      }
-
-      if (aiProvider === 'mlc-mobile') {
-        const client = new OpenAI({
-          apiKey: "no-key",
-          baseURL: customEndpoint || "http://localhost:8080/v1",
-          dangerouslyAllowBrowser: true,
-        });
-        const response = await client.chat.completions.create({
-          model: selectedModel || "main",
-          messages: [{ role: "user", content: prompt }],
-        });
-        return response.choices[0].message.content || "";
-      }
-
-      if (!googleKey && aiProvider === 'google') throw new Error("No Google API Key Found.");
-      if (!activeKey && (aiProvider === 'openai' || aiProvider === 'anthropic' || aiProvider === 'custom')) {
-         if (aiProvider !== 'custom') throw new Error(`No ${aiProvider.toUpperCase()} Key Found.`);
-      }
-
-      if (aiProvider === 'google') {
-        const keyToUse = googleKey;
-        if (!keyToUse) throw new Error("No Google API Key Found. Ensure your API Key is set in the Account tab.");
+    const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+    
+    let retryCount = 0;
+    const maxRetries = 3;
+    
+    while (retryCount <= maxRetries) {
+      try {
+        const activeKey = providerKeys[aiProvider] || "";
+        const googleKey = process.env.GEMINI_API_KEY || providerKeys['google'];
         
-        const ai = new GoogleGenAI({ apiKey: keyToUse });
-        let modelId = selectedModel;
-        if (!modelId.startsWith('gemini-')) modelId = "gemini-3-flash-preview"; 
-        
-        const response = await ai.models.generateContent({
-          model: modelId,
-          contents: prompt,
-          config: {
-            temperature: aiConfig.temperature,
-            topP: aiConfig.topP,
-            topK: aiConfig.topK,
-            maxOutputTokens: aiConfig.maxTokens,
+        // Offline / Specialized Mobile Handlers
+        if (aiProvider === 'gemini-nano') {
+          const w = window as any;
+          if (!w.ai || !w.ai.assistant) {
+            throw new Error("Gemini Nano not detected. Ensure 'AI Test' is enabled in your Android Chrome flags (chrome://flags/#optimization-guide-on-device-model).");
           }
-        });
+          const aiSession = await w.ai.assistant.create();
+          const result = await aiSession.prompt(prompt);
+          return result;
+        }
 
-        const text = response.text;
-        if (!text) throw new Error("The AI Engine returned an empty response.");
-        return text;
-      }
-
-      if (aiProvider === 'openai' || aiProvider === 'custom') {
-        const client = new OpenAI({
-          apiKey: activeKey,
-          baseURL: aiProvider === 'custom' ? customEndpoint : undefined,
-          dangerouslyAllowBrowser: true,
-        });
-
-        const response = await client.chat.completions.create({
-          model: selectedModel,
-          messages: [{ role: "user", content: prompt }],
-          temperature: aiConfig.temperature,
-          top_p: aiConfig.topP,
-          max_tokens: aiConfig.maxTokens,
-        });
-        return response.choices[0].message.content || "";
-      }
-
-      if (aiProvider === 'anthropic') {
-        const response = await fetch("https://api.anthropic.com/v1/messages", {
-          method: "POST",
-          headers: {
-            "x-api-key": activeKey,
-            "anthropic-version": "2023-06-01",
-            "content-type": "application/json",
-            "anthropic-dangerous-direct-browser-access": "true"
-          },
-          body: JSON.stringify({
-            model: selectedModel,
-            max_tokens: 4096,
+        if (aiProvider === 'web-llm') {
+          if (!webLlmEngineRef.current) {
+            setWebLlmProgress("Wakeing AI Engine...");
+            const engine = new webllm.MLCEngine();
+            engine.setInitProgressCallback((report) => setWebLlmProgress(report.text));
+            await engine.reload(selectedModel || "Llama-3-8B-Instruct-v0.1-q4f32_1-MLC");
+            webLlmEngineRef.current = engine;
+          }
+          const response = await webLlmEngineRef.current.chat.completions.create({
             messages: [{ role: "user", content: prompt }]
-          })
-        });
-        const data = await response.json();
-        if (data.error) throw new Error(data.error.message);
-        return data.content[0].text;
-      }
+          });
+          return response.choices[0].message.content || "";
+        }
 
-      throw new Error("AI Provider Disconnected.");
-    } catch (err: any) {
-      const msg = err.message || String(err);
-      if (msg.includes('connection error') || msg.includes('Failed to fetch')) {
-        throw new Error(`[${aiProvider}] Connection failed. If using mobile local AI, ensure the bridge app is active. Otherwise check your internet.`);
+        if (aiProvider === 'mlc-mobile') {
+          const client = new OpenAI({
+            apiKey: "no-key",
+            baseURL: customEndpoint || "http://localhost:8080/v1",
+            dangerouslyAllowBrowser: true,
+          });
+          const response = await client.chat.completions.create({
+            model: selectedModel || "main",
+            messages: [{ role: "user", content: prompt }],
+          });
+          return response.choices[0].message.content || "";
+        }
+
+        if (!googleKey && aiProvider === 'google') throw new Error("No Google API Key Found.");
+        if (!activeKey && (aiProvider === 'openai' || aiProvider === 'anthropic' || aiProvider === 'custom')) {
+           if (aiProvider !== 'custom') throw new Error(`No ${aiProvider.toUpperCase()} Key Found.`);
+        }
+
+        if (aiProvider === 'google') {
+          const ai = new GoogleGenAI({ apiKey: googleKey || "" });
+          let modelId = selectedModel;
+          if (!modelId.startsWith('gemini-')) modelId = "gemini-3-flash-preview"; 
+          
+          try {
+            const response = await ai.models.generateContent({
+              model: modelId,
+              contents: prompt,
+              config: {
+                temperature: aiConfig.temperature,
+                topP: aiConfig.topP,
+                topK: aiConfig.topK,
+                maxOutputTokens: aiConfig.maxTokens,
+              }
+            });
+
+            const text = response.text;
+            if (!text) throw new Error("The AI Engine returned an empty response.");
+            setIsRateLimited(false);
+            setRateLimitCountdown(0);
+            return text;
+          } catch (err: any) {
+            // Check for rate limit error (429)
+            if (err?.message?.includes('429') || err?.status === 429) {
+              if (retryCount < maxRetries) {
+                retryCount++;
+                const waitTime = Math.pow(2, retryCount) * 1000 + Math.random() * 1000;
+                setIsRateLimited(true);
+                setRateLimitCountdown(Math.ceil(waitTime / 1000));
+                
+                // Countdown timer for UI
+                const timer = setInterval(() => {
+                  setRateLimitCountdown(prev => Math.max(0, prev - 1));
+                }, 1000);
+                
+                await sleep(waitTime);
+                clearInterval(timer);
+                continue; // Retry while loop
+              }
+            }
+            throw err;
+          }
+        }
+
+        if (aiProvider === 'openai' || aiProvider === 'custom') {
+          const client = new OpenAI({
+            apiKey: activeKey,
+            baseURL: aiProvider === 'custom' ? customEndpoint : undefined,
+            dangerouslyAllowBrowser: true,
+          });
+
+          const response = await client.chat.completions.create({
+            model: selectedModel,
+            messages: [{ role: "user", content: prompt }],
+            temperature: aiConfig.temperature,
+            top_p: aiConfig.topP,
+            max_tokens: aiConfig.maxTokens,
+          });
+          return response.choices[0].message.content || "";
+        }
+
+        if (aiProvider === 'anthropic') {
+          const response = await fetch("https://api.anthropic.com/v1/messages", {
+            method: "POST",
+            headers: {
+              "x-api-key": activeKey,
+              "anthropic-version": "2023-06-01",
+              "content-type": "application/json",
+              "anthropic-dangerous-direct-browser-access": "true"
+            },
+            body: JSON.stringify({
+              model: selectedModel,
+              max_tokens: 4096,
+              messages: [{ role: "user", content: prompt }]
+            })
+          });
+          const data = await response.json();
+          if (data.error) throw new Error(data.error.message);
+          return data.content[0].text;
+        }
+
+        throw new Error("AI Provider Disconnected.");
+      } catch (err: any) {
+        const msg = err.message || String(err);
+        if (msg.includes('connection error') || msg.includes('Failed to fetch')) {
+          throw new Error(`[${aiProvider}] Connection failed. If using mobile local AI, ensure the bridge app is active. Otherwise check your internet.`);
+        }
+        throw err;
       }
-      throw err;
     }
+    throw new Error("Failed to reach AI after multiple attempts.");
   };
 
   // Gemini AI Provider (Legacy/Internal)
@@ -681,12 +764,14 @@ export default function App() {
   }, [suggestions, searchQuery, filterType, user]);
 
   const neuralStatus = useMemo(() => {
+    if (webLlmProgress && (webLlmProgress.includes('Loading') || webLlmProgress.includes('fetching'))) return webLlmProgress.toUpperCase();
+    if (isRateLimited) return `RATE LIMITED (${rateLimitCountdown}s)`;
     if (isManifesting) return "MANIFESTING";
     if (isBuilding) return "SYNTHESIZING";
     if (isRefining) return "REFINING";
     if (isLoading) return "EXTRACTING";
     return "IDLE";
-  }, [isManifesting, isBuilding, isRefining, isLoading]);
+  }, [webLlmProgress, isRateLimited, rateLimitCountdown, isManifesting, isBuilding, isRefining, isLoading]);
 
   const handleRefine = async (suggestion: Suggestion, refinementPrompt: string) => {
     if (!refinementPrompt.trim() || isRefining) return;
@@ -884,7 +969,7 @@ export default function App() {
     try {
       await updateDoc(doc(db, 'suggestions', id), { votes: (currentVotes || 0) + 1 });
     } catch (err: any) {
-      console.error("Error casting vote:", err);
+      handleFirestoreError(err, OperationType.UPDATE, `suggestions/${id}`, auth);
     }
   };
 
