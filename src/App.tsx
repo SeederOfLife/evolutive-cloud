@@ -163,7 +163,7 @@ export default function App() {
     user_id: boolean
   }>({ pledged_by: true, built_code: true, energy: true, parent_id: true, version: true, user_id: true });
   const [isLoading, setIsLoading] = useState(false);
-  const [isBuilding, setIsBuilding] = useState<number | string | null>(null);
+  const [isBuilding, setIsBuilding] = useState<string | null>(null);
   const [activeModule, setActiveModule] = useState<Suggestion | null>(null);
   const [isRepoOpen, setIsRepoOpen] = useState(false);
   const [activeUsersCount, setActiveUsersCount] = useState(1);
@@ -175,6 +175,13 @@ export default function App() {
   const [isManifesting, setIsManifesting] = useState(false);
   const [isRateLimited, setIsRateLimited] = useState(false);
   const [rateLimitCountdown, setRateLimitCountdown] = useState(0);
+  const [forceCloud, setForceCloud] = useState(() => {
+    try {
+      return localStorage.getItem('app_force_cloud') === 'true';
+    } catch { return false; }
+  });
+  const [isTestingAI, setIsTestingAI] = useState(false);
+  const [testResponse, setTestResponse] = useState<string | null>(null);
   // Expose libraries to window for ModulePlayer
   useEffect(() => {
     const w = window as any;
@@ -255,6 +262,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('app_model', selectedModel);
   }, [selectedModel]);
+
+  useEffect(() => {
+    localStorage.setItem('app_force_cloud', forceCloud.toString());
+  }, [forceCloud]);
 
   const [providerKeys, setProviderKeys] = useState<Record<string, string>>(() => {
     try {
@@ -362,7 +373,7 @@ export default function App() {
   }, [apiQuota]);
   const [creatorId, setCreatorId] = useState<string | null>(null);
   const [advice, setAdvice] = useState<Advice[]>([]);
-  const [isRefining, setIsRefining] = useState<number | null>(null);
+  const [isRefining, setIsRefining] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterType, setFilterType] = useState<'all' | 'built' | 'pending' | 'mine'>('all');
   const [customEndpoint, setCustomEndpoint] = useState(() => {
@@ -488,8 +499,8 @@ export default function App() {
   };
 
   // Unified AI Bridge
-  const callUnifiedAI = async (prompt: string, forceCloud = false): Promise<string> => {
-    if (forceCloud) {
+  const callUnifiedAI = async (prompt: string, force = forceCloud): Promise<string> => {
+    if (force) {
       return await callGeminiCloud(prompt);
     }
 
@@ -812,7 +823,7 @@ export default function App() {
 
   const handleRefine = async (suggestion: Suggestion, refinementPrompt: string) => {
     if (!refinementPrompt.trim() || isRefining) return;
-    setIsRefining(suggestion.id as any);
+    setIsRefining(suggestion.id);
     
     try {
       const prompt = `
@@ -966,7 +977,7 @@ export default function App() {
 
     const rawInput = input.trim();
     setInput("");
-    setIsBuilding(0);
+    setIsBuilding("MANIFESTING");
     setIsManifesting(true);
     
     try {
@@ -1010,6 +1021,20 @@ export default function App() {
     }
   };
 
+  const handleTestNeuralLink = async () => {
+    if (isTestingAI) return;
+    setIsTestingAI(true);
+    setTestResponse(null);
+    try {
+      const response = await callUnifiedAI("Respond with: 'Neural Link Active. Ready for evolution.' and nothing else.");
+      setTestResponse(response);
+    } catch (err: any) {
+      setTestResponse(`LINK ERROR: ${err.message}`);
+    } finally {
+      setIsTestingAI(false);
+    }
+  };
+
   const handlePledge = async (s: Suggestion) => {
     setIsManifesting(true);
     const key = userApiKey || (isCreator ? process.env.GEMINI_API_KEY : null);
@@ -1031,7 +1056,7 @@ export default function App() {
     const shouldBuild = newEnergy >= 100;
 
     try {
-      setIsRefining(s.id as any);
+      setIsRefining(s.id);
       const newPledgedBy = hasPledged ? pledgedBy : [...pledgedBy, user.uid];
       
       let builtCode = s.built_code;
@@ -1482,7 +1507,7 @@ export default function App() {
                 )}
                 {displaySuggestions
                   .filter(s => s.status === 'built')
-                  .sort((a, b) => b.id - a.id)
+                  .sort((a, b) => b.id.localeCompare(a.id))
                   .map((s) => {
                     let title = s.content;
                     if (s.content.startsWith('JSON:')) {
@@ -2028,7 +2053,17 @@ export default function App() {
                             <h4 className="text-[10px] font-black uppercase tracking-[4px] text-white">AI Hub</h4>
                             <p className="text-[8px] text-white/30 uppercase tracking-widest font-medium">Switch & Monitor System Integrations</p>
                           </div>
-                          <div className="flex gap-2">
+                          <div className="flex gap-2 items-center">
+                            <button 
+                              onClick={() => setForceCloud(!forceCloud)}
+                              className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-[8px] font-black uppercase tracking-widest transition-all ${
+                                forceCloud ? 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30' : 'bg-white/5 text-white/20 border-white/5'
+                              }`}
+                              title="Force Cloud Fallback"
+                            >
+                              <Globe className="w-3 h-3" />
+                              {forceCloud ? 'Cloud Primary' : 'Local First'}
+                            </button>
                             {(['google', 'openai', 'anthropic', 'custom', 'web-llm', 'gemini-nano', 'mlc-mobile'] as const).map((p) => (
                               <button
                                 key={p}
@@ -2108,6 +2143,47 @@ export default function App() {
                               >
                                 Synchronize Key
                               </button>
+                              <button 
+                                onClick={handleTestNeuralLink}
+                                disabled={isTestingAI}
+                                className={`w-full py-4 mt-6 flex items-center justify-center gap-3 rounded-2xl border transition-all font-black uppercase tracking-[3px] text-[10px] ${
+                                  isTestingAI ? 'bg-white/5 border-white/5 text-white/20 animate-pulse' : 'bg-indigo-500 text-white border-indigo-600 hover:bg-indigo-600 hover:scale-[1.02] active:scale-95 shadow-[0_10px_20px_rgba(79,70,229,0.3)]'
+                                }`}
+                              >
+                                {isTestingAI ? (
+                                  <>
+                                    <RefreshCw className="w-4 h-4 animate-spin" />
+                                    <span>Testing Neural Link...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Sparkles className="w-4 h-4" />
+                                    <span>Initiate Neural Test</span>
+                                  </>
+                                )}
+                              </button>
+
+                              {testResponse && (
+                                <motion.div 
+                                  initial={{ opacity: 0, y: 10 }}
+                                  animate={{ opacity: 1, y: 0 }}
+                                  className={`mt-4 p-4 rounded-xl border font-mono text-[9px] uppercase tracking-wider leading-relaxed ${
+                                    testResponse.includes('ERROR') ? 'bg-pink-500/10 border-pink-500/20 text-pink-400' : 'bg-green-500/10 border-green-500/20 text-green-400'
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-2 mb-2 opacity-50">
+                                    <Info className="w-3 h-3" />
+                                    <span>Neural Response:</span>
+                                    <button 
+                                      onClick={() => setTestResponse(null)}
+                                      className="ml-auto hover:text-white"
+                                    >
+                                      <X className="w-3 h-3" />
+                                    </button>
+                                  </div>
+                                  {testResponse}
+                                </motion.div>
+                              )}
                             </div>
 
                             <div className="bg-black/20 p-6 rounded-[2rem] border border-white/5 space-y-4 group text-center md:text-left">
