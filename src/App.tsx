@@ -591,6 +591,7 @@ export default function App() {
         addDoc(collection(db, "suggestions"), {
           content: JSON.stringify(config),
           status: 'system_config',
+          user_id: user.uid,
           created_at: new Date().toISOString()
         });
       }
