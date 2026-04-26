@@ -476,26 +476,40 @@ export default function App() {
     return { title: "New Member", color: "#94a3b8", level: 0 };
   }, [suggestions, user]);
 
-  // Cloud Fallback Helper
+  // Cloud Fallback Helper - Uses server-side proxy for security
   const callGeminiCloud = async (prompt: string): Promise<string> => {
-    const googleKey = process.env.GEMINI_API_KEY || providerKeys['google'];
-    if (!googleKey) throw new Error("No Google API Key found for fallback.");
-    
-    const ai = new GoogleGenAI({ apiKey: googleKey });
-    let modelId = "gemini-3.1-pro-preview"; // High capability fallback
-    
-    const response = await ai.models.generateContent({
-      model: modelId,
-      contents: prompt,
-      config: {
-        temperature: 0.7,
-        maxOutputTokens: 2048,
-      }
-    });
+    try {
+      const response = await fetch("/api/neural-link", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          prompt,
+          model: "gemini-3.1-pro-preview" 
+        })
+      });
 
-    const text = response.text;
-    if (!text) throw new Error("Cloud fallback returned empty response.");
-    return text;
+      const data = await response.json();
+      
+      if (!response.ok) {
+        // If server fallback fails because of missing key, check if we have a local user key
+        if (data.error?.includes("Missing") || response.status === 400) {
+          const userGoogleKey = providerKeys['google'];
+          if (userGoogleKey) {
+            // Internal direct fallback for user-provided key if server lacks one
+            const ai = new GoogleGenAI({ apiKey: userGoogleKey });
+            const model = ai.getGenerativeModel({ model: "gemini-3.1-pro-preview" });
+            const result = await model.generateContent(prompt);
+            return result.response.text();
+          }
+        }
+        throw new Error(data.error || JSON.stringify(data));
+      }
+
+      return data.text;
+    } catch (err: any) {
+      console.error("Cloud Fallback Failure:", err);
+      throw new Error(`Cloud neural link failed: ${err.message}`);
+    }
   };
 
   // Unified AI Bridge
