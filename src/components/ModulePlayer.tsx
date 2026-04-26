@@ -58,8 +58,8 @@ export function ModulePlayer({
 
   const cleanCode = useMemo(() => {
     if (!code) return "";
-    let processed = code.replace(/import\s+[\s\S]*?from\s+['"].*?['"];?/g, '');
-    processed = processed.replace(/import\s+['"].*?['"];?/g, '');
+    let processed = code.replace(/import\s+[\s\S]*?from\s+(['"]).*?\1;?/g, '');
+    processed = processed.replace(/import\s+(['"]).*?\1;?/g, '');
     processed = processed.replace(/export\s+default\s+function\s+([a-zA-Z0-9_$]+)/g, 'function $1');
     processed = processed.replace(/export\s+default\s+class\s+([a-zA-Z0-9_$]+)/g, 'class $1');
     processed = processed.replace(/export\s+default\s+([a-zA-Z0-9_$]+);?/g, 'window.__BUILT_APP__ = $1;');
@@ -110,17 +110,16 @@ export function ModulePlayer({
       <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-        <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-        <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+        <script crossorigin="anonymous" src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+        <script crossorigin="anonymous" src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+        <script crossorigin="anonymous" src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
         <script src="https://cdn.tailwindcss.com"></script>
-        <script src="https://unpkg.com/lucide@latest"></script>
-        <script src="https://unpkg.com/lucide-react@latest/dist/umd/lucide-react.js"></script>
-        <script src="https://unpkg.com/framer-motion@10.16.4/dist/framer-motion.js"></script>
-        <script src="https://unpkg.com/recharts/umd/Recharts.min.js"></script>
-        <script src="https://unpkg.com/d3@7"></script>
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.170.0/three.min.js"></script>
-        <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+        <script crossorigin="anonymous" src="https://unpkg.com/lucide-react@0.453.0/dist/umd/lucide-react.js"></script>
+        <script crossorigin="anonymous" src="https://unpkg.com/framer-motion@11.11.11/dist/framer-motion.js"></script>
+        <script crossorigin="anonymous" src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"></script>
+        <script crossorigin="anonymous" src="https://unpkg.com/d3@7"></script>
+        <script crossorigin="anonymous" src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.170.0/three.min.js"></script>
+        <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
         
         <style>
           body { 
@@ -190,11 +189,24 @@ export function ModulePlayer({
               const THREE = window.THREE;
               const Motion = window.Motion || window.framerMotion || {};
               
+              // Handle potential CommonJS output from Babel
+              window.exports = window.exports || {};
+              window.module = window.module || { exports: window.exports };
+
               // Map Framer Motion correctly
               window.motion = Motion.motion || Motion;
               window.AnimatePresence = Motion.AnimatePresence;
+              // Ensure window.Motion has the shape the AI expects
+              if (!window.Motion) window.Motion = { motion: window.motion, AnimatePresence: window.AnimatePresence };
 
-              // Expose Lucide icons globally
+              // Expose Recharts components globally
+              const Recharts = window.Recharts || {};
+              Object.keys(Recharts).forEach(key => {
+                window[key] = Recharts[key];
+              });
+
+              // Expose Lucide icons globally and via the alias the AI expects
+              window.lucide = LucideReact;
               Object.keys(LucideReact).forEach(key => { 
                 if (typeof LucideReact[key] === 'function' || typeof LucideReact[key] === 'object') {
                   window[key] = LucideReact[key]; 
@@ -234,7 +246,20 @@ export function ModulePlayer({
 
               console.log("Locating App component...");
               let AppComp = window.App || window.__BUILT_APP__ || window.Main || window.BuiltApp;
-              if (!AppComp) {
+              
+              if (!AppComp || typeof AppComp !== 'function') {
+                if (window.exports && typeof window.exports.default === 'function') {
+                  AppComp = window.exports.default;
+                } else if (window.module && window.module.exports) {
+                  if (typeof window.module.exports.default === 'function') {
+                    AppComp = window.module.exports.default;
+                  } else if (typeof window.module.exports === 'function') {
+                    AppComp = window.module.exports;
+                  }
+                }
+              }
+
+              if (!AppComp || typeof AppComp !== 'function') {
                 const detected = Object.keys(window).find(k => 
                   /^[A-Z]/.test(k) && 
                   typeof window[k] === 'function' && 

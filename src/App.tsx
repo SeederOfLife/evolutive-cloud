@@ -787,11 +787,11 @@ export default function App() {
         Complexity Level: Professional / High Complexity.
         Available Libraries:
         - window.React (useState, useEffect, etc.)
-        - window.Motion (for animations, use as 'motion')
-        - window.Recharts (for charts, use as 'Recharts.LineChart' etc.)
-        - window.d3 (for data viz)
-        - window.confetti (for effects)
-        - window.lucide (for icons, initialize via lucide.createIcons or similar if needed, or assume SVG standard)
+        - window.Motion (Framer Motion: use "motion" and "AnimatePresence" directly from scope. DO NOT redeclare them.)
+        - window.Recharts (Standard charts available in scope: LineChart, BarChart, ResponsiveContainer, etc. DO NOT redeclare them.)
+        - window.d3 (d3 available in scope.)
+        - window.confetti (confetti available in scope.)
+        - window.lucide (React Icons: Use like <Zap />, <Activity />, etc. Pre-destructured from window.lucide.)
 
         Design Guidance:
         - Create professional, polished UI patterns (dashboards, landing pages, interactive labs).
@@ -1111,7 +1111,7 @@ export default function App() {
       if (shouldBuild && s.status === 'pending') {
         const prompt = `Create a functional, professional React component titled "App" for this idea: ${s.content}. 
         Use Tailwind CSS. Return ONLY the code, no markdown wrappers. Include animations using framer-motion (window.Motion). 
-        Assume you have access to: window.React, window.Motion, window.Recharts, window.d3, window.confetti, window.lucide.`;
+        Assume you have access to: window.React, window.Motion, window.Recharts, window.d3, window.confetti, window.lucide (React icons).`;
         
         const result = await callUnifiedAI(prompt);
         builtCode = result.replace(/```jsx|```tsx|```javascript|```/g, '').trim();
