@@ -491,18 +491,25 @@ export default function App() {
       const data = await response.json();
       
       if (!response.ok) {
-        // If server fallback fails because of missing key, check if we have a local user key
-        if (data.error?.includes("Missing") || response.status === 400) {
+        // If server fallback fails because of mission key or invalid key, attempt user key fallback
+        if (data.error === "SYSTEM_KEY_MISSING" || data.error === "NEURAL_NODE_ERROR" || [400, 401, 403].includes(response.status)) {
           const userGoogleKey = providerKeys['google'];
           if (userGoogleKey) {
-            // Internal direct fallback for user-provided key if server lacks one
+            console.log("Cloud link restricted, switching to user neural key...");
             const ai = new GoogleGenAI({ apiKey: userGoogleKey });
-            const model = ai.getGenerativeModel({ model: "gemini-3.1-pro-preview" });
-            const result = await model.generateContent(prompt);
-            return result.response.text();
+            const result = await ai.models.generateContent({
+              model: "gemini-3.1-pro-preview",
+              contents: prompt
+            });
+            return result.text;
           }
+          
+          if (data.error === "SYSTEM_KEY_MISSING") {
+             throw new Error("System Cloud Key missing. Enable the Neural Hub and provide a Google API Key.");
+          }
+          throw new Error(data.message || "Neural link denied. Check your API Hub credentials.");
         }
-        throw new Error(data.error || JSON.stringify(data));
+        throw new Error(data.message || "Unknown neural link protocol error.");
       }
 
       return data.text;
@@ -826,7 +833,11 @@ export default function App() {
   }, [suggestions, searchQuery, filterType, user]);
 
   const neuralStatus = useMemo(() => {
-    if (webLlmProgress && (webLlmProgress.includes('Loading') || webLlmProgress.includes('fetching'))) return webLlmProgress.toUpperCase();
+    if (webLlmProgress && (webLlmProgress.includes('Loading') || webLlmProgress.includes('fetching'))) {
+      const match = webLlmProgress.match(/\[(\d+)\/(\d+)\]/);
+      if (match) return `SYNCING NEURAL PATHS (${match[1]}/${match[2]})`;
+      return "INITIALIZING LOCAL AI";
+    }
     if (isRateLimited) return `RATE LIMITED (${rateLimitCountdown}s)`;
     if (isManifesting) return "MANIFESTING";
     if (isBuilding) return "SYNTHESIZING";
@@ -1042,6 +1053,8 @@ export default function App() {
     try {
       const response = await callUnifiedAI("Respond with: 'Neural Link Active. Ready for evolution.' and nothing else.");
       setTestResponse(response);
+      // Auto-clear success message after 8 seconds
+      setTimeout(() => setTestResponse(prev => prev === response ? null : prev), 8000);
     } catch (err: any) {
       setTestResponse(`LINK ERROR: ${err.message}`);
     } finally {
@@ -1364,19 +1377,47 @@ export default function App() {
       {/* --- HUD LAYER --- */}
       <div className="fixed top-0 left-0 right-0 z-[100] px-6 py-4 flex items-center justify-between pointer-events-none">
         <div className="flex items-center gap-4 pointer-events-auto">
-          <div className="w-10 h-10 bg-indigo-500 rounded-full flex items-center justify-center shadow-[0_0_20px_rgba(99,102,241,0.4)]">
-             <Activity className="w-5 h-5 text-white animate-pulse" />
+          <div className="w-10 h-10 bg-white/5 border border-white/10 rounded-xl flex items-center justify-center backdrop-blur-md group hover:border-indigo-500/30 transition-colors">
+             <Activity className="w-5 h-5 text-indigo-400 group-hover:scale-110 transition-transform" />
           </div>
-          <div className="hidden md:block">
-            <h1 className="text-[10px] font-black uppercase tracking-[4px] text-white">Engine_Manifest</h1>
-            <div className="flex items-center gap-2">
-               <div className={`w-1.5 h-1.5 rounded-full ${neuralStatus !== 'IDLE' ? 'bg-green-500 animate-pulse' : 'bg-white/20'}`} />
-               <span className="text-[8px] font-mono text-white/40 uppercase tracking-widest">{neuralStatus}</span>
+          <div className="hidden md:flex flex-col">
+            <h1 className="text-[10px] font-black uppercase tracking-[4px] text-white/50">Engine_Manifest</h1>
+            <div className="flex items-center gap-3 mt-0.5">
+               <div className="flex items-center gap-1.5">
+                  <div className={`w-1.5 h-1.5 rounded-full ${neuralStatus !== 'IDLE' ? 'bg-green-500 animate-pulse' : 'bg-white/20'}`} />
+                  <span className="text-[8px] font-mono text-white/40 uppercase tracking-widest">{neuralStatus}</span>
+               </div>
+               
+               <div className="h-2 w-[1px] bg-white/5" />
+               
+               <div className="flex items-center gap-1.5 text-[8px] font-mono text-indigo-400/60 uppercase tracking-widest group cursor-help">
+                  <Users className="w-3 h-3 opacity-50" />
+                  <span className="group-hover:text-white transition-colors">{activeUsersCount} </span>
+               </div>
+               
+               <div className="h-2 w-[1px] bg-white/5" />
+               
+               <div className="flex items-center gap-1.5 text-[8px] font-mono text-green-500/40 uppercase tracking-widest">
+                  <Database className="w-3 h-3 opacity-50" />
+                  <span>SYNCED</span>
+               </div>
             </div>
           </div>
         </div>
 
         <div className="flex items-center gap-3 pointer-events-auto">
+          {isCreator && (
+            <button 
+              onClick={handleToggleFinalize}
+              className={`px-4 py-2 rounded-full border flex items-center gap-2 transition-all backdrop-blur-md shadow-lg group ${
+                isFinalized ? 'bg-green-500/5 border-green-500/20 text-green-500/60 hover:bg-green-500/10' : 'bg-yellow-500/5 border-yellow-500/20 text-yellow-500/60 hover:bg-yellow-500/10'
+              }`}
+            >
+              {isFinalized ? <Unlock className="w-3 h-3 group-hover:rotate-12 transition-transform" /> : <Lock className="w-3 h-3 group-hover:-rotate-12 transition-transform" />}
+              <span className="text-[9px] font-black uppercase tracking-widest">{isFinalized ? "COLLECTIVE" : "CREATOR MODE"}</span>
+            </button>
+          )}
+
           {neuralStatus !== 'IDLE' && (
             <motion.div 
               initial={{ opacity: 0, scale: 0.9 }}
@@ -1430,45 +1471,7 @@ export default function App() {
         })}
       </div>
 
-      <header className="absolute top-6 left-6 md:top-10 md:left-10 z-10 pointer-events-none">
-        <h1 className="text-[32px] md:text-[64px] font-[900] tracking-[-1px] md:tracking-[-2px] leading-[0.9] text-white/15 uppercase">
-          EVOLUTIONARY<br />HUB
-        </h1>
-            <div className="mt-2 flex flex-col gap-1 md:gap-2">
-          <div className="text-[8px] md:text-[11px] tracking-[2px] md:tracking-[4px] text-indigo-400 uppercase font-bold">
-            Evolutionary Hub . Online
-          </div>
-          <div className="flex flex-wrap items-center gap-2 md:gap-3">
-            <div className="flex items-center gap-1 text-[8px] md:text-[9px] text-white/40 uppercase tracking-widest font-mono">
-              <Activity className="w-2 md:w-3 h-2 md:h-3" />
-              <span>{isOpen ? "Open" : "Closed"}</span>
-            </div>
-            <div className="flex items-center gap-1 text-[8px] md:text-[9px] text-green-500/60 uppercase tracking-widest font-mono">
-              <Database className="w-2 md:w-3 h-2 md:h-3" />
-              <span>Synced</span>
-            </div>
-            <div className="flex items-center gap-1 text-[8px] md:text-[9px] text-indigo-400/80 uppercase tracking-widest font-mono">
-              <Users className="w-2 md:w-3 h-2 md:h-3" />
-              <span className="hidden sm:inline">Active:</span> <span>{activeUsersCount}</span>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      {/* --- HUD LAYER --- */}
-      <div className="absolute top-6 right-20 md:top-10 md:left-10 md:right-auto z-20 flex flex-col gap-4">
-        {isCreator && (
-          <button 
-            onClick={handleToggleFinalize}
-            className={`w-12 h-12 rounded-full border flex items-center justify-center transition-all shadow-xl backdrop-blur-md pointer-events-auto ${
-              isFinalized ? 'bg-green-500/20 border-green-500 text-green-500' : 'bg-yellow-500/20 border-yellow-500 text-yellow-500'
-            }`}
-            title={isFinalized ? "Collective Mode Active" : "Creator Mode Active"}
-          >
-            {isFinalized ? <Unlock className="w-5 h-5" /> : <Lock className="w-5 h-5" />}
-          </button>
-        )}
-      </div>
+      {/* --- CONTENT LAYER --- */}
 
       {/* --- RIGHT SIDEBAR TOGGLE --- */}
       <div className="absolute top-1/2 -translate-y-1/2 right-2 md:right-4 z-40">
@@ -1649,7 +1652,7 @@ export default function App() {
                   <div className="flex items-center gap-2 md:gap-3 px-3 md:px-4 py-1.5 md:py-2 bg-white/5 rounded-full border border-white/10">
                     <div className={`w-1.5 md:w-2 h-1.5 md:h-2 rounded-full ${isFinalized ? 'bg-green-500 animate-pulse' : 'bg-yellow-500'}`} />
                     <span className="text-[8px] md:text-[10px] font-black text-white/60 tracking-widest uppercase">
-                      {isFinalized ? 'Community' : 'Creator'}
+                      {isFinalized ? 'COMMUNITY' : 'CREATOR'}
                     </span>
                   </div>
 
@@ -1703,7 +1706,7 @@ export default function App() {
 
                   {/* Explorer Header */}
                   <div className="hidden md:grid grid-cols-[1fr_120px_100px_160px] gap-4 px-6 py-3 border-b border-white/10 text-[10px] uppercase tracking-[0.2em] font-black text-white/30 mb-4">
-                    <div className="flex items-center gap-2 italic"><Box className="w-3 h-3" /> Idea / Application</div>
+                    <div className="flex items-center gap-2"><Box className="w-3 h-3" /> Idea / Application</div>
                     <div className="text-center">Complexity</div>
                     <div className="text-center">Status</div>
                     <div className="text-right">Operations</div>
@@ -1739,11 +1742,11 @@ export default function App() {
                               <div className="text-[8px] md:text-[10px] text-white/20 uppercase tracking-widest mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
                                 <span className={isApp ? 'text-indigo-500' : ''}>#{s.id}</span> 
                                 <span className="hidden md:inline w-1 h-1 rounded-full bg-white/10" />
-                                <span>{isApp ? `Version v${s.version || 1}` : 'Proposal Draft'}</span>
+                                <span>{isApp ? `VERSION V${s.version || 1}` : 'PROPOSAL DRAFT'}</span>
                                 {(s.pledged_by || []).length > 0 && (
                                   <>
                                     <span className="w-1 h-1 rounded-full bg-white/10" />
-                                    <span className="flex items-center gap-1 text-yellow-500/50"><Zap className="w-2 md:w-2.5 h-2 md:h-2.5 fill-current" /> Supported</span>
+                                    <span className="flex items-center gap-1 text-yellow-500/50"><Zap className="w-2 md:w-2.5 h-2 md:h-2.5 fill-current" /> SUPPORTED</span>
                                   </>
                                 )}
                               </div>
@@ -1771,7 +1774,7 @@ export default function App() {
                                ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' 
                                : 'bg-white/5 text-white/30 border-white/10'
                              }`}>
-                               {s.status}
+                               {s.status.toUpperCase()}
                              </div>
                           </div>
 
@@ -1829,7 +1832,7 @@ export default function App() {
                                       <Sparkles className="w-3.5 md:w-4 h-3.5 md:h-4" />
                                     )}
                                     <span className="text-[9px] font-black uppercase tracking-widest">
-                                      {isRefining === s.id || isBuilding === s.id ? 'Manifesting...' : isCreator ? 'Manifest Now' : 'Power-Up'}
+                                      {isRefining === s.id || isBuilding === s.id ? 'Manifesting...' : isCreator ? 'MANIFEST NOW' : 'Power-Up'}
                                     </span>
 
                                     {(isRefining === s.id || isBuilding === s.id) && (
@@ -1856,7 +1859,7 @@ export default function App() {
                                   {s.user_id === user?.uid && (
                                     <div className="px-3 py-2 bg-indigo-500/10 border border-indigo-500/20 rounded-lg flex items-center gap-1.5" title="This is your creation">
                                       <CircleUser className="w-3 h-3 text-indigo-400" />
-                                      <span className="text-[8px] font-black uppercase text-indigo-400 tracking-wider">Me</span>
+                                      <span className="text-[8px] font-black uppercase text-indigo-400 tracking-wider">ME</span>
                                     </div>
                                   )}
                                   <button 
@@ -2062,34 +2065,45 @@ export default function App() {
                       </div>
 
                       <div className="bg-white/[0.03] p-4 md:p-8 rounded-[2rem] md:rounded-[3rem] border border-white/5 space-y-8 text-left">
-                        <div className="flex items-center justify-between border-b border-white/5 pb-4">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-white/5 pb-4 gap-4">
                           <div className="space-y-1">
-                            <h4 className="text-[10px] font-black uppercase tracking-[4px] text-white">AI Hub</h4>
-                            <p className="text-[8px] text-white/30 uppercase tracking-widest font-medium">Switch & Monitor System Integrations</p>
+                            <h4 className="text-[10px] font-black uppercase tracking-[4px] text-white">Neural Hub</h4>
+                            <p className="text-[7px] text-white/30 uppercase tracking-widest font-medium">Control AI Engines & Online Bridges</p>
                           </div>
-                          <div className="flex gap-2 items-center">
-                            <button 
-                              onClick={() => setForceCloud(!forceCloud)}
-                              className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-[8px] font-black uppercase tracking-widest transition-all ${
-                                forceCloud ? 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30' : 'bg-white/5 text-white/20 border-white/5'
-                              }`}
-                              title="Force Cloud Fallback"
-                            >
-                              <Globe className="w-3 h-3" />
-                              {forceCloud ? 'Cloud Primary' : 'Local First'}
-                            </button>
-                            {(['google', 'openai', 'anthropic', 'custom', 'web-llm', 'gemini-nano', 'mlc-mobile'] as const).map((p) => (
-                              <button
-                                key={p}
-                                onClick={() => setAiProvider(p)}
-                                className={`w-3 h-3 rounded-full transition-all flex items-center justify-center relative ${aiProvider === p ? 'bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.5)] scale-125' : 'bg-white/10 hover:bg-white/20'}`}
-                                title={p.toUpperCase()}
+                          <div className="flex flex-wrap gap-2 items-center justify-center md:justify-end">
+                            <div className="flex bg-white/5 rounded-full p-1 border border-white/5 h-fit">
+                              <button 
+                                onClick={() => setForceCloud(false)}
+                                className={`px-2 py-1 rounded-full text-[7px] font-black uppercase tracking-tighter transition-all ${
+                                  !forceCloud ? 'bg-indigo-500 text-white shadow-lg' : 'text-white/40 hover:text-white'
+                                }`}
                               >
-                                {providerHealth[p]?.status === 'online' && (
-                                   <div className="absolute -top-1 -right-1 w-1.5 h-1.5 bg-green-500 rounded-full border border-[#050510]" />
-                                )}
+                                Local First
                               </button>
-                            ))}
+                              <button 
+                                onClick={() => setForceCloud(true)}
+                                className={`px-2 py-1 rounded-full text-[7px] font-black uppercase tracking-tighter transition-all ${
+                                  forceCloud ? 'bg-indigo-500 text-white shadow-lg' : 'text-white/40 hover:text-white'
+                                }`}
+                              >
+                                Cloud Primary
+                              </button>
+                            </div>
+                            <div className="h-4 w-[1px] bg-white/10 mx-1 hidden md:block" />
+                            <div className="flex gap-1.5 p-1 bg-black/20 rounded-full border border-white/5">
+                              {(['google', 'openai', 'anthropic', 'custom', 'web-llm', 'gemini-nano', 'mlc-mobile'] as const).map((p) => (
+                                <button
+                                  key={p}
+                                  onClick={() => setAiProvider(p)}
+                                  className={`w-4 h-4 rounded-full transition-all flex items-center justify-center relative ${aiProvider === p ? 'bg-indigo-500 ring-2 ring-indigo-500/20 scale-110 shadow-lg' : 'bg-white/5 hover:bg-white/10'}`}
+                                  title={p.toUpperCase()}
+                                >
+                                  {providerHealth[p]?.status === 'online' && (
+                                     <div className="absolute -top-0.5 -right-0.5 w-1 h-1 bg-green-500 rounded-full" />
+                                  )}
+                                </button>
+                              ))}
+                            </div>
                           </div>
                         </div>
 
@@ -2138,25 +2152,43 @@ export default function App() {
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div className="bg-black/20 p-6 rounded-[2rem] border border-white/5 space-y-4 group text-center md:text-left">
                               <div className="flex items-center justify-between">
-                                <label className="text-[9px] font-black uppercase tracking-[3px] text-white/40 group-focus-within:text-indigo-400 transition-colors">Energy Secret</label>
+                                <label className="text-[9px] font-black uppercase tracking-[3px] text-white/40 group-focus-within:text-indigo-400 transition-colors">
+                                  {aiProvider === 'web-llm' || aiProvider === 'gemini-nano' ? 'Hardware Engine' : 'Energy Secret'}
+                                </label>
                                 <Lock className="w-3 h-3 text-white/10" />
                               </div>
-                              <div className="relative">
-                                <Key className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/10 group-focus-within:text-indigo-400 transition-colors" />
-                                <input 
-                                  type="password" 
-                                  placeholder="Identity Token Required"
-                                  value={userApiKey}
-                                  onChange={(e) => saveApiKeyToAccount(e.target.value)}
-                                  className="w-full bg-black/40 border border-white/5 rounded-2xl py-4 pl-12 pr-4 text-[11px] text-white outline-none focus:border-indigo-500/30 transition-all font-mono"
-                                />
-                              </div>
-                              <button 
-                                onClick={() => saveApiKeyToAccount(userApiKey)}
-                                className="w-full py-3 bg-white/5 hover:bg-white hover:text-black text-[8px] font-black uppercase tracking-widest rounded-xl transition-all border border-white/5"
-                              >
-                                Synchronize Key
-                              </button>
+                              
+                              {aiProvider === 'web-llm' || aiProvider === 'gemini-nano' ? (
+                                <div className="p-4 bg-indigo-500/5 border border-indigo-500/20 rounded-2xl">
+                                  <div className="flex items-center gap-3 mb-2">
+                                    <Cpu className="w-4 h-4 text-indigo-400 animate-pulse" />
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-indigo-400">On-Device Mode</span>
+                                  </div>
+                                  <p className="text-[8px] text-white/40 leading-relaxed uppercase tracking-widest">
+                                    {aiProvider === 'web-llm' ? 'Utilizing WebGPU for local execution. No API keys required.' : 'Utilizing Chrome Built-in AI. Ensure optimization-guide-on-device-model is enabled.'}
+                                  </p>
+                                </div>
+                              ) : (
+                                <div className="relative">
+                                  <Key className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/10 group-focus-within:text-indigo-400 transition-colors" />
+                                  <input 
+                                    type="password" 
+                                    placeholder="Identity Token Required"
+                                    value={userApiKey}
+                                    onChange={(e) => saveApiKeyToAccount(e.target.value)}
+                                    className="w-full bg-black/40 border border-white/5 rounded-2xl py-4 pl-12 pr-4 text-[11px] text-white outline-none focus:border-indigo-500/30 transition-all font-mono"
+                                  />
+                                </div>
+                              )}
+
+                              {!(aiProvider === 'web-llm' || aiProvider === 'gemini-nano') && (
+                                <button 
+                                  onClick={() => saveApiKeyToAccount(userApiKey)}
+                                  className="w-full py-3 bg-white/5 hover:bg-white hover:text-black text-[8px] font-black uppercase tracking-widest rounded-xl transition-all border border-white/5"
+                                >
+                                  Synchronize Key
+                                </button>
+                              )}
                               <button 
                                 onClick={handleTestNeuralLink}
                                 disabled={isTestingAI}

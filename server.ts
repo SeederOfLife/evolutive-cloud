@@ -22,12 +22,14 @@ async function startServer() {
       const { prompt, model = "gemini-3.1-pro-preview" } = req.body;
       const apiKey = process.env.GEMINI_API_KEY;
       
-      if (!apiKey) {
-        return res.status(500).json({ error: "System Secret Missing: GEMINI_API_KEY is not defined in the environment." });
+      if (!apiKey || apiKey === 'undefined') {
+        return res.status(401).json({ 
+          error: "SYSTEM_KEY_MISSING", 
+          message: "The server-side GEMINI_API_KEY is not configured. Please provide a key in the AI Hub (Google slot) to enable Neural Link Cloud features." 
+        });
       }
 
-      // Check for user-provided key in headers if needed (optional implementation)
-      
+      // Use the official endpoint format
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -43,8 +45,13 @@ async function startServer() {
       const data = await response.json();
       
       if (!response.ok) {
-        console.error("Neural Link Error:", data);
-        return res.status(response.status).json(data);
+        const errorMessage = data.error?.message || data.message || "Unknown Neural Node Error";
+        console.error(`Neural Link Node Failure [${response.status}]:`, errorMessage);
+        return res.status(response.status).json({ 
+          error: "NEURAL_NODE_ERROR", 
+          message: errorMessage,
+          details: data.error || data
+        });
       }
 
       const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
