@@ -6,7 +6,7 @@ export interface EvolutionVersion {
 }
 
 export interface Suggestion {
-  id: number;
+  id: string;
   content: string;
   votes: number;
   energy: number; // 0 to 100
@@ -15,7 +15,7 @@ export interface Suggestion {
   built_code?: string;
   created_at?: string;
   pledged_by?: string[]; // user ids
-  parent_id?: number | null; // For refinement iterations
+  parent_id?: string | null; // For refinement iterations
   version?: number;
   is_deleted?: boolean;
   history?: EvolutionVersion[];
@@ -31,8 +31,8 @@ export interface AIConfig {
 }
 
 export interface Advice {
-  id: number;
-  suggestion_id: number;
+  id: string;
+  suggestion_id: string;
   user_id: string;
   user_email: string;
   content: string;

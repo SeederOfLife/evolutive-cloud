@@ -41,11 +41,33 @@ import {
   Globe,
   CircleUser
 } from "lucide-react";
-import { supabase } from "./lib/supabase";
-import { GoogleGenAI } from "@google/genai";
-import OpenAI from "openai";
-import * as webllm from "@mlc-ai/web-llm";
-import { User, Session } from "@supabase/supabase-js";
+import { User } from "firebase/auth";
+import { 
+  collection, 
+  onSnapshot, 
+  query, 
+  orderBy, 
+  addDoc, 
+  updateDoc, 
+  doc, 
+  deleteDoc, 
+  setDoc, 
+  getDoc, 
+  where,
+  limit,
+  serverTimestamp,
+  Timestamp,
+  getDocs
+} from "firebase/firestore";
+import { 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword, 
+  signOut, 
+  onAuthStateChanged,
+  signInWithPopup,
+  GoogleAuthProvider
+} from "firebase/auth";
+import { auth, db } from "./lib/firebase";
 import { 
   Suggestion, 
   Advice, 
@@ -147,7 +169,7 @@ export default function App() {
   const isSyncing = useRef(false);
 
   // Identity State
-  const [session, setSession] = useState<Session | null>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   
   const [selectedModel, setSelectedModel] = useState(() => {
@@ -222,20 +244,15 @@ export default function App() {
 
   // Sync Profile on Auth
   useEffect(() => {
-    if (!session || !supabase) return;
+    if (!user) return;
 
-    if (!supabase) return;
     const fetchProfile = async () => {
       try {
-        const { data, error } = await supabase
-          .from('user_profiles')
-          .select('*')
-          .eq('id', session.user.id)
-          .maybeSingle();
+        const docRef = doc(db, 'user_profiles', user.uid);
+        const docSnap = await getDoc(docRef);
 
-        if (error) return;
-
-        if (data) {
+        if (docSnap.exists()) {
+          const data = docSnap.data() as UserProfile;
           setUserProfile(data);
           if (data.personal_api_key) {
              try {
@@ -243,13 +260,12 @@ export default function App() {
                 setProviderKeys(prev => ({ ...prev, ...cloudKeys }));
                 localStorage.setItem('app_hub_keys', JSON.stringify({ ...providerKeys, ...cloudKeys }));
              } catch {
-                // If it's a legacy single string key
-                setProviderKeys(prev => ({ ...prev, google: data.personal_api_key }));
+                setProviderKeys(prev => ({ ...prev, google: data.personal_api_key as string }));
                 localStorage.setItem('app_hub_keys', JSON.stringify({ ...providerKeys, google: data.personal_api_key }));
              }
           }
         } else {
-          await supabase.from('user_profiles').insert([{ id: session.user.id }]);
+          await setDoc(docRef, { id: user.uid });
         }
       } catch (e) {
         console.error("Profile sync catch:", e);
@@ -257,7 +273,7 @@ export default function App() {
     };
 
     fetchProfile();
-  }, [session, supabase]);
+  }, [user]);
 
   const saveApiKeyToAccount = async (key: string, provider: string = aiProvider) => {
     const newKeys = { ...providerKeys, [provider]: key };
@@ -265,9 +281,9 @@ export default function App() {
     localStorage.setItem('app_hub_keys', JSON.stringify(newKeys));
     if (provider === 'google') localStorage.setItem('evolutive_energy_key', key);
 
-    if (session && supabase) {
+    if (user) {
       try {
-        await supabase.from('user_profiles').update({ personal_api_key: JSON.stringify(newKeys) }).eq('id', session.user.id);
+        await updateDoc(doc(db, 'user_profiles', user.uid), { personal_api_key: JSON.stringify(newKeys) });
       } catch (e) {
         console.error("Error syncing API key:", e);
       }
@@ -376,14 +392,14 @@ export default function App() {
   // Derive ghosts from presence
   const ghosts = useMemo(() => {
     return Object.entries(presenceData)
-      .filter(([id]) => id !== session?.user?.id)
+      .filter(([id]) => id !== user?.uid)
       .flatMap(([_, instances]) => Object.values(instances))
       .filter((p: any) => p.x !== undefined && p.y !== undefined);
-  }, [presenceData, session]);
+  }, [presenceData, user]);
 
   const appRank = useMemo(() => {
-    if (!session?.user?.id) return { title: "Guest", color: "#ffffff", level: 0 };
-    const myCreations = suggestions.filter(s => s.user_id === session.user.id);
+    if (!user?.uid) return { title: "Guest", color: "#ffffff", level: 0 };
+    const myCreations = suggestions.filter(s => s.user_id === user.uid);
     const builds = myCreations.filter(s => s.status === 'built').length;
     const totalVotes = myCreations.reduce((acc, curr) => acc + (curr.votes || 0), 0);
     
@@ -392,7 +408,7 @@ export default function App() {
     if (totalVotes >= 10) return { title: "Idea Master", color: "#f59e0b", level: 2 };
     if (myCreations.length >= 1) return { title: "Junior Builder", color: "#10b981", level: 1 };
     return { title: "New Member", color: "#94a3b8", level: 0 };
-  }, [suggestions, session]);
+  }, [suggestions, user]);
 
   // Unified AI Bridge
   const callUnifiedAI = async (prompt: string): Promise<string> => {
@@ -406,8 +422,8 @@ export default function App() {
         if (!w.ai || !w.ai.assistant) {
           throw new Error("Gemini Nano not detected. Ensure 'AI Test' is enabled in your Android Chrome flags (chrome://flags/#optimization-guide-on-device-model).");
         }
-        const session = await w.ai.assistant.create();
-        const result = await session.prompt(prompt);
+        const aiSession = await w.ai.assistant.create();
+        const result = await aiSession.prompt(prompt);
         return result;
       }
 
@@ -525,25 +541,17 @@ export default function App() {
 
   // Auth Session Listener
   useEffect(() => {
-    if (!supabase) return;
-
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      if (!session) {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      if (!currentUser) {
         setProviderKeys({});
         localStorage.removeItem('app_nexus_keys');
         localStorage.removeItem('evolutive_energy_key');
+        setUserProfile(null);
       }
     });
 
-    return () => {
-      subscription.unsubscribe();
-    };
+    return () => unsubscribe();
   }, []);
 
   const [initStatus, setInitStatus] = useState<string>("Connecting to System Network...");
@@ -552,188 +560,94 @@ export default function App() {
   useEffect(() => {
     let mounted = true;
     
-    const syncProject = async () => {
-      if (isSyncing.current) return;
-      isSyncing.current = true;
+    setInitStatus("Synchronizing Registry...");
 
-      try {
-        if (!supabase) return;
-        
-        setInitStatus("Synchronizing Registry...");
-        const { data, error } = await supabase.from('suggestions').select('*').eq('status', 'system_config').maybeSingle();
-        
-        if (error) {
-          console.error("SyncProject Query Error:", error);
-          return;
-        }
-
-        if (data) {
+    // Real-time suggestions listener
+    const qSuggestions = query(collection(db, "suggestions"), orderBy("votes", "desc"));
+    const unsubSuggestions = onSnapshot(qSuggestions, (snapshot) => {
+      const newSuggestions: Suggestion[] = [];
+      let foundConfig = false;
+      snapshot.forEach(docSnap => {
+        const s = { id: docSnap.id, ...docSnap.data() } as Suggestion;
+        if (s.status === 'system_config') {
+          foundConfig = true;
           try {
-            const config = JSON.parse(data.content || "{}") as ProjectConfig;
+            const config = JSON.parse(s.content || "{}") as ProjectConfig;
             setIsFinalized(!!config.is_finalized);
-            if (!config.creator_id && session?.user?.id) {
-              config.creator_id = session.user.id;
-              await supabase.from('suggestions').update({ content: JSON.stringify(config) }).eq('id', data.id);
-            }
             setCreatorId(config.creator_id || "");
-          } catch (e) {
-            console.error("Config Parse Error:", e);
-          }
-        } else if (session?.user?.id) {
-          setCreatorId(session.user.id);
-          const config: ProjectConfig = {
-            creator_id: session.user.id,
-            is_finalized: false,
-            project_name: "Initial Phase"
-          };
-          await supabase.from('suggestions').insert([{
-            content: JSON.stringify(config),
-            status: 'system_config'
-          }]);
+          } catch(e) {}
+        } else {
+          newSuggestions.push(unwrapSuggestion(s));
         }
-      } catch (err) {
-        console.error("SyncProject Global Exception:", err);
-      } finally {
-        isSyncing.current = false;
+      });
+
+      // If no config found and user is logged in, create one
+      if (!foundConfig && user?.uid && mounted) {
+        const config: ProjectConfig = {
+          creator_id: user.uid,
+          is_finalized: false,
+          project_name: "Initial Phase"
+        };
+        addDoc(collection(db, "suggestions"), {
+          content: JSON.stringify(config),
+          status: 'system_config',
+          created_at: new Date().toISOString()
+        });
       }
+
+      setSuggestions(newSuggestions);
+      setInitStatus("System Link Established.");
+      setIsInitializing(false);
+    }, (error) => {
+      console.error("Firestore sync error:", error);
+      setInitStatus("Sync Interrupted. Retrying Link...");
+    });
+
+    // Real-time messages listener
+    const qMessages = query(collection(db, "system_messages"), orderBy("createdAt", "desc"), limit(20));
+    const unsubMessages = onSnapshot(qMessages, (snapshot) => {
+      const messages: SystemMessage[] = [];
+      snapshot.forEach(docSnap => messages.push({ id: docSnap.id, ...docSnap.data() } as SystemMessage));
+      setSystemMessages(messages.slice(0, 10));
+    });
+
+    // Real-time advice listener
+    const qAdvice = query(collection(db, "advice"), orderBy("created_at", "asc"));
+    const unsubAdvice = onSnapshot(qAdvice, (snapshot) => {
+      const newAdvice: Advice[] = [];
+      snapshot.forEach(docSnap => newAdvice.push({ id: docSnap.id, ...docSnap.data() } as Advice));
+      setAdvice(newAdvice);
+    });
+
+    // Presence simulation
+    const interval = setInterval(() => {
+      setSystemMessages(prev => prev.filter(e => Date.now() - e.createdAt < 15000));
+    }, 5000);
+
+    return () => {
+      mounted = false;
+      unsubSuggestions();
+      unsubMessages();
+      unsubAdvice();
+      clearInterval(interval);
     };
-
-    const init = async () => {
-      console.log("Starting Initialization sequence...");
-      
-      const safetyTimeout = setTimeout(() => {
-        if (mounted) {
-          console.warn("Initialization safety threshold reached. Forcing interface boot.");
-          setIsInitializing(false);
-        }
-      }, 4000);
-
-      if (!supabase) {
-        setInitStatus("Supabase Matrix Off-Bridge. Offline Mode Active.");
-        setTimeout(() => {
-          if (mounted) {
-            clearTimeout(safetyTimeout);
-            setIsInitializing(false);
-          }
-        }, 1200);
-        return;
-      }
-
-      try {
-        setInitStatus("Synchronizing with Global Registry...");
-        await Promise.all([
-          fetchSuggestions().catch(e => console.error("Suggestions sync failure:", e)),
-          syncProject().catch(e => console.error("Registry config failure:", e))
-        ]);
-        
-        setInitStatus("System Link Established.");
-      } catch (err) {
-        console.error("Initialization sequence interrupted:", err);
-        setInitStatus("Sync Interrupted. Retrying Link...");
-      } finally {
-        if (mounted) {
-          clearTimeout(safetyTimeout);
-          setTimeout(() => setIsInitializing(false), 800);
-        }
-      }
-    };
-
-    init();
-    
-    if (supabase) {
-      // Real-time listener for suggestions and presence and system messages
-      if (!channelRef.current) {
-        channelRef.current = supabase.channel('system-sync');
-
-        channelRef.current
-          .on(
-            'postgres_changes',
-            { event: '*', schema: 'public', table: 'suggestions' },
-            (payload: any) => {
-              if (payload.eventType === 'INSERT') {
-                if (payload.new.status === 'system_config') {
-                  try {
-                    const config = JSON.parse(payload.new.content) as ProjectConfig;
-                    setIsFinalized(config.is_finalized);
-                    setCreatorId(config.creator_id);
-                  } catch(e) {}
-                } else {
-                  setSuggestions(current => [...current, payload.new as Suggestion].sort((a,b) => (b.votes || 0) - (a.votes || 0)));
-                }
-              } else if (payload.eventType === 'UPDATE') {
-                if (payload.new.status === 'system_config') {
-                  try {
-                    const config = JSON.parse(payload.new.content) as ProjectConfig;
-                    setIsFinalized(config.is_finalized);
-                  } catch(e) {}
-                } else {
-                  setSuggestions(current => current.map(s => s.id === payload.new.id ? { ...s, ...payload.new } : s).sort((a,b) => (b.votes || 0) - (a.votes || 0)));
-                }
-              } else if (payload.eventType === 'DELETE') {
-                setSuggestions(current => current.filter(s => s.id !== payload.old.id));
-              }
-            }
-          )
-          .on('presence', { event: 'sync' }, () => {
-            const state = channelRef.current.presenceState();
-            setPresenceData(state);
-            setActiveUsersCount(Object.keys(state).length);
-          })
-          .on('broadcast', { event: 'message' }, ({ payload }: any) => {
-            setSystemMessages(prev => [...prev, payload].slice(-10));
-          })
-          .on('broadcast', { event: 'advice' }, ({ payload }: any) => {
-            setAdvice(prev => [...prev, payload]);
-          })
-          .subscribe(async (status: string) => {
-            if (status === 'SUBSCRIBED') {
-              await channelRef.current.track({ 
-                online_at: new Date().toISOString(),
-                userId: session?.user.id || 'anonymous'
-              });
-            }
-          });
-      }
-
-      // Clear old messages
-      const interval = setInterval(() => {
-        setSystemMessages(prev => prev.filter(e => Date.now() - e.createdAt < 5000));
-      }, 1000);
-
-      const handleMouseMove = (e: MouseEvent) => {
-        if (channelRef.current) {
-          channelRef.current.track({
-            online_at: new Date().toISOString(),
-            userId: session?.user.id || 'anonymous',
-            x: e.clientX,
-            y: e.clientY
-          });
-        }
-      };
-
-      window.addEventListener('mousemove', handleMouseMove);
-
-      return () => {
-        mounted = false;
-        if (channelRef.current) {
-          supabase.removeChannel(channelRef.current);
-          channelRef.current = null;
-        }
-        clearInterval(interval);
-        window.removeEventListener('mousemove', handleMouseMove);
-      };
-    }
-  }, [session?.user?.id]); // Only reconfirm project sync if user changes
+  }, [user?.uid]);
 
   const handleToggleFinalize = async () => {
-    if (!supabase || session?.user.id !== creatorId) return;
+    if (!user || user.uid !== creatorId) return;
     const newFinalized = !isFinalized;
     
-    const { data: configRecord } = await supabase.from('suggestions').select('*').eq('status', 'system_config').single();
-    if (configRecord) {
-      const config = JSON.parse(configRecord.content) as ProjectConfig;
-      config.is_finalized = newFinalized;
-      await supabase.from('suggestions').update({ content: JSON.stringify(config) }).eq('id', configRecord.id);
+    try {
+      const q = query(collection(db, "suggestions"), where("status", "==", "system_config"), limit(1));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        const docRef = doc(db, "suggestions", snap.docs[0].id);
+        const config = JSON.parse(snap.docs[0].data().content || "{}") as ProjectConfig;
+        config.is_finalized = newFinalized;
+        await updateDoc(docRef, { content: JSON.stringify(config) });
+      }
+    } catch(e) {
+      console.error("Finalize error:", e);
     }
   };
 
@@ -758,11 +672,11 @@ export default function App() {
         let matchesCategory = true;
         if (filterType === 'built') matchesCategory = s.status === 'built';
         if (filterType === 'pending') matchesCategory = s.status === 'pending';
-        if (filterType === 'mine') matchesCategory = s.user_id === session?.user?.id;
+        if (filterType === 'mine') matchesCategory = s.user_id === user?.uid;
         
         return matchesSearch && matchesCategory;
       });
-  }, [suggestions, searchQuery, filterType, session]);
+  }, [suggestions, searchQuery, filterType, user]);
 
   const neuralStatus = useMemo(() => {
     if (isManifesting) return "MANIFESTING";
@@ -774,7 +688,7 @@ export default function App() {
 
   const handleRefine = async (suggestion: Suggestion, refinementPrompt: string) => {
     if (!refinementPrompt.trim() || isRefining) return;
-    setIsRefining(suggestion.id);
+    setIsRefining(suggestion.id as any);
     
     try {
       const prompt = `
@@ -821,46 +735,19 @@ export default function App() {
         throw new Error("The system returned an empty application structure. Try refining your request.");
       }
 
-      if (supabase) {
-        // Create a new version of the app
-        const insertData: any = { 
-          content: `Improved version of: ${suggestion.content} (${refinementPrompt})`,
-          status: 'built',
-          votes: 0,
-          energy: 100,
-          user_id: session?.user?.id || null
-        };
+      // Create a new version of the app
+      const insertData: any = { 
+        content: `Improved version of: ${suggestion.content} (${refinementPrompt})`,
+        status: 'built',
+        votes: 0,
+        energy: 100,
+        user_id: user?.uid || null,
+        built_code: generatedCode,
+        parent_id: suggestion.id,
+        created_at: new Date().toISOString()
+      };
 
-        if (dbFeatures.built_code) {
-          insertData.built_code = generatedCode;
-        } else {
-          insertData.content = 'JSON:' + JSON.stringify({
-            text: insertData.content,
-            status: insertData.status,
-            votes: insertData.votes,
-            energy: insertData.energy,
-            built_code: generatedCode
-          });
-        }
-
-        if (dbFeatures.parent_id) insertData.parent_id = suggestion.id;
-        // Don't assume version exists if not detected
-        // if (dbFeatures.version) insertData.version = (suggestion.version || 1) + 1;
-
-        await supabase
-          .from('suggestions')
-          .insert([insertData]);
-      } else {
-        setSuggestions([{ 
-          id: Date.now(), 
-          content: `Refinement of ${suggestion.id}`, 
-          votes: 0, 
-          energy: 100, 
-          status: 'built', 
-          built_code: generatedCode,
-          parent_id: suggestion.id 
-        }, ...suggestions]);
-      }
+      await addDoc(collection(db, 'suggestions'), insertData);
       setApiQuota(prev => Math.max(0, prev - 10));
     } catch (err) {
       console.error("Refinement failed:", err);
@@ -869,41 +756,31 @@ export default function App() {
     }
   };
 
-  const postAdvice = async (suggestionId: number, content: string) => {
-    if (!content.trim() || !session) return;
+  const postAdvice = async (suggestionId: string, content: string) => {
+    if (!content.trim() || !user) return;
     try {
-      // In a real app we might have an 'advice' table. 
-      // For this demo, we'll store it as a broadcast message if table isn't ready,
-      // or just simulate local state update for others.
-      // But let's try to use a broadcast event specifically for advice.
-    const channel = channelRef.current;
-    if (!channel) return;
-    
-    channel.send({
-      type: 'broadcast',
-      event: 'advice',
-      payload: {
-          suggestion_id: suggestionId,
-          user_email: session.user.email,
-          content: content,
-          created_at: new Date().toISOString()
-        }
+      await addDoc(collection(db, 'advice'), {
+        suggestion_id: suggestionId,
+        user_id: user.uid,
+        user_email: user.email,
+        content: content,
+        created_at: new Date().toISOString()
       });
     } catch (err) {
       console.error("Advice failed:", err);
     }
   };
 
-  const isCreator = !!session?.user?.id && (session.user.id === creatorId || !creatorId || creatorId === "");
+  const isCreator = !!user?.uid && (user.uid === creatorId || !creatorId || creatorId === "");
   const canSuggest = isFinalized || isCreator;
   const canInteract = isFinalized || isCreator;
   
   // Debug logging for permissions
   useEffect(() => {
-    if (session?.user?.id) {
-      console.log("Current Identity:", session.user.id, "Creator Identity:", creatorId, "isCreator:", isCreator);
+    if (user?.uid) {
+      console.log("Current Identity:", user.uid, "Creator Identity:", creatorId, "isCreator:", isCreator);
     }
-  }, [session, creatorId, isCreator]);
+  }, [user, creatorId, isCreator]);
   
   // Passive Quota Recharge
   useEffect(() => {
@@ -917,65 +794,24 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (session?.user?.id) {
+    if (user?.uid) {
        setFilterType('mine');
     }
-  }, [session]);
+  }, [user]);
 
-  const fetchSuggestions = async () => {
-    if (!supabase) {
-      setSuggestions([]);
-      return;
-    }
-
-    try {
-      setIsLoading(true);
-      const { data, error } = await supabase
-        .from('suggestions')
-        .select('*')
-        .order('votes', { ascending: false });
-
-      if (error) throw error;
-      if (data) {
-        const unwrapped = data.map(unwrapSuggestion);
-        setSuggestions(unwrapped);
-        if (data.length > 0) {
-          const columns = Object.keys(data[0]);
-          setDbFeatures({
-            pledged_by: columns.includes('pledged_by'),
-            built_code: columns.includes('built_code'),
-            energy: columns.includes('energy'),
-            parent_id: columns.includes('parent_id'),
-            version: columns.includes('version'),
-            user_id: columns.includes('user_id')
-          });
-          console.log("Database Schema:", columns);
-        }
-      }
-    } catch (err: any) {
-      console.error("Error fetching root memory:", err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  // fetchSuggestions is no longer needed as onSnapshot handles real-time updates.
 
   const handleEmailAuth = async () => {
-    if (!supabase) return;
     setAuthError(null);
     setIsLoading(true);
     try {
-      const { error } = isSignUp 
-        ? await supabase.auth.signUp({ email: authEmail, password: authPassword })
-        : await supabase.auth.signInWithPassword({ email: authEmail, password: authPassword });
-      
-      if (error) {
-        console.error("Auth Error:", error);
-        setAuthError(error.message);
+      if (isSignUp) {
+        await createUserWithEmailAndPassword(auth, authEmail, authPassword);
       } else {
-        console.log("Auth Success!");
-        setAuthEmail("");
-        setAuthPassword("");
+        await signInWithEmailAndPassword(auth, authEmail, authPassword);
       }
+      setAuthEmail("");
+      setAuthPassword("");
     } catch (err: any) {
       console.error("Auth Exception:", err);
       setAuthError(err.message);
@@ -985,16 +821,10 @@ export default function App() {
   };
 
   const handleGoogleAuth = async () => {
-    if (!supabase) return;
     setIsLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: window.location.origin
-        }
-      });
-      if (error) throw error;
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
     } catch (err: any) {
       console.error("Google Auth Error:", err);
       setAuthError(err.message);
@@ -1029,84 +859,56 @@ export default function App() {
         // We use the raw input if the AI refinement fails to prevent blocking the user
       }
 
-      if (!supabase) {
-        setSuggestions([{ id: Date.now(), content, votes: 0, energy: 0, status: "pending", user_id: session?.user?.id }, ...suggestions]);
-        setApiQuota(prev => Math.max(0, prev - 5));
-        return;
-      }
+      const insertData: any = { 
+        content,
+        status: 'pending',
+        votes: 0,
+        energy: 0,
+        user_id: user?.uid || null,
+        created_at: new Date().toISOString()
+      };
 
-      const suggestData: any = { content };
-      // Wrap in JSON if columns are missing
-      if (session?.user?.id) {
-        if (!dbFeatures.user_id || !dbFeatures.energy) {
-          suggestData.content = 'JSON:' + JSON.stringify({
-            text: content,
-            user_id: session.user.id,
-            energy: 0,
-            votes: 0
-          });
-        } else {
-          suggestData.user_id = session.user.id;
-        }
-      }
-
-      const { data, error } = await supabase
-        .from('suggestions')
-        .insert([suggestData])
-        .select();
-
-      if (error) throw error;
+      await addDoc(collection(db, 'suggestions'), insertData);
       setApiQuota(prev => Math.max(0, prev - 5));
-      if (data) {
-        setSuggestions([unwrapSuggestion(data[0]), ...suggestions]);
-      }
     } catch (err: any) {
       console.error("Error planting intent:", err);
-      const errorMsg = err.message || (typeof err === 'object' ? JSON.stringify(err) : String(err));
-      alert(`System Link Failure: ${errorMsg}`);
+      alert(`System Link Failure: ${err.message}`);
     } finally {
       setIsBuilding(null);
     }
   };
 
-  const handleVote = async (id: number, currentVotes: number) => {
-    if (!supabase) {
-      setSuggestions(suggestions.map(s => s.id === id ? { ...s, votes: s.votes + 1 } : s).sort((a,b) => b.votes-a.votes));
-      return;
-    }
+  const handleVote = async (id: string, currentVotes: number) => {
     try {
-      const { error } = await supabase.from('suggestions').update({ votes: currentVotes + 1 }).eq('id', id);
-      if (error) throw error;
-      // Real-time channel will handle the local state update
+      await updateDoc(doc(db, 'suggestions', id), { votes: (currentVotes || 0) + 1 });
     } catch (err: any) {
       console.error("Error casting vote:", err);
     }
   };
 
   const handlePledge = async (s: Suggestion) => {
-      setIsManifesting(true);
-      const key = userApiKey || (isCreator ? process.env.GEMINI_API_KEY : null);
-      if (!session || !key || !supabase) {
-        if (!key && !userApiKey) {
-          alert("Please set your API Key in the Account tab to power builds.");
-          setActiveTab('identity');
-        }
-        setIsManifesting(false);
-        return;
+    setIsManifesting(true);
+    const key = userApiKey || (isCreator ? process.env.GEMINI_API_KEY : null);
+    if (!user || !key) {
+      if (!key && !userApiKey) {
+        alert("Please set your API Key in the Account tab to power builds.");
+        setActiveTab('identity');
       }
+      setIsManifesting(false);
+      return;
+    }
     if (isRefining) return;
     
-    // Simplified data extraction from unwrapped suggestion
     const pledgedBy = s.pledged_by || [];
     const currentEnergy = s.energy || 0;
 
-    const hasPledged = pledgedBy.includes(session.user.id);
+    const hasPledged = pledgedBy.includes(user.uid);
     const newEnergy = Math.min(100, currentEnergy + (isCreator ? 100 : 25));
     const shouldBuild = newEnergy >= 100;
 
     try {
-      setIsRefining(s.id);
-      const newPledgedBy = hasPledged ? pledgedBy : [...pledgedBy, session.user.id];
+      setIsRefining(s.id as any);
+      const newPledgedBy = hasPledged ? pledgedBy : [...pledgedBy, user.uid];
       
       let builtCode = s.built_code;
       let newStatus = s.status;
@@ -1121,70 +923,42 @@ export default function App() {
         newStatus = 'built';
       }
 
-      const updateData: any = { status: newStatus };
-      if (builtCode && dbFeatures.built_code) updateData.built_code = builtCode;
+      const updateData: any = { 
+        status: newStatus,
+        energy: newEnergy,
+        pledged_by: newPledgedBy,
+        built_code: builtCode || ""
+      };
       
-      // Only include fields that exist in DB
-      if (dbFeatures.energy) updateData.energy = newEnergy;
-      if (dbFeatures.pledged_by) updateData.pledged_by = newPledgedBy;
-
-      // Wrap missing fields into content
-      if (!dbFeatures.energy || !dbFeatures.pledged_by || !dbFeatures.built_code) {
-        const meta = { text: s.content, energy: newEnergy, pledged_by: newPledgedBy, built_code: builtCode };
-        updateData.content = 'JSON:' + JSON.stringify(meta);
-      }
-      
-      const { error: updateError } = await supabase.from('suggestions').update(updateData).eq('id', s.id);
-      if (updateError) throw updateError;
+      await updateDoc(doc(db, 'suggestions', s.id), updateData);
       
       if (shouldBuild) {
         setApiQuota(prev => Math.max(0, prev - 10));
-        // Update local state for immediate launch
         const updatedS = { ...s, status: 'built' as const, built_code: builtCode };
-        setSuggestions(prev => prev.map(p => p.id === s.id ? updatedS : p));
         setActiveModule(updatedS);
       }
     } catch (err: any) {
       console.error("Error during build cycle:", err);
-      const errMsg = err.message || String(err);
-      alert(`The system bridge flickered: ${errMsg}\n\nPlease verify your API key and internet connection.`);
+      alert(`The system bridge flickered: ${err.message}`);
     } finally {
       setIsRefining(null);
       setIsManifesting(false);
     }
   };
 
-  const handleDeleteSuggestion = async (id: number) => {
-    if (!supabase) {
-      setSuggestions(suggestions.filter(s => s.id !== id));
-      return;
-    }
-    
+  const handleDeleteSuggestion = async (id: string) => {
     setIsLoading(true);
     try {
-      // Find the suggestion to check ownership again locally for safety
       const target = suggestions.find(s => s.id === id);
-      if (target && target.user_id && session?.user?.id && target.user_id !== session.user.id && !isCreator) {
+      if (target && target.user_id && user?.uid && target.user_id !== user.uid && !isCreator) {
         throw new Error("Ownership validation failed. You are not the creator of this module.");
       }
 
-      // Direct Hard Delete
-      const { error } = await supabase.from('suggestions').delete().eq('id', id);
-      
-      if (error) {
-        console.warn("Delete restriction encountered:", error.message);
-        // Fallback: try soft delete if delete is prohibited by RLS but update is allowed
-        const { error: updateError } = await supabase.from('suggestions').update({ status: 'deleted' }).eq('id', id);
-        if (updateError) {
-          throw new Error(`Insufficient Permissions: ${error.message}`);
-        }
-      }
-      
-      setSuggestions(prev => prev.filter(s => s.id !== id));
+      await updateDoc(doc(db, 'suggestions', id), { status: 'deleted', is_deleted: true });
       if (activeModule?.id === id) setActiveModule(null);
     } catch (err: any) {
       console.error("Deletion Error:", err);
-      alert(err.message || "Access Denied. Ensure you are signed in and own this project.");
+      alert(err.message || "Access Denied.");
     } finally {
       setIsLoading(false);
     }
@@ -1192,50 +966,41 @@ export default function App() {
 
   const sendMessage = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!messageInput.trim() || !supabase || !channelRef.current) return;
+    if (!messageInput.trim() || !user) return;
     
-    const newMessage: SystemMessage = {
-      id: Math.random().toString(36),
-      userId: session?.user.id || 'anonymous',
+    const newMessage: any = {
+      userId: user.uid,
       text: messageInput.trim(),
       x: Math.random() * window.innerWidth,
       y: Math.random() * window.innerHeight,
       createdAt: Date.now()
     };
 
-    channelRef.current.send({
-      type: 'broadcast',
-      event: 'message',
-      payload: newMessage
-    });
-
+    addDoc(collection(db, 'system_messages'), newMessage);
     setMessageInput("");
   };
 
   const initiateNewProject = async () => {
     const promptValue = prompt("What do you want to build in this new Evolutionary Workspace?");
-    if (!promptValue || !supabase) return;
+    if (!promptValue) return;
 
     try {
       setIsBuilding("new");
-      const { data: userData } = await supabase.auth.getUser();
       
       const newSuggestion = {
         content: promptValue,
         votes: 1,
         energy: 10,
         status: 'pending',
-        user_id: userData.user?.id,
-        built_code: ""
+        user_id: user?.uid || null,
+        built_code: "",
+        created_at: new Date().toISOString()
       };
 
-      const { data, error } = await supabase.from('suggestions').insert(newSuggestion).select().single();
-      if (error) throw error;
-
-      setSuggestions(prev => [data, ...prev]);
-      setActiveModule(data); // OPEN IMMEDIATELY
+      const docRef = await addDoc(collection(db, 'suggestions'), newSuggestion);
+      const data = { id: docRef.id, ...newSuggestion } as Suggestion;
       
-      // Auto-trigger first build
+      setActiveModule(data); // OPEN IMMEDIATELY
       await buildEvolution(data);
       
     } catch (err: any) {
@@ -1245,8 +1010,9 @@ export default function App() {
       setIsBuilding(null);
     }
   };
+
   const buildEvolution = async (suggestion: Suggestion) => {
-    if (isBuilding) return;
+    if (isBuilding && isBuilding !== suggestion.id) return;
     
     try {
       setIsBuilding(suggestion.id);
@@ -1296,7 +1062,6 @@ export default function App() {
       setIsManifesting(true);
       const text = await callUnifiedAI(prompt);
       
-      // Clean backticks and language identifiers meticulously
       let generatedCode = text
         .replace(/```[a-z]*\n?/gi, '')
         .replace(/```/g, '')
@@ -1306,36 +1071,19 @@ export default function App() {
         throw new Error("The system returned no code. Build failed.");
       }
 
-      if (supabase) {
-        const updateData: any = { status: 'built' };
-        
-        if (dbFeatures.built_code) {
-          updateData.built_code = generatedCode;
-        } else {
-          const meta = suggestion.content.startsWith('JSON:') ? JSON.parse(suggestion.content.substring(5)) : { text: suggestion.content };
-          meta.built_code = generatedCode;
-          meta.status = 'built';
-          updateData.content = 'JSON:' + JSON.stringify(meta);
-        }
-
-        const { error } = await supabase
-          .from('suggestions')
-          .update(updateData)
-          .eq('id', suggestion.id);
-        
-        if (error) throw error;
-      }
+      await updateDoc(doc(db, 'suggestions', suggestion.id), {
+        status: 'built',
+        built_code: generatedCode
+      });
 
       setApiQuota(prev => Math.max(0, prev - 15));
       const updatedSuggestion = { ...suggestion, status: 'built' as const, built_code: generatedCode };
-      setSuggestions(suggestions.map(s => s.id === suggestion.id ? updatedSuggestion : s));
       setActiveModule(updatedSuggestion);
       setIsManifesting(false);
 
     } catch (err: any) {
       console.error("Generation failure:", err);
-      const errMsg = err.message || String(err);
-      alert(`App build failed: ${errMsg}`);
+      alert(`App build failed: ${err.message}`);
     } finally {
       setIsBuilding(null);
       setIsManifesting(false);
@@ -1502,7 +1250,7 @@ export default function App() {
       <div className="fixed inset-0 pointer-events-none z-40">
         {Object.entries(presenceData).map(([key, presences]) => {
           const presence = (presences as any)[0];
-          if (!presence?.x || presence.userId === session?.user.id) return null;
+          if (!presence?.x || presence.userId === user?.uid) return null;
           return (
             <motion.div
               key={key}
@@ -1940,9 +1688,9 @@ export default function App() {
                               )
                             )}
 
-                            {(isCreator || (s.user_id && session?.user?.id && s.user_id === session.user.id)) && (
+                            {(isCreator || (s.user_id && user?.uid && s.user_id === user.uid)) && (
                                 <div className="flex gap-2">
-                                  {s.user_id === session?.user?.id && (
+                                  {s.user_id === user?.uid && (
                                     <div className="px-3 py-2 bg-indigo-500/10 border border-indigo-500/20 rounded-lg flex items-center gap-1.5" title="This is your creation">
                                       <CircleUser className="w-3 h-3 text-indigo-400" />
                                       <span className="text-[8px] font-black uppercase text-indigo-400 tracking-wider">Me</span>
@@ -1991,7 +1739,7 @@ export default function App() {
                 />
               ) : (
                 <div className="max-w-md mx-auto space-y-12 py-20">
-                  {!session ? (
+                  {!user ? (
                     <div className="text-center space-y-10">
                       <div className="w-24 h-24 bg-gradient-to-tr from-indigo-500 to-pink-500 rounded-full flex items-center justify-center mx-auto shadow-[0_0_50px_rgba(99,102,241,0.3)]">
                         <CircleUser className="w-10 h-10 text-white" />
@@ -2005,13 +1753,6 @@ export default function App() {
 
                       {/* Email Auth Form - Circular Buttons/Inputs */}
                       <div className="space-y-4 px-2">
-                        {!supabase && (
-                          <div className="p-4 bg-pink-500/10 border border-pink-500/30 rounded-2xl mb-4">
-                            <p className="text-[10px] text-pink-400 uppercase font-black tracking-widest leading-relaxed">
-                              Database Disconnected.<br/>Check your setup.
-                            </p>
-                          </div>
-                        )}
                         <input 
                           type="email"
                           placeholder="Email Address"
@@ -2062,24 +1803,7 @@ export default function App() {
                       </div>
 
                           <button 
-                            onClick={() => {
-                              supabase.auth.signInWithOAuth({ 
-                                provider: 'google',
-                                options: { 
-                                  redirectTo: window.location.origin,
-                                  skipBrowserRedirect: true, 
-                                }
-                              }).then(({ data, error }) => {
-                                if (error) setAuthError(error.message);
-                                if (data?.url) {
-                                  const authWindow = window.open(data.url, 'google_auth', 'width=600,height=700');
-                                  if (!authWindow) {
-                                    setAuthError("Please allow popups to sign in with Google.");
-                                  }
-                                }
-                              });
-                            }}
-                            disabled={!supabase}
+                            onClick={handleGoogleAuth}
                             className="w-full px-6 py-5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-[11px] font-black uppercase tracking-[4px] rounded-full hover:rotate-1 transition-all flex items-center justify-center gap-3 disabled:opacity-30"
                           >
                             Sign in with Google
@@ -2090,7 +1814,7 @@ export default function App() {
                       <div className="relative inline-block">
                         <div className="w-24 h-24 rounded-full overflow-hidden mx-auto border-4 border-indigo-500/50 shadow-[0_0_30px_rgba(99,102,241,0.3)] relative z-10 bg-black">
                           <img 
-                            src={session.user.user_metadata.avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${session.user.email}`} 
+                            src={user.photoURL || `https://api.dicebear.com/7.x/bottts/svg?seed=${user.email}`} 
                             alt="Profile Avatar"
                             referrerPolicy="no-referrer"
                             className="w-full h-full object-cover"
@@ -2105,7 +1829,7 @@ export default function App() {
                       </div>
 
                       <div className="space-y-4">
-                         <h3 className="text-xl font-black uppercase tracking-[8px] text-white">{session.user.email?.split('@')[0]}</h3>
+                         <h3 className="text-xl font-black uppercase tracking-[8px] text-white">{user.email?.split('@')[0]}</h3>
                          <div className="flex flex-col items-center gap-2">
                           <div 
                             className="px-6 py-1.5 rounded-full text-[10px] font-black uppercase tracking-[4px] inline-block shadow-lg border"
@@ -2128,13 +1852,13 @@ export default function App() {
                         <div className="p-4 md:p-6 bg-white/[0.03] border border-white/5 rounded-2xl md:rounded-3xl group">
                           <div className="text-[8px] md:text-[10px] text-white/20 uppercase tracking-widest font-black mb-1 md:mb-2 group-hover:text-indigo-400 transition-colors text-center md:text-left">Ideas</div>
                           <div className="text-xl md:text-2xl text-white font-black tracking-tighter text-center md:text-left">
-                            {suggestions.filter(s => s.user_id === session.user.id).length}
+                            {suggestions.filter(s => s.user_id === user.uid).length}
                           </div>
                         </div>
                         <div className="p-4 md:p-6 bg-white/[0.03] border border-white/5 rounded-2xl md:rounded-3xl group">
                           <div className="text-[8px] md:text-[10px] text-white/20 uppercase tracking-widest font-black mb-1 md:mb-2 group-hover:text-pink-400 transition-colors text-center md:text-left">Builds</div>
                           <div className="text-xl md:text-2xl text-white font-black tracking-tighter text-center md:text-left">
-                      {suggestions.filter(s => s.user_id === session.user.id && s.status === 'built').length}
+                      {suggestions.filter(s => s.user_id === user.uid && s.status === 'built').length}
                     </div>
                   </div>
                   
@@ -2169,7 +1893,7 @@ export default function App() {
                         <div className="p-4 md:p-6 bg-white/[0.03] border border-white/5 rounded-2xl md:rounded-3xl group">
                           <div className="text-[8px] md:text-[10px] text-white/20 uppercase tracking-widest font-black mb-1 md:mb-2 group-hover:text-yellow-400 transition-colors text-center md:text-left">Build Power</div>
                           <div className="text-xl md:text-2xl text-white font-black tracking-tighter text-center md:text-left">
-                            {suggestions.filter(s => s.user_id === session.user.id).reduce((acc, curr) => acc + (curr.votes || 0), 0)}
+                            {suggestions.filter(s => s.user_id === user.uid).reduce((acc, curr) => acc + (curr.votes || 0), 0)}
                           </div>
                         </div>
                       </div>
@@ -2436,7 +2160,7 @@ export default function App() {
                       </div>
 
                       <button 
-                        onClick={() => supabase.auth.signOut()}
+                        onClick={() => signOut(auth)}
                         className="px-10 py-5 bg-white text-black text-[11px] font-black uppercase tracking-[6px] rounded-full hover:bg-pink-500 hover:text-white transition-all shadow-xl active:scale-95"
                       >
                         Sever Connection
@@ -2451,7 +2175,7 @@ export default function App() {
             <div className="p-4 md:p-10 border-t border-white/10 shrink-0 bg-white/10">
               {activeTab === 'library' ? (
                 <div className="flex flex-col gap-4 md:gap-6 max-w-4xl mx-auto">
-                  {!session && (
+                  {!user && (
                     <div className="text-center px-4 animate-pulse">
                       <p className="text-[8px] md:text-[10px] font-black text-white/30 uppercase tracking-[4px] bg-white/5 py-2 border border-white/5 rounded-full flex items-center justify-center gap-2">
                          <Lock className="w-2.5 h-2.5" />
@@ -2459,7 +2183,7 @@ export default function App() {
                       </p>
                     </div>
                   )}
-                  {!canSuggest && session && (
+                  {!canSuggest && user && (
                     <div className="text-center px-4">
                       <p className="text-[8px] md:text-[10px] font-black text-yellow-500 uppercase tracking-widest bg-yellow-500/10 py-2 border border-yellow-500/30 rounded-full italic">
                         Access Restricted: Waiting for Master Bridge Sync
@@ -2549,7 +2273,7 @@ export default function App() {
               const newCode = await callUnifiedAI(refinePrompt);
               
               // Push to local history and sync
-              if (newCode && supabase) {
+              if (newCode) {
                 const newVersion: EvolutionVersion = {
                   code: activeModule.built_code || "",
                   timestamp: new Date().toISOString(),
@@ -2559,26 +2283,13 @@ export default function App() {
                 const updatedHistory = [newVersion, ...(activeModule.history || [])];
                 const updatePayload: any = { history: updatedHistory, built_code: newCode };
                 
-                // Fallback for schema
-                if (!dbFeatures.version) {
-                  const meta = activeModule.content.startsWith('JSON:') ? JSON.parse(activeModule.content.substring(5)) : { text: activeModule.content };
-                  meta.history = updatedHistory;
-                  meta.built_code = newCode;
-                  updatePayload.content = 'JSON:' + JSON.stringify(meta);
-                  delete updatePayload.history;
-                  delete updatePayload.built_code;
-                }
-
-                await supabase.from('suggestions').update(updatePayload).eq('id', activeModule.id);
-                setSuggestions(prev => prev.map(s => s.id === activeModule.id ? { ...s, built_code: newCode, history: updatedHistory } : s));
+                await updateDoc(doc(db, 'suggestions', activeModule.id), updatePayload);
                 setActiveModule(prev => prev ? { ...prev, built_code: newCode, history: updatedHistory } : null);
               }
               
               return newCode;
             }}
             onSave={async (newCode) => {
-              if (!supabase) return;
-              
               const newVersion: EvolutionVersion = {
                 code: activeModule.built_code || "",
                 timestamp: new Date().toISOString(),
@@ -2591,19 +2302,7 @@ export default function App() {
                 history: updatedHistory
               };
 
-              if (!dbFeatures.built_code) {
-                const meta = activeModule.content.startsWith('JSON:') ? JSON.parse(activeModule.content.substring(5)) : { text: activeModule.content };
-                meta.built_code = newCode;
-                meta.history = updatedHistory;
-                updatePayload.content = 'JSON:' + JSON.stringify(meta);
-                delete updatePayload.built_code;
-                delete updatePayload.history;
-              }
-
-              const { error } = await supabase.from('suggestions').update(updatePayload).eq('id', activeModule.id);
-              if (error) throw error;
-              
-              setSuggestions(prev => prev.map(s => s.id === activeModule.id ? { ...s, built_code: newCode, history: updatedHistory } : s));
+              await updateDoc(doc(db, 'suggestions', activeModule.id), updatePayload);
               setActiveModule(prev => prev ? { ...prev, built_code: newCode, history: updatedHistory } : null);
             }}
           />
