@@ -465,8 +465,34 @@ export default function App() {
     return { title: "New Member", color: "#94a3b8", level: 0 };
   }, [suggestions, user]);
 
+  // Cloud Fallback Helper
+  const callGeminiCloud = async (prompt: string): Promise<string> => {
+    const googleKey = process.env.GEMINI_API_KEY || providerKeys['google'];
+    if (!googleKey) throw new Error("No Google API Key found for fallback.");
+    
+    const ai = new GoogleGenAI({ apiKey: googleKey });
+    let modelId = "gemini-3.1-pro-preview"; // High capability fallback
+    
+    const response = await ai.models.generateContent({
+      model: modelId,
+      contents: prompt,
+      config: {
+        temperature: 0.7,
+        maxOutputTokens: 2048,
+      }
+    });
+
+    const text = response.text;
+    if (!text) throw new Error("Cloud fallback returned empty response.");
+    return text;
+  };
+
   // Unified AI Bridge
-  const callUnifiedAI = async (prompt: string): Promise<string> => {
+  const callUnifiedAI = async (prompt: string, forceCloud = false): Promise<string> => {
+    if (forceCloud) {
+      return await callGeminiCloud(prompt);
+    }
+
     const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
     
     let retryCount = 0;
@@ -479,27 +505,38 @@ export default function App() {
         
         // Offline / Specialized Mobile Handlers
         if (aiProvider === 'gemini-nano') {
-          const w = window as any;
-          if (!w.ai || !w.ai.assistant) {
-            throw new Error("Gemini Nano not detected. Ensure 'AI Test' is enabled in your Android Chrome flags (chrome://flags/#optimization-guide-on-device-model).");
+          try {
+            const w = window as any;
+            if (!w.ai || !w.ai.assistant) {
+              throw new Error("Gemini Nano not detected.");
+            }
+            const aiSession = await w.ai.assistant.create();
+            const result = await aiSession.prompt(prompt);
+            return result;
+          } catch (err) {
+            console.warn("Gemini Nano failed, falling back to Cloud:", err);
+            return await callGeminiCloud(prompt);
           }
-          const aiSession = await w.ai.assistant.create();
-          const result = await aiSession.prompt(prompt);
-          return result;
         }
 
         if (aiProvider === 'web-llm') {
-          if (!webLlmEngineRef.current) {
-            setWebLlmProgress("Wakeing AI Engine...");
-            const engine = new webllm.MLCEngine();
-            engine.setInitProgressCallback((report) => setWebLlmProgress(report.text));
-            await engine.reload(selectedModel || "Llama-3-8B-Instruct-v0.1-q4f32_1-MLC");
-            webLlmEngineRef.current = engine;
+          try {
+            if (!webLlmEngineRef.current) {
+              setWebLlmProgress("Wakeing AI Engine...");
+              const engine = new webllm.MLCEngine();
+              engine.setInitProgressCallback((report) => setWebLlmProgress(report.text));
+              await engine.reload(selectedModel || "Llama-3-8B-Instruct-v0.1-q4f32_1-MLC");
+              webLlmEngineRef.current = engine;
+            }
+            const response = await webLlmEngineRef.current.chat.completions.create({
+              messages: [{ role: "user", content: prompt }]
+            });
+            return response.choices[0].message.content || "";
+          } catch (err) {
+            console.warn("Web-LLM failed, falling back to Cloud:", err);
+            setWebLlmProgress("");
+            return await callGeminiCloud(prompt);
           }
-          const response = await webLlmEngineRef.current.chat.completions.create({
-            messages: [{ role: "user", content: prompt }]
-          });
-          return response.choices[0].message.content || "";
         }
 
         if (aiProvider === 'mlc-mobile') {
