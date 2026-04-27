@@ -164,6 +164,7 @@ export default function App() {
   }>({ pledged_by: true, built_code: true, energy: true, parent_id: true, version: true, user_id: true });
   const [isLoading, setIsLoading] = useState(false);
   const [isBuilding, setIsBuilding] = useState<string | null>(null);
+  const [activeModule, setActiveModule] = useState<Suggestion | null>(null);
   const [viewMode, setViewMode] = useState<'EXPLORER' | 'FEED'>('FEED');
   const [newAppType, setNewAppType] = useState<'phone' | 'desktop' | 'game' | 'terminal'>('desktop');
   const [devicePreview, setDevicePreview] = useState<'phone' | 'desktop'>('phone');
@@ -1767,6 +1768,7 @@ export default function App() {
                       )}
                       {displaySuggestions.map((s, idx) => {
                         const isApp = s.status === 'built';
+                        const isCreator = s.user_id && user?.uid && s.user_id === user.uid;
 
                         return (
                           <motion.div 

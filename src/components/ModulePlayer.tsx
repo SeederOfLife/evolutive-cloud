@@ -13,6 +13,7 @@ import {
   RefreshCw,
   Code,
   FileJson,
+  Layout,
   FolderTree,
   Settings,
   ChevronRight,
