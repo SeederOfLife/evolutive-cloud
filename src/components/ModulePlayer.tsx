@@ -36,6 +36,7 @@ export function ModulePlayer({
 }) {
   const [code, setCode] = useState(suggestion.built_code || "");
   const [activeSideTab, setActiveSideTab] = useState<'files' | 'chat' | 'history' | 'settings'>('files');
+  const [deviceFrame, setDeviceFrame] = useState<'phone' | 'desktop'>(suggestion.app_type === 'phone' ? 'phone' : 'desktop');
   const [isExplorerOpen, setIsExplorerOpen] = useState(true);
   const [activeFile, setActiveFile] = useState('src/App.tsx');
   const [showPreview, setShowPreview] = useState(true);
@@ -58,17 +59,32 @@ export function ModulePlayer({
 
   const cleanCode = useMemo(() => {
     if (!code) return "";
-    let processed = code.replace(/import\s+[\s\S]*?from\s+(['"]).*?\1;?/g, '');
+    let processed = code;
+    
+    // Remove imports but keep the variable names if they are used as destructured elements 
+    // actually, most AI code uses standard imports. 
+    // We'll strip them and rely on global scope.
+    processed = processed.replace(/import\s+[\s\S]*?from\s+(['"]).*?\1;?/g, '');
     processed = processed.replace(/import\s+(['"]).*?\1;?/g, '');
+    
+    // Handle exports - capture the component for rendering
+    // 1. Named function export
     processed = processed.replace(/export\s+default\s+function\s+([a-zA-Z0-9_$]+)/g, 'window.__BUILT_APP__ = function $1');
+    // 2. Anonymous function export
+    processed = processed.replace(/export\s+default\s+function\s*\(/g, 'window.__BUILT_APP__ = function (');
+    // 3. Class export
     processed = processed.replace(/export\s+default\s+class\s+([a-zA-Z0-9_$]+)/g, 'window.__BUILT_APP__ = class $1');
+    // 4. Anonymous class export
+    processed = processed.replace(/export\s+default\s+class\s*\{/g, 'window.__BUILT_APP__ = class {');
+    // 5. Arrow function/Variable export
     processed = processed.replace(/export\s+default\s+([a-zA-Z0-9_$]+);?/g, 'window.__BUILT_APP__ = $1;');
+    
+    // Remaining exports
     if (processed.includes('export default')) {
        processed = processed.replace(/export\s+default\s+/g, 'window.__BUILT_APP__ = ');
     }
     processed = processed.replace(/\bexport\s+/g, '');
     
-    // No complex escaping needed if we use JSON.stringify in the target
     return processed.trim();
   }, [code]);
 
@@ -119,7 +135,14 @@ export function ModulePlayer({
         <script crossorigin="anonymous" src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"></script>
         <script crossorigin="anonymous" src="https://unpkg.com/d3@7"></script>
         <script crossorigin="anonymous" src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.170.0/three.min.js"></script>
+        <script crossorigin="anonymous" src="https://unpkg.com/@react-three/fiber@8.13.0/dist/react-three-fiber.umd.js"></script>
+        <script crossorigin="anonymous" src="https://unpkg.com/@react-three/drei@9.78.1/dist/index.umd.js"></script>
+        <script crossorigin="anonymous" src="https://unpkg.com/react-markdown@8.0.7/react-markdown.min.js"></script>
         <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+        <script crossorigin="anonymous" src="https://unpkg.com/clsx@2.0.0/dist/clsx.min.js"></script>
+        <script crossorigin="anonymous" src="https://unpkg.com/tailwind-merge@1.14.0/dist/bundle.min.js"></script>
+        <script crossorigin="anonymous" src="https://unpkg.com/tone@14.7.77/build/Tone.js"></script>
+        <script crossorigin="anonymous" src="https://unpkg.com/openai@4.0.0/dist/index.browser.js"></script>
         
         <style>
           body { 
@@ -185,16 +208,59 @@ export function ModulePlayer({
                 throw new Error("Neural Bridge Timeout: Essential libraries failed to materialize.");
               }
 
-              const { useState, useEffect, useMemo, useRef, useCallback } = window.React;
+              const { useState, useEffect, useMemo, useRef, useCallback, createContext, useContext, useReducer, useLayoutEffect } = window.React;
               const LucideReact = window.LucideReact || {};
               const React = window.React;
               const ReactDOM = window.ReactDOM;
               const THREE = window.THREE;
               const Motion = window.Motion || window.framerMotion || {};
+              const Fiber = window.ReactThreeFiber || {};
+              const Drei = window.Drei || {};
+              const Markdown = window.ReactMarkdown;
+              const { clsx } = window;
+              const { twMerge } = window.tailwindMerge || {};
+              const Tone = window.Tone || {};
+              const OpenAI = window.OpenAI || {};
               
               // Handle potential CommonJS output from Babel
               window.exports = window.exports || {};
               window.module = window.module || { exports: window.exports };
+
+              // Expose popular libs to global scope for AI logic
+              window.React = React;
+              window.ReactDOM = ReactDOM;
+              window.THREE = THREE;
+              window.Canvas = Fiber.Canvas;
+              window.Markdown = Markdown;
+              window.ReactMarkdown = Markdown; // Alias
+              window.clsx = clsx;
+              window.twMerge = twMerge;
+              window.cn = (...args) => twMerge ? twMerge(clsx(...args)) : clsx(...args);
+              window.Tone = Tone;
+              window.OpenAI = OpenAI;
+              
+              // Standard hooks
+              window.useState = useState;
+              window.useEffect = useEffect;
+              window.useMemo = useMemo;
+              window.useRef = useRef;
+              window.useCallback = useCallback;
+              window.createContext = createContext;
+              window.useContext = useContext;
+              window.useReducer = useReducer;
+              window.useLayoutEffect = useLayoutEffect;
+              
+              // Map all Drei components
+              Object.keys(Drei).forEach(key => {
+                window[key] = Drei[key];
+              });
+              
+              if (Drei.OrbitControls) window.OrbitControls = Drei.OrbitControls;
+
+              // Map Fiber hooks/components
+              Object.keys(Fiber).forEach(key => {
+                if (!window[key]) window[key] = Fiber[key];
+              });
 
               // Map Framer Motion correctly
               window.motion = Motion.motion || Motion;
@@ -219,7 +285,9 @@ export function ModulePlayer({
               });
               
               window.Icon = ({ name, ...props }) => {
-                const IconComp = LucideReact[name] || LucideReact[name.charAt(0).toUpperCase() + name.slice(1)];
+                if (!name) return null;
+                const normalizedName = name.split('-').map(part => part.charAt(0).toUpperCase() + part.slice(1)).join('');
+                const IconComp = LucideReact[normalizedName] || LucideReact[name] || LucideReact[name.charAt(0).toUpperCase() + name.slice(1)];
                 return IconComp ? React.createElement(IconComp, props) : null;
               };
 
@@ -280,9 +348,14 @@ export function ModulePlayer({
               
               if (AppComp) {
                 console.log("Rendering App component...");
-                const root = ReactDOM.createRoot(rootElement);
-                root.render(React.createElement(AppComp));
-                console.log("Manifestation complete.");
+                try {
+                  const root = ReactDOM.createRoot(rootElement);
+                  root.render(React.createElement(AppComp));
+                  console.log("Manifestation complete.");
+                } catch (renderErr) {
+                  console.error("Render catch:", renderErr);
+                  reportError("Component initialization failure: " + renderErr.message, renderErr.stack);
+                }
               } else {
                 throw new Error("No architectural anchor (App component) manifested. Ensure your code defines 'export default function App() {}' or a global 'App' function.");
               }
@@ -330,6 +403,25 @@ export function ModulePlayer({
               Code
             </button>
           </div>
+
+          {showPreview && (
+            <div className="flex items-center gap-1 bg-white/5 p-1 rounded-lg ml-2">
+              <button 
+                onClick={() => setDeviceFrame('phone')}
+                className={`w-8 h-8 flex items-center justify-center rounded-md transition-all ${deviceFrame === 'phone' ? 'bg-indigo-500 text-white' : 'text-white/20'}`}
+                title="Phone Preview"
+              >
+                 <Layout className="w-3 h-3" />
+              </button>
+              <button 
+                onClick={() => setDeviceFrame('desktop')}
+                className={`w-8 h-8 flex items-center justify-center rounded-md transition-all ${deviceFrame === 'desktop' ? 'bg-indigo-500 text-white' : 'text-white/20'}`}
+                title="Desktop Preview"
+              >
+                 <Monitor className="w-3 h-3" />
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-3">
@@ -532,17 +624,40 @@ export function ModulePlayer({
                  </div>
                  <div className="flex items-center gap-2">
                     <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-                    <span className="text-[8px] font-black uppercase tracking-widest text-white/30">Stable</span>
+                    <span className="text-[8px] font-black uppercase tracking-widest text-white/30">{deviceFrame.toUpperCase()} MODE</span>
                  </div>
               </div>
-              <div className="flex-1 relative group">
-                  <iframe 
-                    ref={iframeRef}
-                    srcDoc={srcDoc}
-                    className="w-full h-full border-none"
-                    title="app-player"
-                    sandbox="allow-scripts allow-modals allow-forms allow-popups allow-same-origin"
-                  />
+              <div className="flex-1 bg-black/40 flex items-center justify-center overflow-hidden p-4 md:p-8">
+                 <div className={`relative transition-all duration-700 ease-[cubic-bezier(0.23,1,0.32,1)] ${
+                   deviceFrame === 'phone' 
+                   ? 'w-[320px] h-[640px] rounded-[3rem] border-[12px] border-white/10 shadow-[0_50px_100px_rgba(0,0,0,0.5)] bg-black overflow-hidden' 
+                   : 'w-full h-full rounded-2xl md:rounded-3xl border border-white/5 bg-black md:max-w-6xl md:max-h-[90%]'
+                 }`}>
+                    {/* Phone Status Bar Mockup */}
+                    {deviceFrame === 'phone' && (
+                       <div className="absolute top-0 left-0 w-full h-8 flex items-center justify-between px-8 z-10 pointer-events-none">
+                          <div className="text-[10px] font-black text-white/40">9:41</div>
+                          <div className="flex gap-1">
+                             <div className="w-3 h-3 rounded-full bg-white/10" />
+                             <div className="w-3 h-3 rounded-full bg-white/10" />
+                          </div>
+                       </div>
+                    )}
+                    
+                    <iframe 
+                      ref={iframeRef}
+                      srcDoc={srcDoc}
+                      className="w-full h-full border-none bg-black"
+                      title="app-player"
+                      sandbox="allow-scripts allow-modals allow-forms allow-popups allow-same-origin"
+                    />
+                    
+                    {/* Phone Home Indicator Mockup */}
+                    {deviceFrame === 'phone' && (
+                       <div className="absolute bottom-1.5 left-1/2 -translate-x-1/2 w-32 h-1.5 bg-white/10 rounded-full z-10 pointer-events-none" />
+                    )}
+                 </div>
+              </div>
                   {!code && (
                     <div className="absolute inset-0 bg-[#020205] flex flex-col items-center justify-center p-10 text-center">
                        <Loader2 className="w-10 h-10 text-indigo-500 animate-spin mb-6" />
@@ -571,7 +686,6 @@ export function ModulePlayer({
               </div>
            </div>
         </div>
-      </div>
     </motion.div>
   );
 }

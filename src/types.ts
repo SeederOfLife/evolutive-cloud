@@ -8,6 +8,8 @@ export interface EvolutionVersion {
 export interface Suggestion {
   id: string;
   content: string;
+  app_type?: 'phone' | 'desktop' | 'game' | 'terminal';
+  category?: string;
   votes: number;
   energy: number; // 0 to 100
   status: string;

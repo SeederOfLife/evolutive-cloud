@@ -39,7 +39,7 @@ import {
   Key, 
   Cpu, 
   Globe,
-  CircleUser
+  User as UserIcon
 } from "lucide-react";
 import { User } from "firebase/auth";
 import OpenAI from "openai";
@@ -164,13 +164,15 @@ export default function App() {
   }>({ pledged_by: true, built_code: true, energy: true, parent_id: true, version: true, user_id: true });
   const [isLoading, setIsLoading] = useState(false);
   const [isBuilding, setIsBuilding] = useState<string | null>(null);
-  const [activeModule, setActiveModule] = useState<Suggestion | null>(null);
+  const [viewMode, setViewMode] = useState<'EXPLORER' | 'FEED'>('FEED');
+  const [newAppType, setNewAppType] = useState<'phone' | 'desktop' | 'game' | 'terminal'>('desktop');
+  const [devicePreview, setDevicePreview] = useState<'phone' | 'desktop'>('phone');
   const [isRepoOpen, setIsRepoOpen] = useState(false);
   const [activeUsersCount, setActiveUsersCount] = useState(1);
   const [presenceData, setPresenceData] = useState<Record<string, any>>({});
   const [systemMessages, setSystemMessages] = useState<SystemMessage[]>([]);
   const [messageInput, setMessageInput] = useState("");
-  const [viewMode, setViewMode] = useState<'all' | 'mine'>('all');
+  const [filterMode, setFilterMode] = useState<'all' | 'mine'>('all');
   const [isInitializing, setIsInitializing] = useState(true);
   const [isManifesting, setIsManifesting] = useState(false);
   const [isRateLimited, setIsRateLimited] = useState(false);
@@ -202,7 +204,7 @@ export default function App() {
     w.LucideReact = { 
       ChevronUp, MessageSquare, Plus, X, Search, Activity, Database, Zap, Play, Eye, Code, 
       Sparkles, Loader2, Users, Lock, Unlock, History, MessageCircle, RefreshCw, Info, 
-      Trash2, GitBranch, Box, Layout, DraftingCompass, LogOut, ShieldCheck, Key, Cpu, Globe, CircleUser 
+      Trash2, GitBranch, Box, Layout, DraftingCompass, LogOut, ShieldCheck, Key, Cpu, Globe, CircleUser: UserIcon 
     };
     w.THREE = THREE;
   }, []);
@@ -717,6 +719,14 @@ export default function App() {
 
     // Real-time suggestions listener
     const qSuggestions = query(collection(db, "suggestions"), orderBy("votes", "desc"));
+    // Initialization timeout
+    const initTimeout = setTimeout(() => {
+      if (isInitializing) {
+        console.warn("Initialization taking too long, forcing start...");
+        setIsInitializing(false);
+      }
+    }, 5000);
+
     const unsubSuggestions = onSnapshot(qSuggestions, (snapshot) => {
       const newSuggestions: Suggestion[] = [];
       let foundConfig = false;
@@ -752,9 +762,12 @@ export default function App() {
       setSuggestions(newSuggestions);
       setInitStatus("System Link Established.");
       setIsInitializing(false);
+      clearTimeout(initTimeout);
     }, (error) => {
       console.error("Firestore sync error:", error);
       setInitStatus("Sync Interrupted. Retrying Link...");
+      clearTimeout(initTimeout);
+      setIsInitializing(false); // Force through on error
     });
 
     // Real-time messages listener
@@ -1021,6 +1034,7 @@ export default function App() {
 
       const insertData: any = { 
         content,
+        app_type: newAppType,
         status: 'pending',
         votes: 0,
         energy: 0,
@@ -1090,7 +1104,12 @@ export default function App() {
       let newStatus = s.status;
 
       if (shouldBuild && s.status === 'pending') {
+        const typeContext = s.app_type === 'phone' ? 'optimized for a mobile device (portrait)' : 
+                            s.app_type === 'game' ? 'a high-performance interactive game' : 
+                            s.app_type === 'terminal' ? 'a command-line style utility' : 'a desktop web application';
+        
         const prompt = `Create a functional, professional React component titled "App" for this idea: ${s.content}. 
+        The application is ${typeContext}.
         Use Tailwind CSS. Return ONLY the code, no markdown wrappers. Include animations using framer-motion (window.Motion). 
         Assume you have access to: window.React, window.Motion, window.Recharts, window.d3, window.confetti, window.lucide (React icons).`;
         
@@ -1238,7 +1257,8 @@ export default function App() {
       setIsManifesting(true);
       const text = await callUnifiedAI(prompt);
       
-      let generatedCode = text
+      const match = text.match(/```(?:javascript|typescript|tsx|jsx)?\s?([\s\S]*?)```/);
+      let generatedCode = (match ? match[1] : text)
         .replace(/```[a-z]*\n?/gi, '')
         .replace(/```/g, '')
         .trim();
@@ -1692,6 +1712,23 @@ export default function App() {
                     </div>
                     
                     <div className="flex gap-2 p-1 bg-white/5 rounded-full border border-white/10 shrink-0">
+                      <button 
+                        onClick={() => setViewMode('FEED')}
+                        className={`w-10 h-10 flex items-center justify-center rounded-full transition-all ${viewMode === 'FEED' ? 'bg-indigo-500 text-white shadow-lg' : 'text-white/40 hover:text-white'}`}
+                        title="Discovery Feed"
+                      >
+                        <Layout className="w-4 h-4" />
+                      </button>
+                      <button 
+                        onClick={() => setViewMode('EXPLORER')}
+                        className={`w-10 h-10 flex items-center justify-center rounded-full transition-all ${viewMode === 'EXPLORER' ? 'bg-indigo-500 text-white shadow-lg' : 'text-white/40 hover:text-white'}`}
+                        title="Table View"
+                      >
+                        <Search className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    <div className="flex gap-2 p-1 bg-white/5 rounded-full border border-white/10 shrink-0">
                       {(['all', 'built', 'pending', 'mine'] as const).map((type) => (
                         <button 
                           key={type}
@@ -1712,188 +1749,211 @@ export default function App() {
                     <div className="text-right">Operations</div>
                   </div>
 
-                  <div className="flex flex-col gap-3">
-                  {displaySuggestions.length === 0 && (
-                    <div className="py-12 md:py-20 text-center border-2 border-dashed border-white/5 rounded-[1.5rem] md:rounded-[2rem]">
-                      <p className="text-white/20 italic tracking-widest text-[10px] md:text-xs uppercase px-6">The global library is currently empty. Awaiting an idea...</p>
-                    </div>
-                  )}
-                  {displaySuggestions.map((s, idx) => {
-                    const isApp = s.status === 'built';
+                  {viewMode === 'EXPLORER' ? (
+                    <>
+                      {/* Explorer Header */}
+                      <div className="hidden md:grid grid-cols-[1fr_120px_100px_160px] gap-4 px-6 py-3 border-b border-white/10 text-[10px] uppercase tracking-[0.2em] font-black text-white/30 mb-4">
+                        <div className="flex items-center gap-2"><Box className="w-3 h-3" /> Idea / Application</div>
+                        <div className="text-center">Complexity</div>
+                        <div className="text-center">Status</div>
+                        <div className="text-right">Operations</div>
+                      </div>
 
-                    return (
-                      <motion.div 
-                        key={s.id}
-                        initial={{ opacity: 0, x: -10 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: idx * 0.03 }}
-                        className="group relative"
-                      >
-                        <div className="flex flex-col md:grid md:grid-cols-[1fr_120px_100px_160px] gap-4 items-stretch md:items-center p-4 md:px-6 md:py-4 rounded-2xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.05] hover:border-indigo-500/30 transition-all cursor-default">
-                          {/* Main Info */}
-                          <div className="flex items-start gap-3 md:gap-4 overflow-hidden">
-                            <div className={`w-8 h-8 md:w-10 md:h-10 rounded-lg md:rounded-xl flex items-center justify-center shrink-0 ${isApp ? 'bg-indigo-500/20 text-indigo-400' : 'bg-white/5 text-white/40 shadow-inner'}`}>
-                              {isApp ? <Layout className="w-4 h-4 md:w-5 md:h-5" /> : <DraftingCompass className="w-4 h-4 md:w-5 md:h-5" />}
-                            </div>
-                            <div className="overflow-hidden flex-1">
-                              <h3 className="text-white font-bold text-xs md:text-sm truncate group-hover:text-indigo-300 transition-colors">
-                                {s.content}
-                              </h3>
-                              <div className="text-[8px] md:text-[10px] text-white/20 uppercase tracking-widest mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
-                                <span className={isApp ? 'text-indigo-500' : ''}>#{s.id}</span> 
-                                <span className="hidden md:inline w-1 h-1 rounded-full bg-white/10" />
-                                <span>{isApp ? `VERSION V${s.version || 1}` : 'PROPOSAL DRAFT'}</span>
-                                {(s.pledged_by || []).length > 0 && (
+                      <div className="flex flex-col gap-3">
+                      {displaySuggestions.length === 0 && (
+                        <div className="py-12 md:py-20 text-center border-2 border-dashed border-white/5 rounded-[1.5rem] md:rounded-[2rem]">
+                          <p className="text-white/20 italic tracking-widest text-[10px] md:text-xs uppercase px-6">The global library is currently empty. Awaiting an idea...</p>
+                        </div>
+                      )}
+                      {displaySuggestions.map((s, idx) => {
+                        const isApp = s.status === 'built';
+
+                        return (
+                          <motion.div 
+                            key={s.id}
+                            initial={{ opacity: 0, x: -10 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: idx * 0.03 }}
+                            className="group relative"
+                          >
+                            <div className="flex flex-col md:grid md:grid-cols-[1fr_120px_100px_160px] gap-4 items-stretch md:items-center p-4 md:px-6 md:py-4 rounded-2xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.05] hover:border-indigo-500/30 transition-all cursor-default">
+                              {/* Main Info */}
+                              <div className="flex items-start gap-3 md:gap-4 overflow-hidden">
+                                <div className={`w-8 h-8 md:w-10 md:h-10 rounded-lg md:rounded-xl flex items-center justify-center shrink-0 ${isApp ? 'bg-indigo-500/20 text-indigo-400' : 'bg-white/5 text-white/40 shadow-inner'}`}>
+                                  {isApp ? <Layout className="w-4 h-4 md:w-5 md:h-5" /> : <DraftingCompass className="w-4 h-4 md:w-5 md:h-5" />}
+                                </div>
+                                <div className="overflow-hidden flex-1">
+                                  <h3 className="text-white font-bold text-xs md:text-sm truncate group-hover:text-indigo-300 transition-colors">
+                                    {s.content}
+                                  </h3>
+                                  <div className="text-[8px] md:text-[10px] text-white/20 uppercase tracking-widest mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+                                    <span className={isApp ? 'text-indigo-500' : ''}>#{s.id}</span> 
+                                    <span className="hidden md:inline w-1 h-1 rounded-full bg-white/10" />
+                                    <span>{isApp ? `VERSION V${s.version || 1}` : 'PROPOSAL DRAFT'}</span>
+                                    <span className="hidden md:inline w-1 h-1 rounded-full bg-white/10" />
+                                    <span className={`uppercase ${s.app_type === 'phone' ? 'text-pink-400' : s.app_type === 'game' ? 'text-green-400' : 'text-white/40'}`}>
+                                      {s.app_type || 'desktop'}
+                                    </span>
+                                    {(s.pledged_by || []).length > 0 && (
+                                      <>
+                                        <span className="w-1 h-1 rounded-full bg-white/10" />
+                                        <span className="flex items-center gap-1 text-yellow-500/50"><Zap className="w-2 md:w-2.5 h-2 md:h-2.5 fill-current" /> SUPPORTED</span>
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Data Column: Stats */}
+                              <div className="flex flex-col items-center md:items-center gap-1">
+                                <div className="w-full bg-white/5 h-1 rounded-full overflow-hidden">
+                                  <motion.div 
+                                    initial={{ width: 0 }}
+                                    animate={{ width: `${s.energy || 0}%` }}
+                                    className="h-full bg-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.5)]"
+                                  />
+                                </div>
+                                <span className="text-[7px] md:text-[9px] font-mono text-white/40 tracking-tighter uppercase whitespace-nowrap">
+                                  {s.votes || 0} Votes / {s.energy || 0}% Power
+                                </span>
+                              </div>
+
+                              {/* Data Column: Status */}
+                              <div className="flex justify-start md:justify-center">
+                                <div className={`px-2 py-0.5 md:py-1 rounded text-[7px] md:text-[8px] font-black uppercase tracking-widest border ${
+                                  isApp 
+                                  ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' 
+                                  : 'bg-white/5 text-white/30 border-white/10'
+                                }`}>
+                                  {s.status.toUpperCase()}
+                                </div>
+                              </div>
+
+                              {/* Actions */}
+                              <div className="flex justify-end gap-2 md:pr-2 mt-2 md:mt-0 pt-2 md:pt-0 border-t md:border-t-0 border-white/5">
+                                {isApp ? (
                                   <>
-                                    <span className="w-1 h-1 rounded-full bg-white/10" />
-                                    <span className="flex items-center gap-1 text-yellow-500/50"><Zap className="w-2 md:w-2.5 h-2 md:h-2.5 fill-current" /> SUPPORTED</span>
+                                    <button onClick={() => setActiveModule(s)} className="flex-1 md:flex-none p-2 md:p-2.5 rounded-lg bg-white text-black hover:scale-105 md:hover:scale-110 active:scale-95 transition-all flex items-center justify-center gap-2 group/launch" title="Launch App">
+                                      <Play className="w-3.5 md:w-4 h-3.5 md:h-4 fill-current group-hover/launch:animate-pulse" />
+                                      <span className="text-[9px] font-black uppercase tracking-widest">Execute</span>
+                                    </button>
                                   </>
+                                ) : (
+                                  s.status === 'pending' && (
+                                    <>
+                                      {!isCreator && (
+                                        <button 
+                                          onClick={() => handleVote(s.id, s.votes)}
+                                          className="flex-1 md:flex-none p-2 md:p-2.5 rounded-lg border border-white/10 text-white/40 hover:border-white hover:text-white transition-all hover:bg-white/5 flex items-center justify-center gap-2"
+                                          title="Upvote"
+                                        >
+                                          <ChevronUp className="w-3.5 md:w-4 h-3.5 md:h-4" />
+                                          <span className="text-[9px] font-black uppercase tracking-widest">Vote</span>
+                                        </button>
+                                      )}
+                                      <button 
+                                        onClick={() => handlePledge(s)}
+                                        disabled={!!isRefining || !!isBuilding || (!isCreator && !userApiKey)}
+                                        className={`flex-1 md:flex-none p-2 md:p-2.5 rounded-lg border flex items-center justify-center transition-all gap-2 relative overflow-hidden group/pledge ${
+                                          isCreator 
+                                          ? 'bg-gradient-to-r from-indigo-600 to-indigo-800 border-indigo-500 text-white hover:scale-105 shadow-[0_0_20px_rgba(79,70,229,0.3)]' 
+                                          : 'bg-white/5 border-white/10 text-yellow-500/50 hover:bg-indigo-500 hover:text-white hover:border-indigo-500'
+                                        }`}
+                                        title={isCreator ? "Manifest Module" : "Manifest with Your Power"}
+                                      >
+                                        {(isRefining === s.id || isBuilding === s.id) ? (
+                                          <Loader2 className="w-3.5 md:w-4 h-3.5 md:h-4 animate-spin" />
+                                        ) : isCreator ? (
+                                          <Zap className="w-3.5 md:w-4 h-3.5 md:h-4 fill-current animate-pulse text-yellow-400" />
+                                        ) : (
+                                          <Sparkles className="w-3.5 md:w-4 h-3.5 md:h-4" />
+                                        )}
+                                        <span className="text-[9px] font-black uppercase tracking-widest">
+                                          {isRefining === s.id || isBuilding === s.id ? 'Manifesting...' : isCreator ? 'MANIFEST NOW' : 'Power-Up'}
+                                        </span>
+                                      </button>
+                                    </>
+                                  )
                                 )}
                               </div>
                             </div>
-                          </div>
-
-                          {/* Data Column: Stats */}
-                          <div className="flex flex-col items-center md:items-center gap-1">
-                             <div className="w-full bg-white/5 h-1 rounded-full overflow-hidden">
-                               <motion.div 
-                                 initial={{ width: 0 }}
-                                 animate={{ width: `${s.energy || 0}%` }}
-                                 className="h-full bg-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.5)]"
-                               />
-                             </div>
-                             <span className="text-[7px] md:text-[9px] font-mono text-white/40 tracking-tighter uppercase whitespace-nowrap">
-                               {s.votes || 0} Votes / {s.energy || 0}% Power
-                             </span>
-                          </div>
-
-                          {/* Data Column: Status */}
-                          <div className="flex justify-start md:justify-center">
-                             <div className={`px-2 py-0.5 md:py-1 rounded text-[7px] md:text-[8px] font-black uppercase tracking-widest border ${
-                               isApp 
-                               ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' 
-                               : 'bg-white/5 text-white/30 border-white/10'
-                             }`}>
-                               {s.status.toUpperCase()}
-                             </div>
-                          </div>
-
-                          {/* Actions */}
-                          <div className="flex justify-end gap-2 md:pr-2 mt-2 md:mt-0 pt-2 md:pt-0 border-t md:border-t-0 border-white/5">
-                            {isApp ? (
-                              <>
-                                <button onClick={() => setActiveModule(s)} className="flex-1 md:flex-none p-2 md:p-2.5 rounded-lg bg-white text-black hover:scale-105 md:hover:scale-110 active:scale-95 transition-all flex items-center justify-center gap-2 group/launch" title="Launch App">
-                                  <Play className="w-3.5 md:w-4 h-3.5 md:h-4 fill-current group-hover/launch:animate-pulse" />
-                                  <span className="text-[9px] font-black uppercase tracking-widest">Execute</span>
-                                </button>
-                                {(isFinalized || isCreator) && (
-                                  <button 
-                                    onClick={() => {
-                                      const prompt = window.prompt("Suggest an evolution for this app:");
-                                      if (prompt) handleRefine(s, prompt);
-                                    }}
-                                    disabled={!!isRefining}
-                                    className="p-2 md:p-2.5 rounded-lg border border-white/10 text-white/60 hover:bg-white hover:text-black transition-all disabled:opacity-20 flex items-center justify-center gap-2"
-                                    title="Evolve"
-                                  >
-                                    {isRefining === s.id ? <Loader2 className="w-3.5 md:w-4 h-3.5 md:h-4 animate-spin text-indigo-400" /> : <RefreshCw className="w-3.5 md:w-4 h-3.5 md:h-4" />}
-                                    <span className="text-[9px] uppercase font-black tracking-widest md:hidden">Evolve</span>
-                                  </button>
-                                )}
-                              </>
-                            ) : (
-                              s.status === 'pending' && (
-                                <>
-                                  {!isCreator && (
-                                    <button 
-                                      onClick={() => handleVote(s.id, s.votes)}
-                                      className="flex-1 md:flex-none p-2 md:p-2.5 rounded-lg border border-white/10 text-white/40 hover:border-white hover:text-white transition-all hover:bg-white/5 flex items-center justify-center gap-2"
-                                      title="Upvote"
-                                    >
-                                      <ChevronUp className="w-3.5 md:w-4 h-3.5 md:h-4" />
-                                      <span className="text-[9px] font-black uppercase tracking-widest">Vote</span>
-                                    </button>
-                                  )}
-                                  <button 
-                                    onClick={() => handlePledge(s)}
-                                    disabled={!!isRefining || !!isBuilding || (!isCreator && !userApiKey)}
-                                    className={`flex-1 md:flex-none p-2 md:p-2.5 rounded-lg border flex items-center justify-center transition-all gap-2 relative overflow-hidden group/pledge ${
-                                      isCreator 
-                                      ? 'bg-gradient-to-r from-indigo-600 to-indigo-800 border-indigo-500 text-white hover:scale-105 shadow-[0_0_20px_rgba(79,70,229,0.3)]' 
-                                      : 'bg-white/5 border-white/10 text-yellow-500/50 hover:bg-indigo-500 hover:text-white hover:border-indigo-500'
-                                    }`}
-                                    title={isCreator ? "Manifest Module" : "Manifest with Your Power"}
-                                  >
-                                    {(isRefining === s.id || isBuilding === s.id) ? (
-                                      <Loader2 className="w-3.5 md:w-4 h-3.5 md:h-4 animate-spin" />
-                                    ) : isCreator ? (
-                                      <Zap className="w-3.5 md:w-4 h-3.5 md:h-4 fill-current animate-pulse text-yellow-400" />
-                                    ) : (
-                                      <Sparkles className="w-3.5 md:w-4 h-3.5 md:h-4" />
-                                    )}
-                                    <span className="text-[9px] font-black uppercase tracking-widest">
-                                      {isRefining === s.id || isBuilding === s.id ? 'Manifesting...' : isCreator ? 'MANIFEST NOW' : 'Power-Up'}
-                                    </span>
-
-                                    {(isRefining === s.id || isBuilding === s.id) && (
-                                      <motion.div 
-                                        className="absolute inset-0 bg-white/20"
-                                        animate={{ x: ["-100%", "100%"] }}
-                                        transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                                      />
-                                    )}
-                                    
-                                    {isCreator && !isRefining && !isBuilding && (
-                                      <div className="absolute -top-1 -right-1 flex h-2 w-2">
-                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
-                                        <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
-                                      </div>
-                                    )}
-                                  </button>
-                                </>
-                              )
-                            )}
-
-                            {(isCreator || (s.user_id && user?.uid && s.user_id === user.uid)) && (
-                                <div className="flex gap-2">
-                                  {s.user_id === user?.uid && (
-                                    <div className="px-3 py-2 bg-indigo-500/10 border border-indigo-500/20 rounded-lg flex items-center gap-1.5" title="This is your creation">
-                                      <CircleUser className="w-3 h-3 text-indigo-400" />
-                                      <span className="text-[8px] font-black uppercase text-indigo-400 tracking-wider">ME</span>
-                                    </div>
-                                  )}
-                                  <button 
-                                    onClick={() => {
-                                      if (window.confirm("This action is irreversible. Delete permanently?")) {
-                                        handleDeleteSuggestion(s.id);
-                                      }
-                                    }}
-                                    className="p-2 md:p-2.5 rounded-lg border border-pink-500/10 text-pink-500/20 hover:bg-pink-500 hover:text-white hover:border-pink-500 transition-all"
-                                    title="Delete Forever"
-                                  >
-                                    <Trash2 className="w-3.5 md:w-4 h-3.5 md:h-4" />
-                                  </button>
-                                </div>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Expandable Feedback / Details */}
-                        {advice.filter(a => a.suggestion_id === s.id).length > 0 && (
-                          <div className="mx-6 mt-1 mb-4 pt-1 flex flex-wrap gap-2">
-                             {advice.filter(a => a.suggestion_id === s.id).map((a, i) => (
-                               <div key={i} className="text-[8px] bg-white/[0.03] text-white/40 px-3 py-1 rounded-full border border-white/5 flex items-center gap-2">
-                                 <MessageCircle className="w-2 h-2 text-indigo-400" />
-                                 <span className="text-white/60 lowercase">{a.user_email.split('@')[0]}:</span>
-                                 <span>{a.content}</span>
+                          </motion.div>
+                        );
+                      })}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                       {displaySuggestions.map((s, idx) => (
+                         <motion.div 
+                           key={s.id}
+                           initial={{ opacity: 0, scale: 0.9 }}
+                           animate={{ opacity: 1, scale: 1 }}
+                           transition={{ delay: idx * 0.1 }}
+                           className="group aspect-[4/5] bg-gradient-to-b from-white/10 to-white/5 rounded-[2rem] border border-white/10 overflow-hidden relative flex flex-col hover:border-indigo-500/50 transition-all cursor-pointer shadow-2xl"
+                           onClick={() => s.status === 'built' && setActiveModule(s)}
+                         >
+                            {/* App Preview Mock/Visual */}
+                            <div className="flex-1 bg-black/40 flex items-center justify-center relative overflow-hidden">
+                               <div className="absolute inset-0 opacity-20 pointer-events-none">
+                                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(99,102,241,0.2),transparent_70%)]" />
                                </div>
-                             ))}
-                          </div>
-                        )}
-                      </motion.div>
-                    );
-                  })}
-                  </div>
+                               {s.app_type === 'phone' ? (
+                                 <div className="w-1/2 aspect-[9/19] rounded-[2rem] border-4 border-white/20 bg-white/5 flex flex-col items-center justify-center gap-2 p-4 animate-pulse">
+                                    <div className="w-full h-1 bg-white/10 rounded-full" />
+                                    <div className="flex-1 w-full bg-white/5 rounded-lg" />
+                                 </div>
+                               ) : s.app_type === 'game' ? (
+                                 <Activity className="w-16 h-16 text-indigo-400/20" />
+                               ) : (
+                                 <Layout className="w-16 h-16 text-indigo-400/20" />
+                               )}
+                               
+                               <div className="absolute top-6 left-6 flex items-center gap-2">
+                                  <div className={`px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest border border-white/10 transition-all ${s.status === 'built' ? 'bg-indigo-500 text-white' : 'bg-white/5 text-white/40'}`}>
+                                     {s.status}
+                                  </div>
+                                  <div className="px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest border border-white/10 bg-black/50 text-white/70">
+                                     {s.app_type || 'desktop'}
+                                  </div>
+                               </div>
+                            </div>
+
+                            {/* Card Content */}
+                            <div className="p-8 bg-gradient-to-t from-black to-transparent space-y-4">
+                               <h3 className="text-lg font-black text-white uppercase leading-tight tracking-tight line-clamp-2">{s.content}</h3>
+                               <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-3">
+                                     <div className="w-8 h-8 rounded-full bg-white/10 overflow-hidden">
+                                        <img src={`https://api.dicebear.com/7.x/identicon/svg?seed=${s.user_id || s.id}`} alt="User" />
+                                     </div>
+                                     <span className="text-[10px] font-black text-white/40 uppercase tracking-widest">@{s.user_id?.slice(0, 6) || 'anonymous'}</span>
+                                  </div>
+                                  <div className="flex items-center gap-4">
+                                     <div className="flex items-center gap-1.5 text-indigo-400">
+                                        <Zap className="w-3 h-3 fill-current" />
+                                        <span className="text-[10px] font-black">{s.energy || 0}%</span>
+                                     </div>
+                                     <div className="flex items-center gap-1.5 text-white/40">
+                                        <ChevronUp className="w-3 h-3" />
+                                        <span className="text-[10px] font-black">{s.votes || 0}</span>
+                                     </div>
+                                  </div>
+                               </div>
+                               
+                               {s.status === 'pending' && (
+                                 <button 
+                                   onClick={(e) => { e.stopPropagation(); handlePledge(s); }}
+                                   className="w-full py-4 bg-indigo-500 text-white rounded-2xl text-[10px] font-black uppercase tracking-[4px] hover:bg-indigo-400 transition-all shadow-lg active:scale-95"
+                                 >
+                                   Fuel Manifestation
+                                 </button>
+                               )}
+                            </div>
+                         </motion.div>
+                       ))}
+                    </div>
+                  )}
                 </div>
               ) : activeTab === 'evolution' ? (
                 <EvolutionTree 
@@ -1908,7 +1968,7 @@ export default function App() {
                   {!user ? (
                     <div className="text-center space-y-10">
                       <div className="w-24 h-24 bg-gradient-to-tr from-indigo-500 to-pink-500 rounded-full flex items-center justify-center mx-auto shadow-[0_0_50px_rgba(99,102,241,0.3)]">
-                        <CircleUser className="w-10 h-10 text-white" />
+                        <UserIcon className="w-10 h-10 text-white" />
                       </div>
                       <div className="space-y-4">
                         <h3 className="text-2xl font-black uppercase tracking-[10px] text-white">Account</h3>
@@ -2436,19 +2496,31 @@ export default function App() {
                       </p>
                     </div>
                   )}
-                  <div className={`flex gap-3 md:gap-6 w-full transition-opacity ${!canSuggest ? 'opacity-30 pointer-events-none' : ''}`}>
-                    <input 
-                      value={input}
-                      onChange={(e) => setInput(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && canSuggest && handleSuggest()}
-                      placeholder="Manifest an idea..."
-                      className="flex-1 bg-white/5 border-2 border-white/10 px-6 md:px-8 py-4 md:py-6 rounded-full text-xs md:text-sm text-white focus:outline-none focus:border-indigo-500 placeholder:text-white/10 font-black uppercase tracking-[2px] md:tracking-[4px] text-center"
-                    />
-                    <button 
-                      onClick={handleSuggest}
-                      disabled={!canSuggest || isLoading}
-                      className={`relative w-14 h-14 md:w-20 md:h-20 shrink-0 rounded-full bg-white text-black flex items-center justify-center transition-all hover:scale-105 active:scale-95 shadow-2xl hover:bg-indigo-500 hover:text-white disabled:opacity-50 overflow-hidden group`}
-                    >
+                  <div className={`flex flex-col gap-4 w-full transition-opacity ${!canSuggest ? 'opacity-30 pointer-events-none' : ''}`}>
+                    <div className="flex gap-2 justify-center mb-2">
+                       {(['phone', 'desktop', 'game', 'terminal'] as const).map(type => (
+                         <button 
+                           key={type}
+                           onClick={() => setNewAppType(type)}
+                           className={`px-4 py-2 rounded-full text-[8px] font-black uppercase tracking-widest border transition-all ${newAppType === type ? 'bg-white text-black border-white' : 'bg-white/5 text-white/30 border-white/10'}`}
+                         >
+                           {type}
+                         </button>
+                       ))}
+                    </div>
+                    <div className="flex gap-3 md:gap-6 w-full">
+                      <input 
+                        value={input}
+                        onChange={(e) => setInput(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && canSuggest && handleSuggest()}
+                        placeholder={`Manifest a ${newAppType}...`}
+                        className="flex-1 bg-white/5 border-2 border-white/10 px-6 md:px-8 py-4 md:py-6 rounded-full text-xs md:text-sm text-white focus:outline-none focus:border-indigo-500 placeholder:text-white/10 font-black uppercase tracking-[2px] md:tracking-[4px] text-center"
+                      />
+                      <button 
+                        onClick={handleSuggest}
+                        disabled={!canSuggest || isLoading}
+                        className={`relative w-14 h-14 md:w-20 md:h-20 shrink-0 rounded-full bg-white text-black flex items-center justify-center transition-all hover:scale-105 active:scale-95 shadow-2xl hover:bg-indigo-500 hover:text-white disabled:opacity-50 overflow-hidden group`}
+                      >
                       {isLoading ? (
                         <Loader2 className="w-6 md:w-10 h-6 md:h-10 animate-spin text-indigo-500" />
                       ) : (
@@ -2465,7 +2537,8 @@ export default function App() {
                     </button>
                   </div>
                 </div>
-              ) : null}
+              </div>
+            ) : null}
             </div>
           </motion.div>
         )}
