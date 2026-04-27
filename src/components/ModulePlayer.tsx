@@ -121,7 +121,8 @@ export function ModulePlayer({
     }
   };
 
-  const srcDoc = useMemo(() => `
+  const srcDoc = useMemo(() => {
+    const base = `
     <!DOCTYPE html>
     <html>
       <head>
@@ -292,7 +293,7 @@ export function ModulePlayer({
                 return IconComp ? React.createElement(IconComp, props) : null;
               };
 
-              const scriptBody = ${JSON.stringify(cleanCode)};
+              const scriptBody = __SCRIPT_BODY_PLACEHOLDER__;
               if (!scriptBody || scriptBody.length < 10) {
                 rootElement.innerHTML = '<div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; opacity: 0.2; text-transform: uppercase; letter-spacing: 10px; font-weight: 900;">Awaiting Manifestation</div>';
                 return;
@@ -364,11 +365,12 @@ export function ModulePlayer({
               reportError(err.message, err.stack);
             }
           })();
-
         </script>
       </body>
     </html>
-  `, [cleanCode]);
+  `;
+    return base.replace('__SCRIPT_BODY_PLACEHOLDER__', JSON.stringify(cleanCode));
+  }, [cleanCode]);
 
   return (
     <motion.div 

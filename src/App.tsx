@@ -164,7 +164,7 @@ export default function App() {
   }>({ pledged_by: true, built_code: true, energy: true, parent_id: true, version: true, user_id: true });
   const [isLoading, setIsLoading] = useState(false);
   const [isBuilding, setIsBuilding] = useState<string | null>(null);
-  const [activeModule, setActiveModule] = useState<Suggestion | null>(null);
+  const [currentSuggestion, setCurrentSuggestion] = useState<Suggestion | null>(null);
   const [viewMode, setViewMode] = useState<'EXPLORER' | 'FEED'>('FEED');
   const [newAppType, setNewAppType] = useState<'phone' | 'desktop' | 'game' | 'terminal'>('desktop');
   const [devicePreview, setDevicePreview] = useState<'phone' | 'desktop'>('phone');
@@ -1131,7 +1131,7 @@ export default function App() {
       if (shouldBuild) {
         setApiQuota(prev => Math.max(0, prev - 10));
         const updatedS = { ...s, status: 'built' as const, built_code: builtCode };
-        setActiveModule(updatedS);
+        setCurrentSuggestion(updatedS);
       }
     } catch (err: any) {
       console.error("Error during build cycle:", err);
@@ -1151,7 +1151,7 @@ export default function App() {
       }
 
       await updateDoc(doc(db, 'suggestions', id), { status: 'deleted', is_deleted: true });
-      if (activeModule?.id === id) setActiveModule(null);
+      if (currentSuggestion?.id === id) setCurrentSuggestion(null);
     } catch (err: any) {
       console.error("Deletion Error:", err);
       alert(err.message || "Access Denied.");
@@ -1196,7 +1196,7 @@ export default function App() {
       const docRef = await addDoc(collection(db, 'suggestions'), newSuggestion);
       const data = { id: docRef.id, ...newSuggestion } as Suggestion;
       
-      setActiveModule(data); // OPEN IMMEDIATELY
+      setCurrentSuggestion(data); // OPEN IMMEDIATELY
       await buildEvolution(data);
       
     } catch (err: any) {
@@ -1275,7 +1275,7 @@ export default function App() {
 
       setApiQuota(prev => Math.max(0, prev - 15));
       const updatedSuggestion = { ...suggestion, status: 'built' as const, built_code: generatedCode };
-      setActiveModule(updatedSuggestion);
+      setCurrentSuggestion(updatedSuggestion);
       setIsManifesting(false);
 
     } catch (err: any) {
@@ -1567,7 +1567,7 @@ export default function App() {
                           <button 
                             onClick={() => {
                               if (s.built_code) {
-                                setActiveModule(s as any);
+                                setCurrentSuggestion(s as any);
                                 setIsRepoOpen(false);
                               }
                             }}
@@ -1618,7 +1618,7 @@ export default function App() {
             <ModuleNode 
               key={s.id} 
               suggestion={s} 
-              onRun={(suggestion) => setActiveModule(suggestion)} 
+              onRun={(suggestion) => setCurrentSuggestion(suggestion)} 
             />
           ))
         }
@@ -1835,7 +1835,7 @@ export default function App() {
                               <div className="flex justify-end gap-2 md:pr-2 mt-2 md:mt-0 pt-2 md:pt-0 border-t md:border-t-0 border-white/5">
                                 {isApp ? (
                                   <>
-                                    <button onClick={() => setActiveModule(s)} className="flex-1 md:flex-none p-2 md:p-2.5 rounded-lg bg-white text-black hover:scale-105 md:hover:scale-110 active:scale-95 transition-all flex items-center justify-center gap-2 group/launch" title="Launch App">
+                                    <button onClick={() => setCurrentSuggestion(s)} className="flex-1 md:flex-none p-2 md:p-2.5 rounded-lg bg-white text-black hover:scale-105 md:hover:scale-110 active:scale-95 transition-all flex items-center justify-center gap-2 group/launch" title="Launch App">
                                       <Play className="w-3.5 md:w-4 h-3.5 md:h-4 fill-current group-hover/launch:animate-pulse" />
                                       <span className="text-[9px] font-black uppercase tracking-widest">Execute</span>
                                     </button>
@@ -1893,7 +1893,7 @@ export default function App() {
                            animate={{ opacity: 1, scale: 1 }}
                            transition={{ delay: idx * 0.1 }}
                            className="group aspect-[4/5] bg-gradient-to-b from-white/10 to-white/5 rounded-[2rem] border border-white/10 overflow-hidden relative flex flex-col hover:border-indigo-500/50 transition-all cursor-pointer shadow-2xl"
-                           onClick={() => s.status === 'built' && setActiveModule(s)}
+                           onClick={() => s.status === 'built' && setCurrentSuggestion(s)}
                          >
                             {/* App Preview Mock/Visual */}
                             <div className="flex-1 bg-black/40 flex items-center justify-center relative overflow-hidden">
@@ -1962,7 +1962,7 @@ export default function App() {
                   suggestions={suggestions} 
                   onSelect={(s) => {
                     console.log("Selected evolution node:", s);
-                    setActiveModule(s);
+                    setCurrentSuggestion(s);
                   }} 
                 />
               ) : (
@@ -2568,17 +2568,17 @@ export default function App() {
       )}
 
       <AnimatePresence>
-        {activeModule && (
+        {currentSuggestion && (
           <ModulePlayer 
-            suggestion={activeModule} 
-            onClose={() => setActiveModule(null)} 
+            suggestion={currentSuggestion} 
+            onClose={() => setCurrentSuggestion(null)} 
             onRefine={async (feedback) => {
               const refinePrompt = `
                 System: ${aiConfig.systemPrompt}
                 Objective: Update the existing "App" component based on user feedback.
                 
                 Current Code:
-                ${activeModule.built_code}
+                ${currentSuggestion.built_code}
                 
                 User Feedback:
                 "${feedback}"
@@ -2596,35 +2596,35 @@ export default function App() {
               // Push to local history and sync
               if (newCode) {
                 const newVersion: EvolutionVersion = {
-                  code: activeModule.built_code || "",
+                  code: currentSuggestion.built_code || "",
                   timestamp: new Date().toISOString(),
                   prompt: feedback
                 };
                 
-                const updatedHistory = [newVersion, ...(activeModule.history || [])];
+                const updatedHistory = [newVersion, ...(currentSuggestion.history || [])];
                 const updatePayload: any = { history: updatedHistory, built_code: newCode };
                 
-                await updateDoc(doc(db, 'suggestions', activeModule.id), updatePayload);
-                setActiveModule(prev => prev ? { ...prev, built_code: newCode, history: updatedHistory } : null);
+                await updateDoc(doc(db, 'suggestions', currentSuggestion.id), updatePayload);
+                setCurrentSuggestion(prev => prev ? { ...prev, built_code: newCode, history: updatedHistory } : null);
               }
               
               return newCode;
             }}
             onSave={async (newCode) => {
               const newVersion: EvolutionVersion = {
-                code: activeModule.built_code || "",
+                code: currentSuggestion.built_code || "",
                 timestamp: new Date().toISOString(),
                 prompt: "Manual Revision"
               };
               
-              const updatedHistory = [newVersion, ...(activeModule.history || [])];
+              const updatedHistory = [newVersion, ...(currentSuggestion.history || [])];
               const updatePayload: any = { 
                 built_code: newCode,
                 history: updatedHistory
               };
 
-              await updateDoc(doc(db, 'suggestions', activeModule.id), updatePayload);
-              setActiveModule(prev => prev ? { ...prev, built_code: newCode, history: updatedHistory } : null);
+              await updateDoc(doc(db, 'suggestions', currentSuggestion.id), updatePayload);
+              setCurrentSuggestion(prev => prev ? { ...prev, built_code: newCode, history: updatedHistory } : null);
             }}
           />
         )}
