@@ -176,6 +176,7 @@ export default function App() {
   const [filterMode, setFilterMode] = useState<'all' | 'mine'>('all');
   const [isInitializing, setIsInitializing] = useState(true);
   const [isManifesting, setIsManifesting] = useState(false);
+  const [manifestingStep, setManifestingStep] = useState("");
   const [isRateLimited, setIsRateLimited] = useState(false);
   const [rateLimitCountdown, setRateLimitCountdown] = useState(0);
   const [forceCloud, setForceCloud] = useState(() => {
@@ -1255,28 +1256,50 @@ export default function App() {
         setIsBuilding(null);
         return;
       }
-      setIsManifesting(true);
-      const text = await callUnifiedAI(prompt);
+      const steps = [
+        "Initializing Neural Engine...",
+        "Analysing prompt architecture...",
+        "Conceptualizing UI patterns...",
+        "Synthesizing component logic...",
+        "Hardening structural layers...",
+        "Finalizing environment bridge..."
+      ];
       
-      const match = text.match(/```(?:javascript|typescript|tsx|jsx)?\s?([\s\S]*?)```/);
-      let generatedCode = (match ? match[1] : text)
-        .replace(/```[a-z]*\n?/gi, '')
-        .replace(/```/g, '')
-        .trim();
+      let stepIdx = 0;
+      setManifestingStep(steps[0]);
+      setIsManifesting(true);
+      
+      const stepInterval = setInterval(() => {
+        stepIdx = Math.min(stepIdx + 1, steps.length - 1);
+        setManifestingStep(steps[stepIdx]);
+      }, 2000);
 
-      if (!generatedCode) {
-        throw new Error("The system returned no code. Build failed.");
+      try {
+        const text = await callUnifiedAI(prompt);
+        clearInterval(stepInterval);
+        
+        const match = text.match(/```(?:javascript|typescript|tsx|jsx)?\s?([\s\S]*?)```/);
+        let generatedCode = (match ? match[1] : text)
+          .replace(/```[a-z]*\n?/gi, '')
+          .replace(/```/g, '')
+          .trim();
+
+        if (!generatedCode) {
+          throw new Error("The system returned no code. Build failed.");
+        }
+
+        await updateDoc(doc(db, 'suggestions', suggestion.id), {
+          status: 'built',
+          built_code: generatedCode
+        });
+
+        setApiQuota(prev => Math.max(0, prev - 15));
+        const updatedSuggestion = { ...suggestion, status: 'built' as const, built_code: generatedCode };
+        setCurrentSuggestion(updatedSuggestion);
+      } finally {
+        clearInterval(stepInterval);
+        setIsManifesting(false);
       }
-
-      await updateDoc(doc(db, 'suggestions', suggestion.id), {
-        status: 'built',
-        built_code: generatedCode
-      });
-
-      setApiQuota(prev => Math.max(0, prev - 15));
-      const updatedSuggestion = { ...suggestion, status: 'built' as const, built_code: generatedCode };
-      setCurrentSuggestion(updatedSuggestion);
-      setIsManifesting(false);
 
     } catch (err: any) {
       console.error("Generation failure:", err);
@@ -1370,7 +1393,9 @@ export default function App() {
                 </motion.h2>
                 
                 <div className="flex flex-col gap-3">
-                   <p className="text-[11px] text-indigo-400 font-mono uppercase tracking-[6px] animate-pulse">Neural Path Integration in progress</p>
+                   <p className="text-[11px] text-indigo-400 font-mono uppercase tracking-[6px] animate-pulse">
+                     {manifestingStep}
+                   </p>
                    <div className="flex justify-center gap-1">
                       {[1,2,3,4,5].map(i => (
                         <motion.div 

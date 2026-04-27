@@ -369,7 +369,7 @@ export function ModulePlayer({
       </body>
     </html>
   `;
-    return base.replace('__SCRIPT_BODY_PLACEHOLDER__', JSON.stringify(cleanCode));
+    return base.replace('__SCRIPT_BODY_PLACEHOLDER__', () => JSON.stringify(cleanCode));
   }, [cleanCode]);
 
   return (
