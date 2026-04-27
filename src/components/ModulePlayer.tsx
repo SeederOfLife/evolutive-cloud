@@ -38,7 +38,7 @@ export function ModulePlayer({
   const [code, setCode] = useState(suggestion.built_code || "");
   const [activeSideTab, setActiveSideTab] = useState<'files' | 'chat' | 'history' | 'settings'>('files');
   const [deviceFrame, setDeviceFrame] = useState<'phone' | 'desktop'>(suggestion.app_type === 'phone' ? 'phone' : 'desktop');
-  const [isExplorerOpen, setIsExplorerOpen] = useState(true);
+  const [isExplorerOpen, setIsExplorerOpen] = useState(typeof window !== 'undefined' && window.innerWidth >= 768);
   const [activeFile, setActiveFile] = useState('src/App.tsx');
   const [showPreview, setShowPreview] = useState(true);
 
@@ -378,45 +378,59 @@ export function ModulePlayer({
       className="fixed inset-0 z-50 flex flex-col bg-[#050508] text-white overflow-hidden font-sans"
     >
       {/* --- TOP BAR --- */}
-      <div className="h-14 border-b border-white/5 flex items-center justify-between px-4 bg-black/40 backdrop-blur-2xl shrink-0">
-        <div className="flex items-center gap-4">
+      <div className="h-14 border-b border-white/5 flex items-center justify-between px-2 sm:px-4 bg-black/40 backdrop-blur-2xl shrink-0">
+        <div className="flex items-center gap-2 sm:gap-4 flex-1">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-indigo-500/20 flex items-center justify-center border border-indigo-500/30">
+            <button 
+              onClick={onClose}
+              className="md:hidden w-8 h-8 flex items-center justify-center rounded-lg bg-white/5 border border-white/10 text-white/60 active:scale-90 transition-all"
+              title="Close"
+            >
+              <X className="w-4 h-4" />
+            </button>
+            <button 
+              onClick={() => setIsExplorerOpen(!isExplorerOpen)}
+              className="md:hidden w-8 h-8 flex items-center justify-center rounded-lg bg-white/5 border border-white/10 text-white/60 active:scale-90 transition-all"
+              title="Menu"
+            >
+              <FolderTree className="w-4 h-4" />
+            </button>
+            <div className="w-8 h-8 rounded-lg bg-indigo-500/20 hidden sm:flex items-center justify-center border border-indigo-500/30">
               <Sparkles className="w-4 h-4 text-indigo-400" />
             </div>
-            <div className="hidden sm:block">
+            <div className="hidden lg:block">
               <h1 className="text-[10px] font-black uppercase tracking-[3px] leading-none mb-0.5">EVOLUTIONARY_STUDIO</h1>
               <p className="text-[8px] text-white/30 uppercase tracking-[2px] font-bold">Rev: {suggestion.version || 1}.0</p>
             </div>
           </div>
           
-          <div className="flex items-center gap-1 bg-white/5 p-1 rounded-lg ml-4">
+          <div className="flex items-center gap-1 bg-white/5 p-0.5 sm:p-1 rounded-lg ml-0 sm:ml-4">
             <button 
               onClick={() => setShowPreview(true)}
-              className={`px-4 py-1.5 rounded-md text-[9px] font-black uppercase tracking-widest transition-all ${showPreview ? 'bg-indigo-500 text-white shadow-lg' : 'text-white/40 hover:text-white'}`}
+              className={`px-3 sm:px-4 py-1.5 rounded-md text-[8px] sm:text-[9px] font-black uppercase tracking-widest transition-all ${showPreview ? 'bg-indigo-500 text-white shadow-lg' : 'text-white/40 hover:text-white'}`}
             >
               Preview
             </button>
             <button 
               onClick={() => setShowPreview(false)}
-              className={`px-4 py-1.5 rounded-md text-[9px] font-black uppercase tracking-widest transition-all ${!showPreview ? 'bg-indigo-500 text-white shadow-lg' : 'text-white/40 hover:text-white'}`}
+              className={`px-3 sm:px-4 py-1.5 rounded-md text-[8px] sm:text-[9px] font-black uppercase tracking-widest transition-all ${!showPreview ? 'bg-indigo-500 text-white shadow-lg' : 'text-white/40 hover:text-white'}`}
             >
               Code
             </button>
           </div>
 
           {showPreview && (
-            <div className="flex items-center gap-1 bg-white/5 p-1 rounded-lg ml-2">
+            <div className="flex items-center gap-1 bg-white/5 p-0.5 sm:p-1 rounded-lg ml-1 sm:ml-2">
               <button 
                 onClick={() => setDeviceFrame('phone')}
-                className={`w-8 h-8 flex items-center justify-center rounded-md transition-all ${deviceFrame === 'phone' ? 'bg-indigo-500 text-white' : 'text-white/20'}`}
+                className={`w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center rounded-md transition-all ${deviceFrame === 'phone' ? 'bg-indigo-500 text-white' : 'text-white/20'}`}
                 title="Phone Preview"
               >
                  <Layout className="w-3 h-3" />
               </button>
               <button 
                 onClick={() => setDeviceFrame('desktop')}
-                className={`w-8 h-8 flex items-center justify-center rounded-md transition-all ${deviceFrame === 'desktop' ? 'bg-indigo-500 text-white' : 'text-white/20'}`}
+                className={`w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center rounded-md transition-all ${deviceFrame === 'desktop' ? 'bg-indigo-500 text-white' : 'text-white/20'}`}
                 title="Desktop Preview"
               >
                  <Monitor className="w-3 h-3" />
@@ -425,18 +439,18 @@ export function ModulePlayer({
           )}
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           <button 
             onClick={handleSave}
             disabled={isSaving || code === suggestion.built_code}
-            className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase tracking-[2px] transition-all flex items-center gap-2 ${code === suggestion.built_code ? 'bg-white/5 text-white/20' : 'bg-white text-black hover:scale-105 active:scale-95'}`}
+            className={`px-3 sm:px-4 py-2 rounded-lg text-[8px] sm:text-[9px] font-black uppercase tracking-[2px] transition-all flex items-center gap-2 ${code === suggestion.built_code ? 'bg-white/5 text-white/20' : 'bg-white text-black hover:scale-105 active:scale-95'}`}
           >
             {isSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Database className="w-3 h-3" />}
-            Commit
+            <span className="hidden xs:inline">Commit</span>
           </button>
           <button 
             onClick={onClose} 
-            className="w-9 h-9 flex items-center justify-center hover:bg-white/10 rounded-lg transition-all text-white/40 hover:text-white border border-white/10"
+            className="hidden md:flex w-9 h-9 items-center justify-center hover:bg-white/10 rounded-lg transition-all text-white/40 hover:text-white border border-white/10"
           >
             <X className="w-5 h-5" />
           </button>
@@ -445,7 +459,7 @@ export function ModulePlayer({
 
       <div className="flex-1 flex overflow-hidden">
         {/* --- ACTIVITY BAR (SIDE) --- */}
-        <div className="w-14 border-r border-white/5 bg-[#020205] flex flex-col items-center py-4 gap-6 shrink-0">
+        <div className="hidden md:flex w-14 border-r border-white/5 bg-[#020205] flex-col items-center py-4 gap-6 shrink-0">
           {[
             { id: 'files', icon: FolderTree, label: 'Files' },
             { id: 'chat', icon: MessageCircle, label: 'AI' },
@@ -476,15 +490,31 @@ export function ModulePlayer({
           {isExplorerOpen && (
             <motion.div 
               initial={{ width: 0, opacity: 0 }}
-              animate={{ width: 300, opacity: 1 }}
+              animate={{ width: typeof window !== 'undefined' && window.innerWidth < 768 ? '100%' : 300, opacity: 1 }}
               exit={{ width: 0, opacity: 0 }}
-              className="border-r border-white/5 bg-[#08080a] flex flex-col overflow-hidden shrink-0"
+              className={`border-r border-white/5 bg-[#08080a] flex flex-col overflow-hidden shrink-0 z-40 ${typeof window !== 'undefined' && window.innerWidth < 768 ? 'fixed inset-0 top-14' : ''}`}
             >
               <div className="h-12 flex items-center justify-between px-4 border-b border-white/5 bg-white/5 shrink-0">
-                <span className="text-[10px] font-black uppercase tracking-[3px] text-white/60">
+                <div className="flex md:hidden items-center gap-2 mr-2">
+                   {[
+                     { id: 'files', icon: FolderTree },
+                     { id: 'chat', icon: MessageCircle },
+                     { id: 'history', icon: History },
+                     { id: 'settings', icon: Settings }
+                   ].map(tab => (
+                     <button 
+                       key={tab.id}
+                       onClick={() => setActiveSideTab(tab.id as any)}
+                       className={`p-1.5 rounded-lg transition-all ${activeSideTab === tab.id ? 'bg-indigo-500 text-white' : 'text-white/20'}`}
+                     >
+                        <tab.icon className="w-3.5 h-3.5" />
+                     </button>
+                   ))}
+                </div>
+                <span className="text-[10px] font-black uppercase tracking-[3px] text-white/60 truncate">
                   {activeSideTab === 'files' ? 'File_Explorer' : activeSideTab.toUpperCase()}
                 </span>
-                <button onClick={() => setIsExplorerOpen(false)} className="text-white/20 hover:text-white">
+                <button onClick={() => setIsExplorerOpen(false)} className="ml-auto text-white/20 hover:text-white shrink-0">
                   <ChevronDown className="w-4 h-4 rotate-90" />
                 </button>
               </div>
@@ -628,19 +658,19 @@ export function ModulePlayer({
                     <span className="text-[8px] font-black uppercase tracking-widest text-white/30">{deviceFrame.toUpperCase()} MODE</span>
                  </div>
               </div>
-              <div className="flex-1 bg-black/40 flex items-center justify-center overflow-hidden p-4 md:p-8">
+              <div className="flex-1 bg-black/40 flex items-center justify-center overflow-hidden p-2 sm:p-4 md:p-8">
                  <div className={`relative transition-all duration-700 ease-[cubic-bezier(0.23,1,0.32,1)] ${
                    deviceFrame === 'phone' 
-                   ? 'w-[320px] h-[640px] rounded-[3rem] border-[12px] border-white/10 shadow-[0_50px_100px_rgba(0,0,0,0.5)] bg-black overflow-hidden' 
-                   : 'w-full h-full rounded-2xl md:rounded-3xl border border-white/5 bg-black md:max-w-6xl md:max-h-[90%]'
+                   ? 'w-full max-w-[320px] aspect-[9/19] max-h-full rounded-[2rem] sm:rounded-[3rem] border-[8px] sm:border-[12px] border-white/10 shadow-[0_50px_100px_rgba(0,0,0,0.5)] bg-black overflow-hidden' 
+                   : 'w-full h-full rounded-xl md:rounded-3xl border border-white/5 bg-black md:max-w-6xl md:max-h-[90%]'
                  }`}>
                     {/* Phone Status Bar Mockup */}
                     {deviceFrame === 'phone' && (
-                       <div className="absolute top-0 left-0 w-full h-8 flex items-center justify-between px-8 z-10 pointer-events-none">
-                          <div className="text-[10px] font-black text-white/40">9:41</div>
+                       <div className="absolute top-0 left-0 w-full h-6 sm:h-8 flex items-center justify-between px-6 sm:px-8 z-10 pointer-events-none">
+                          <div className="text-[8px] sm:text-[10px] font-black text-white/40">9:41</div>
                           <div className="flex gap-1">
-                             <div className="w-3 h-3 rounded-full bg-white/10" />
-                             <div className="w-3 h-3 rounded-full bg-white/10" />
+                             <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-white/10" />
+                             <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-white/10" />
                           </div>
                        </div>
                     )}
@@ -655,7 +685,7 @@ export function ModulePlayer({
                     
                     {/* Phone Home Indicator Mockup */}
                     {deviceFrame === 'phone' && (
-                       <div className="absolute bottom-1.5 left-1/2 -translate-x-1/2 w-32 h-1.5 bg-white/10 rounded-full z-10 pointer-events-none" />
+                       <div className="absolute bottom-1 sm:bottom-1.5 left-1/2 -translate-x-1/2 w-24 sm:w-32 h-1 sm:h-1.5 bg-white/10 rounded-full z-10 pointer-events-none" />
                     )}
                  </div>
               </div>
