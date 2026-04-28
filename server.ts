@@ -79,12 +79,12 @@ async function startServer() {
     } catch (viteErr) {
       console.error("Failed to initialize Vite server:", viteErr);
       // Fallback to static if vite fails
-      const distPath = path.join(process.cwd(), "dist");
+      const distPath = path.join(process.cwd(), "build");
       app.use(express.static(distPath));
     }
   } else {
     console.log("Starting in PRODUCTION mode...");
-    const distPath = path.join(process.cwd(), "dist");
+    const distPath = path.join(process.cwd(), "build");
     app.use(express.static(distPath));
     app.get("*", (req, res) => {
       res.sendFile(path.join(distPath, "index.html"));

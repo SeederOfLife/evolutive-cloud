@@ -79,25 +79,30 @@ export function ModulePlayer({
     let processed = code;
     
     // Remove imports but keep the variable names if they are used as destructured elements 
-    // actually, most AI code uses standard imports. 
-    // We'll strip them and rely on global scope.
-    processed = processed.replace(/import\s+[\s\S]*?from\s+(['"]).*?\1;?/g, '');
+    // We'll strip them and allow the injection logic to provide them as locals or via window.
+    processed = processed.replace(/import\s+[\s\S]*?from\s+(["'])(?:react|lucide-react|framer-motion|motion\/react|recharts|d3|three|@react-three\/fiber|@react-three\/drei|react-markdown|tone|openai|canvas-confetti|clsx|tailwind-merge|@google\/generative-ai).*?\1;?/g, '');
     processed = processed.replace(/import\s+(['"]).*?\1;?/g, '');
     
+    // Remove individual imports like import { useState } from "react";
+    processed = processed.replace(/import\s+\{([^}]+)\}\s+from\s+(["'])(?:react|lucide-react|framer-motion|motion\/react|recharts|d3|three|@react-three\/fiber|@react-three\/drei|react-markdown|tone|openai|canvas-confetti|clsx|tailwind-merge|@google\/generative-ai).*?\2;?/g, '');
+
     // Remove boilerplate that AI might generate despite instructions
-    processed = processed.replace(/const\s+\{[\s\S]*?\}\s*=\s*window\.(React|Motion|lucide|Recharts|d3);?/g, '');
+    processed = processed.replace(/const\s+\{[\s\S]*?\}\s*=\s*(window\.)?(React|Motion|lucide|Lucide|Recharts|d3|LucideReact);?/g, '');
+    processed = processed.replace(/const\s+([a-zA-Z0-9_$]+)\s*=\s*(window\.)?(React|Motion|lucide|Lucide|Recharts|d3|LucideReact)\.([a-zA-Z0-9_$]+);?/g, '');
     
     // Handle exports - capture the component for rendering
-    // 1. Named function export (with or without space before parens)
-    processed = processed.replace(/export\s+default\s+function\s+([a-zA-Z0-9_$]+)\s*\(/g, 'window.__BUILT_APP__ = function $1(');
+    // 1. Named function export
+    processed = processed.replace(/export\s+default\s+function\s+([a-zA-Z0-9_$]+)/g, 'window.__BUILT_APP__ = function $1');
     // 2. Anonymous function export
     processed = processed.replace(/export\s+default\s+function\s*\(/g, 'window.__BUILT_APP__ = function (');
+    // 2b. Arrow function anonymous
+    processed = processed.replace(/export\s+default\s+\(([^)]*)\)\s*=>/g, 'window.__BUILT_APP__ = ($1) =>');
     // 3. Class export
     processed = processed.replace(/export\s+default\s+class\s+([a-zA-Z0-9_$]+)/g, 'window.__BUILT_APP__ = class $1');
     // 4. Anonymous class export
     processed = processed.replace(/export\s+default\s+class\s*\{/g, 'window.__BUILT_APP__ = class {');
-    // 5. Arrow function/Variable export (e.g., export default App;)
-    processed = processed.replace(/export\s+default\s+([a-zA-Z0-9_$]+);?\s*$/g, 'window.__BUILT_APP__ = $1;');
+    // 5. Arrow function/Variable export (e.g., const App = ...; export default App;)
+    processed = processed.replace(/export\s+default\s+([a-zA-Z0-9_$]+);?\s*$/gm, 'window.__BUILT_APP__ = $1;');
     
     // Remaining generic exports
     processed = processed.replace(/export\s+default\s+/g, 'window.__BUILT_APP__ = ');
@@ -252,6 +257,29 @@ export function ModulePlayer({
               // Handle potential CommonJS output from Babel
               window.exports = window.exports || {};
               window.module = window.module || { exports: window.exports };
+              window.require = (name) => {
+                const map = {
+                  'react': window.React,
+                  'react-dom': window.ReactDOM,
+                  'react-dom/client': window.ReactDOM,
+                  'lucide-react': window.LucideReact,
+                  'framer-motion': window.Motion,
+                  'motion/react': window.Motion,
+                  'recharts': window.Recharts,
+                  'd3': window.d3,
+                  'three': window.THREE,
+                  '@react-three/fiber': window.ReactThreeFiber,
+                  '@react-three/drei': window.Drei,
+                  'react-markdown': window.ReactMarkdown,
+                  'canvas-confetti': window.confetti,
+                  'clsx': window.clsx,
+                  'tailwind-merge': window.tailwindMerge,
+                  'tone': window.Tone,
+                  'openai': window.OpenAI,
+                  '@google/generative-ai': window.GoogleGenAI
+                };
+                return map[name] || window[name] || {};
+              };
 
               // Expose popular libs to global scope for AI logic
               window.React = React;
@@ -279,7 +307,7 @@ export function ModulePlayer({
               
               // Map all Drei components
               Object.keys(Drei).forEach(key => {
-                window[key] = Drei[key];
+                if (/^[A-Z]/.test(key)) window[key] = Drei[key];
               });
               
               if (Drei.OrbitControls) window.OrbitControls = Drei.OrbitControls;
@@ -292,8 +320,9 @@ export function ModulePlayer({
               // Map Framer Motion correctly
               window.motion = Motion.motion || Motion;
               window.AnimatePresence = Motion.AnimatePresence;
+              window.LayoutGroup = Motion.LayoutGroup;
               // Ensure window.Motion has the shape the AI expects
-              if (!window.Motion) window.Motion = { motion: window.motion, AnimatePresence: window.AnimatePresence };
+              if (!window.Motion) window.Motion = { motion: window.motion, AnimatePresence: window.AnimatePresence, LayoutGroup: window.LayoutGroup };
 
               // Expose Recharts components globally
               const Recharts = window.Recharts || {};
@@ -302,20 +331,22 @@ export function ModulePlayer({
               });
 
               // Expose Lucide icons globally and via the alias the AI expects
+              const LucideReact = window.LucideReact || {};
               window.lucide = LucideReact;
+              window.Lucide = LucideReact;
               Object.keys(LucideReact).forEach(key => { 
                 if (typeof LucideReact[key] === 'function' || typeof LucideReact[key] === 'object') {
-                  window[key] = LucideReact[key]; 
+                  if (/^[A-Z]/.test(key)) window[key] = LucideReact[key]; 
                   // Also expose lowercase version if AI uses it (less common but safe)
                   if (!window[key.toLowerCase()]) window[key.toLowerCase()] = LucideReact[key];
                 }
               });
-              
-              window.Icon = ({ name, ...props }) => {
-                if (!name) return null;
-                const normalizedName = name.split('-').map(part => part.charAt(0).toUpperCase() + part.slice(1)).join('');
-                const IconComp = LucideReact[normalizedName] || LucideReact[name] || LucideReact[name.charAt(0).toUpperCase() + name.slice(1)];
-                return IconComp ? React.createElement(IconComp, props) : null;
+
+              // Inject common hooks into local scope of the script if possible
+              const commonLocals = {
+                React, ReactDOM, useState, useEffect, useMemo, useRef, useCallback, createContext, useContext, useReducer, useLayoutEffect,
+                motion: window.motion, AnimatePresence: window.AnimatePresence, LayoutGroup: window.LayoutGroup,
+                ...LucideReact, ...Recharts
               };
 
               const scriptBody = __SCRIPT_BODY_PLACEHOLDER__;
@@ -326,7 +357,10 @@ export function ModulePlayer({
 
               try {
                 console.log("Transpiling logic...");
-                const transpiled = Babel.transform(scriptBody, { 
+                // Wrap in scope to provide local variables for common imports
+                const keys = Object.keys(commonLocals).filter(k => /^[a-zA-Z0-9_$]+$/.test(k) && !['default', 'module', 'exports'].includes(k));
+                const scopePrefex = 'const { ' + keys.join(', ') + ' } = window;\n';
+                const transpiled = Babel.transform(scopePrefex + scriptBody, { 
                   presets: ['env', 'react', 'typescript'],
                   filename: 'built-app.tsx'
                 }).code;
@@ -355,6 +389,12 @@ export function ModulePlayer({
                     AppComp = window.module.exports;
                   }
                 }
+                
+                // Check for named exports in exports object
+                if (!AppComp && window.exports) {
+                  const namedExport = Object.keys(window.exports).find(k => /^[A-Z]/.test(k) && typeof window.exports[k] === 'function');
+                  if (namedExport) AppComp = window.exports[namedExport];
+                }
               }
 
               // Final detection heuristic
@@ -363,7 +403,7 @@ export function ModulePlayer({
                   !initialKeys.has(k) &&
                   /^[A-Z]/.test(k) && 
                   typeof window[k] === 'function' && 
-                  !['React', 'ReactDOM', 'Recharts', 'Motion', 'LucideReact', 'Babel', 'THREE', 'Icon', 'AppComp'].includes(k) &&
+                  !['React', 'ReactDOM', 'Recharts', 'Motion', 'LucideReact', 'Babel', 'THREE', 'Icon', 'AppComp', 'Lucide', 'Drei', 'Fiber'].includes(k) &&
                   !LucideReact[k] &&
                   !k.startsWith('_')
                 );
@@ -486,9 +526,9 @@ export function ModulePlayer({
 
       <div className="flex-1 flex overflow-hidden">
         {/* --- ACTIVITY BAR (SIDE) --- */}
-        <div className="hidden md:flex w-14 border-r border-white/5 bg-[#020205] flex-col items-center py-4 gap-6 shrink-0">
+        <div className="hidden md:flex w-16 border-r border-white/5 bg-[#020205] flex-col items-center py-6 gap-8 shrink-0">
           {[
-            { id: 'files', icon: FolderTree, label: 'Files' },
+            { id: 'files', icon: FolderTree, label: 'File' },
             { id: 'chat', icon: MessageCircle, label: 'AI' },
             { id: 'history', icon: History, label: 'History' },
             { id: 'settings', icon: Settings, label: 'Config' }
@@ -640,11 +680,11 @@ export function ModulePlayer({
         <div className="flex-1 flex flex-col md:flex-row overflow-hidden relative">
            
            {/* EDITOR AREA */}
-           <div className={`flex flex-col bg-[#050508] transition-all duration-500 ${showPreview ? 'w-0 md:w-1/2 opacity-0 md:opacity-100 hidden md:flex' : 'flex-1 opacity-100'}`}>
-              <div className="h-10 border-b border-white/5 flex items-center gap-px bg-black/20 shrink-0">
-                 <div className="h-full px-4 flex items-center gap-2 bg-white/5 border-r border-white/5">
-                    <Code className="w-3 h-3 text-indigo-400" />
-                    <span className="text-[10px] font-black uppercase tracking-widest text-indigo-100">{activeFile}</span>
+           <div className={`flex flex-col bg-[#050508] transition-all duration-700 ${showPreview ? 'w-0 md:w-[35%] opacity-0 md:opacity-100 hidden md:flex' : 'flex-1 opacity-100'}`}>
+              <div className="h-12 border-b border-white/5 flex items-center gap-px bg-black/20 shrink-0">
+                 <div className="h-full px-6 flex items-center gap-3 bg-white/5 border-r border-white/5">
+                    <Code className="w-3.5 h-3.5 text-indigo-400" />
+                    <span className="text-[10px] font-black uppercase tracking-[3px] text-indigo-100">{activeFile}</span>
                  </div>
               </div>
               <div className="flex-1 overflow-hidden relative">
@@ -656,8 +696,8 @@ export function ModulePlayer({
                     className="w-full h-full bg-transparent p-8 font-mono text-[13px] text-indigo-100/70 outline-none resize-none custom-scrollbar leading-relaxed"
                   />
                 ) : (
-                  <div className="p-8 font-mono text-[12px] text-white/40 uppercase tracking-widest leading-relaxed">
-                     <FileJson className="w-8 h-8 mb-4 opacity-20" />
+                  <div className="p-10 font-mono text-[12px] text-white/40 uppercase tracking-[4px] leading-relaxed">
+                     <FileJson className="w-10 h-10 mb-6 opacity-20" />
                      {JSON.stringify({ 
                        id: suggestion.id, 
                        status: suggestion.status, 
@@ -667,37 +707,41 @@ export function ModulePlayer({
                   </div>
                 )}
               </div>
-              <div className="h-8 border-t border-white/5 bg-black/40 flex items-center justify-between px-6 text-[8px] font-black text-white/20 uppercase tracking-[3px]">
+              <div className="h-10 border-t border-white/5 bg-black/40 flex items-center justify-between px-8 text-[9px] font-black text-white/20 uppercase tracking-[4px]">
                  <span>{activeFile.split('.').pop()?.toUpperCase() || 'PLAINTEXT'}</span>
-                 <span>Evolution Layer 1.0</span>
+                 <span>Revision Layer 1.2</span>
               </div>
            </div>
 
            {/* PREVIEW AREA */}
            <div className={`flex flex-col bg-[#020205] transition-all duration-500 ${showPreview ? 'flex-1' : 'w-0 md:w-0 opacity-0 overflow-hidden hidden md:flex'}`}>
-              <div className="h-10 border-b border-white/5 flex items-center justify-between px-6 bg-black/20 shrink-0">
-                 <div className="flex items-center gap-3">
-                   <Monitor className="w-3.5 h-3.5 text-indigo-400" />
-                   <span className="text-[10px] font-black uppercase tracking-widest text-white/40">App Preview</span>
+              <div className="h-12 border-b border-white/5 flex items-center justify-between px-8 bg-black/20 shrink-0">
+                 <div className="flex items-center gap-4">
+                   <Monitor className="w-4 h-4 text-indigo-400" />
+                   <span className="text-[11px] font-black uppercase tracking-[4px] text-white/60">Live Preview Workspace</span>
                  </div>
-                 <div className="flex items-center gap-2">
-                    <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-                    <span className="text-[8px] font-black uppercase tracking-widest text-white/30">{deviceFrame.toUpperCase()} MODE</span>
+                 <div className="flex items-center gap-3">
+                    <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse shadow-[0_0_10px_rgba(34,197,94,0.5)]" />
+                    <span className="text-[10px] font-black uppercase tracking-[4px] text-white/30">{deviceFrame.toUpperCase()} MODE</span>
                  </div>
               </div>
-              <div className="flex-1 bg-black/40 flex items-center justify-center overflow-hidden p-2 sm:p-4 md:p-8">
+              <div className="flex-1 bg-black/40 flex items-center justify-center overflow-hidden p-2 sm:p-4 lg:p-12">
                  <div className={`relative transition-all duration-700 ease-[cubic-bezier(0.23,1,0.32,1)] ${
                    deviceFrame === 'phone' 
-                   ? 'w-full max-w-[320px] aspect-[9/19] max-h-full rounded-[2rem] sm:rounded-[3rem] border-[8px] sm:border-[12px] border-white/10 shadow-[0_50px_100px_rgba(0,0,0,0.5)] bg-black overflow-hidden' 
-                   : 'w-full h-full rounded-xl md:rounded-3xl border border-white/5 bg-black md:max-w-6xl md:max-h-[90%]'
+                   ? 'w-full max-w-[320px] aspect-[9/19] max-h-full rounded-[2.5rem] sm:rounded-[3.5rem] border-[10px] sm:border-[14px] border-white/10 shadow-[0_60px_120px_rgba(0,0,0,0.6)] bg-black overflow-hidden' 
+                   : 'w-full h-full rounded-2xl lg:rounded-[3rem] border border-white/10 bg-black shadow-[0_40px_80px_rgba(0,0,0,0.4)]'
                  }`}>
                     {/* Phone Status Bar Mockup */}
                     {deviceFrame === 'phone' && (
-                       <div className="absolute top-0 left-0 w-full h-6 sm:h-8 flex items-center justify-between px-6 sm:px-8 z-10 pointer-events-none">
-                          <div className="text-[8px] sm:text-[10px] font-black text-white/40">9:41</div>
-                          <div className="flex gap-1">
-                             <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-white/10" />
-                             <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-white/10" />
+                       <div className="absolute top-0 left-0 w-full h-8 sm:h-10 flex items-center justify-between px-8 sm:px-10 z-10 pointer-events-none">
+                          <div className="text-[9px] sm:text-[11px] font-black text-white/40 font-mono tracking-tighter">9:41</div>
+                          <div className="flex gap-1.5 items-center">
+                             <div className="w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full bg-white/10 flex items-center justify-center">
+                                <div className="w-1.5 h-1.5 bg-white/40 rounded-full" />
+                             </div>
+                             <div className="w-5 h-2.5 sm:w-6 sm:h-3 rounded-[2px] border border-white/20 relative">
+                                <div className="absolute top-0.5 left-0.5 bottom-0.5 right-1 bg-white/40 rounded-[1px]" />
+                             </div>
                           </div>
                        </div>
                     )}
@@ -712,7 +756,7 @@ export function ModulePlayer({
                     
                     {/* Phone Home Indicator Mockup */}
                     {deviceFrame === 'phone' && (
-                       <div className="absolute bottom-1 sm:bottom-1.5 left-1/2 -translate-x-1/2 w-24 sm:w-32 h-1 sm:h-1.5 bg-white/10 rounded-full z-10 pointer-events-none" />
+                       <div className="absolute bottom-2 left-1/2 -translate-x-1/2 w-28 sm:w-36 h-1.5 bg-white/10 rounded-full z-10 pointer-events-none" />
                     )}
                  </div>
               </div>
@@ -724,24 +768,30 @@ export function ModulePlayer({
                   )}
 
                   {/* MINI HUD */}
-                  <div className="absolute bottom-6 right-6 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="absolute bottom-10 right-10 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button 
                        onClick={() => { if (iframeRef.current) iframeRef.current.srcdoc = srcDoc; }}
-                       className="p-3 bg-white/5 hover:bg-white/10 backdrop-blur-xl border border-white/10 rounded-xl transition-all text-white/40 hover:text-white"
+                       className="p-4 bg-white/5 hover:bg-white/10 backdrop-blur-3xl border border-white/10 rounded-2xl transition-all text-white/40 hover:text-white shadow-2xl hover:scale-110 active:scale-90"
+                       title="Neural Reboot"
                     >
-                       <RefreshCw className="w-4 h-4" />
+                       <RefreshCw className="w-5 h-5" />
                     </button>
                   </div>
               </div>
-              <div className="h-8 border-t border-white/5 bg-black/40 flex items-center px-6 gap-6 overflow-hidden">
-                 <div className="flex items-center gap-2 text-[8px] font-black text-white/20 uppercase tracking-widest shrink-0">
-                    <Terminal className="w-3 h-3" />
-                    <span>AI Runtime</span>
+              <div className="h-10 sm:h-12 border-t border-white/5 bg-black/40 flex items-center px-4 sm:px-8 gap-4 sm:gap-8 overflow-hidden backdrop-blur-3xl shrink-0">
+                 <div className="flex items-center gap-3 text-[9px] font-black text-white/30 uppercase tracking-[4px] shrink-0">
+                    <Terminal className="w-3.5 h-3.5 text-indigo-500" />
+                    <span className="hidden xs:inline">Bridge_Status</span>
                  </div>
-                 <div className="flex-1 h-3 bg-white/5 rounded-full overflow-hidden flex items-center px-2">
-                    <div className="text-[7px] text-indigo-400 font-mono uppercase tracking-tighter truncate animate-pulse">
+                 <div className="flex-1 flex items-center gap-3 min-w-0">
+                    <div className={`w-2 h-2 rounded-full shrink-0 ${runtimeStatus.includes('CRITICAL') ? 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.8)]' : 'bg-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.8)]'} animate-pulse`} />
+                    <div className="text-[10px] text-white/60 font-mono uppercase tracking-tighter truncate">
                       {runtimeStatus}
                     </div>
+                 </div>
+                 <div className="hidden sm:flex items-center gap-4 text-[8px] font-bold text-white/10 uppercase tracking-widest shrink-0">
+                    <span>Transpiler: Babel 7.23</span>
+                    <span>Layers: 3rd_Dimension</span>
                  </div>
               </div>
            </div>
