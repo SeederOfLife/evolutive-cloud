@@ -56,7 +56,23 @@ export function ModulePlayer({
     suggestion.built_code ? [] : [{ role: 'user', content: `Initiating application sequence for: ${suggestion.content}` }]
   );
   
+  const [runtimeStatus, setRuntimeStatus] = useState("Initializing neural bridge...");
+  const [runtimeLogs, setRuntimeLogs] = useState<string[]>([]);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  
+  useEffect(() => {
+    const handleMessage = (e: MessageEvent) => {
+      if (e.data?.type === 'EVO_LOG') {
+        setRuntimeLogs(prev => [e.data.content, ...prev].slice(0, 50));
+        setRuntimeStatus(e.data.content);
+      }
+      if (e.data?.type === 'EVO_ERROR') {
+        setRuntimeStatus("CRITICAL_ERROR: " + e.data.msg);
+      }
+    };
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
 
   const cleanCode = useMemo(() => {
     if (!code) return "";
@@ -68,22 +84,23 @@ export function ModulePlayer({
     processed = processed.replace(/import\s+[\s\S]*?from\s+(['"]).*?\1;?/g, '');
     processed = processed.replace(/import\s+(['"]).*?\1;?/g, '');
     
+    // Remove boilerplate that AI might generate despite instructions
+    processed = processed.replace(/const\s+\{[\s\S]*?\}\s*=\s*window\.(React|Motion|lucide|Recharts|d3);?/g, '');
+    
     // Handle exports - capture the component for rendering
-    // 1. Named function export
-    processed = processed.replace(/export\s+default\s+function\s+([a-zA-Z0-9_$]+)/g, 'window.__BUILT_APP__ = function $1');
+    // 1. Named function export (with or without space before parens)
+    processed = processed.replace(/export\s+default\s+function\s+([a-zA-Z0-9_$]+)\s*\(/g, 'window.__BUILT_APP__ = function $1(');
     // 2. Anonymous function export
     processed = processed.replace(/export\s+default\s+function\s*\(/g, 'window.__BUILT_APP__ = function (');
     // 3. Class export
     processed = processed.replace(/export\s+default\s+class\s+([a-zA-Z0-9_$]+)/g, 'window.__BUILT_APP__ = class $1');
     // 4. Anonymous class export
     processed = processed.replace(/export\s+default\s+class\s*\{/g, 'window.__BUILT_APP__ = class {');
-    // 5. Arrow function/Variable export
-    processed = processed.replace(/export\s+default\s+([a-zA-Z0-9_$]+);?/g, 'window.__BUILT_APP__ = $1;');
+    // 5. Arrow function/Variable export (e.g., export default App;)
+    processed = processed.replace(/export\s+default\s+([a-zA-Z0-9_$]+);?\s*$/g, 'window.__BUILT_APP__ = $1;');
     
-    // Remaining exports
-    if (processed.includes('export default')) {
-       processed = processed.replace(/export\s+default\s+/g, 'window.__BUILT_APP__ = ');
-    }
+    // Remaining generic exports
+    processed = processed.replace(/export\s+default\s+/g, 'window.__BUILT_APP__ = ');
     processed = processed.replace(/\bexport\s+/g, '');
     
     return processed.trim();
@@ -130,11 +147,11 @@ export function ModulePlayer({
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <script crossorigin="anonymous" src="https://unpkg.com/react@18.2.0/umd/react.production.min.js"></script>
         <script crossorigin="anonymous" src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
-        <script crossorigin="anonymous" src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+        <script crossorigin="anonymous" src="https://unpkg.com/@babel/standalone@7.23.4/babel.min.js"></script>
         <script src="https://cdn.tailwindcss.com"></script>
         <script crossorigin="anonymous" src="https://unpkg.com/lucide-react@0.453.0/dist/umd/lucide-react.min.js"></script>
         <script crossorigin="anonymous" src="https://unpkg.com/framer-motion@10.16.4/dist/framer-motion.js"></script>
-        <script crossorigin="anonymous" src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"></script>
+        <script crossorigin="anonymous" src="https://unpkg.com/recharts@2.10.3/umd/Recharts.js"></script>
         <script crossorigin="anonymous" src="https://unpkg.com/d3@7"></script>
         <script crossorigin="anonymous" src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.170.0/three.min.js"></script>
         <script crossorigin="anonymous" src="https://unpkg.com/@react-three/fiber@8.13.0/dist/react-three-fiber.umd.js"></script>
@@ -184,14 +201,22 @@ export function ModulePlayer({
             const rootElement = document.getElementById('root');
             const reportError = (msg, stack) => {
               console.error("Evolution Error:", msg, stack);
+              // Report back to parent
+              window.parent.postMessage({ type: 'EVO_ERROR', msg, stack }, '*');
               rootElement.innerHTML = [
                 '<div class="error-container">',
                 '<div style="font-weight: 800; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px; color: #f87171;">Evolution Failure</div>',
                 '<div style="opacity: 0.8; margin-bottom: 12px;">' + msg + '</div>',
                 stack ? '<pre style="font-size: 10px; opacity: 0.5; overflow: auto; max-height: 200px;">' + stack + '</pre>' : '',
-                '<div style="margin-top: 16px; font-size: 10px; color: #6366f1; text-transform: uppercase; font-weight: 800; cursor: pointer;" onclick="window.location.reload()">Re-attempting interface sync...</div>',
                 '</div>'
               ].join("");
+            };
+
+            // Capture console logs
+            const oldLog = console.log;
+            console.log = (...args) => {
+              oldLog(...args);
+              window.parent.postMessage({ type: 'EVO_LOG', content: args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ') }, '*');
             };
 
             window.onerror = (msg, url, line, col, error) => {
@@ -714,7 +739,9 @@ export function ModulePlayer({
                     <span>AI Runtime</span>
                  </div>
                  <div className="flex-1 h-3 bg-white/5 rounded-full overflow-hidden flex items-center px-2">
-                    <div className="text-[7px] text-white/10 uppercase tracking-tighter truncate">Bootstrapping framework... Complete. Mapping dependencies... Complete. Executing application logic...</div>
+                    <div className="text-[7px] text-indigo-400 font-mono uppercase tracking-tighter truncate animate-pulse">
+                      {runtimeStatus}
+                    </div>
                  </div>
               </div>
            </div>

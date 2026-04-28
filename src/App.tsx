@@ -39,6 +39,8 @@ import {
   Key, 
   Cpu, 
   Globe,
+  Monitor,
+  Terminal,
   User as UserIcon
 } from "lucide-react";
 import { User } from "firebase/auth";
@@ -206,7 +208,7 @@ export default function App() {
     w.LucideReact = { 
       ChevronUp, MessageSquare, Plus, X, Search, Activity, Database, Zap, Play, Eye, Code, 
       Sparkles, Loader2, Users, Lock, Unlock, History, MessageCircle, RefreshCw, Info, 
-      Trash2, GitBranch, Box, Layout, DraftingCompass, LogOut, ShieldCheck, Key, Cpu, Globe, CircleUser: UserIcon 
+      Trash2, GitBranch, Box, Layout, DraftingCompass, LogOut, ShieldCheck, Key, Cpu, Globe, Monitor, Terminal, CircleUser: UserIcon 
     };
     w.THREE = THREE;
   }, []);
@@ -558,6 +560,10 @@ export default function App() {
         if (aiProvider === 'web-llm') {
           try {
             if (!webLlmEngineRef.current) {
+              const w = window as any;
+              if (!w.navigator.gpu) {
+                throw new Error("WebGPU is not supported or enabled in this browser. Local AI requires WebGPU.");
+              }
               setWebLlmProgress("Wakeing AI Engine...");
               const engine = new webllm.MLCEngine();
               engine.setInitProgressCallback((report) => setWebLlmProgress(report.text));
@@ -568,9 +574,10 @@ export default function App() {
               messages: [{ role: "user", content: prompt }]
             });
             return response.choices[0].message.content || "";
-          } catch (err) {
-            console.warn("Web-LLM failed, falling back to Cloud:", err);
+          } catch (err: any) {
+            console.warn("Web-LLM failure:", err);
             setWebLlmProgress("");
+            if (err.message?.includes("WebGPU")) throw err;
             return await callGeminiCloud(prompt);
           }
         }
@@ -639,9 +646,14 @@ export default function App() {
         }
 
         if (aiProvider === 'openai' || aiProvider === 'custom') {
+          const isDeepInfra = activeKey.startsWith('nvapi-') || activeKey.startsWith('NVAPI-');
+          const isMistralDirect = activeKey.startsWith('mistral-') || activeKey.toLowerCase().includes('mistral');
+          
           const client = new OpenAI({
             apiKey: activeKey,
-            baseURL: aiProvider === 'custom' ? customEndpoint : undefined,
+            baseURL: isDeepInfra ? "https://api.deepinfra.com/v1" : 
+                     (isMistralDirect && !customEndpoint ? "https://api.mistral.ai/v1" : 
+                     (aiProvider === 'custom' ? customEndpoint : undefined)),
             dangerouslyAllowBrowser: true,
           });
 
@@ -913,6 +925,7 @@ export default function App() {
       // Create a new version of the app
       const insertData: any = { 
         content: `Improved version of: ${suggestion.content} (${refinementPrompt})`,
+        app_type: suggestion.app_type || 'desktop',
         status: 'built',
         votes: 0,
         energy: 100,
@@ -1186,6 +1199,7 @@ export default function App() {
       
       const newSuggestion = {
         content: promptValue,
+        app_type: newAppType,
         votes: 1,
         energy: 10,
         status: 'pending',
@@ -1216,9 +1230,15 @@ export default function App() {
       
       const prompt = `
         System: ${aiConfig.systemPrompt}
-        Context: This app was requested by the community. ${suggestion.pledged_by?.length || 0} users supported this idea.
+        Target Archetype: ${suggestion.app_type?.toUpperCase() || 'DESKTOP'}
         
         Task: Create a beautiful, polished, and functionally complex React application for: "${suggestion.content}"
+        
+        Archetype Guidelines:
+        - If DESKTOP: Design for wide viewports, use dashboard grids, sidebars, and comprehensive layouts.
+        - If PHONE: Design for touch-first interaction, bottom navigation, and vertical stacking.
+        - If GAME: Focus on high-interactivity, canvas or motion-heavy layers, and game state loops.
+        - If TERMINAL: Use a technical, mono-spaced command interface with log outputs and technical telemetry.
         
         Capabilities & Libraries:
         - React 18 (Hooks are available in the local scope: useState, useEffect, useMemo, etc. DO NOT declare these.)
@@ -1241,14 +1261,15 @@ export default function App() {
         - Use sophisticated state management for internal transitions.
 
         Constraints:
-        - Output ONLY the component code.
+        - Output ONLY the component code. No markdown formatting.
         - The component MUST be exported as "export default function App() { ... }".
         - Use Tailwind CSS for all styling.
-        - CRITICAL: Do NOT include any import statements. The environment provides all necessary tools globally.
-        - CRITICAL: Do NOT redeclare hooks (useState, etc), or libraries like motion, Recharts, or d3. Just use them.
+        - CRITICAL: Do NOT include ANY import statements.
+        - CRITICAL: Do NOT redeclare or extract hooks/libraries from globals (e.g., do NOT do "const { useState } = React;").
+        - Assume useState, useEffect, useMemo, useRef, motion, etc., are ALREADY present in the global scope.
         - For icons, always use the pre-mapped global components (e.g. <Zap />) or the <Icon name="IconName" /> helper.
         - The container should be transparent or dark.
-        - Return ONLY the code, no markdown formatting outside of the code block if you must use one.
+        - Return ONLY the raw code.
       `;
 
       if (apiQuota < 20) {
@@ -1464,6 +1485,14 @@ export default function App() {
             </button>
           )}
 
+          <button 
+            onClick={() => setIsRepoOpen(true)}
+            className="px-4 py-2 bg-white/5 border border-white/10 rounded-full flex items-center gap-2 text-white/40 hover:text-white hover:bg-white/10 hover:border-indigo-500/50 transition-all group backdrop-blur-md shadow-lg"
+          >
+            <Database className="w-3 h-3 text-indigo-400 group-hover:scale-125 transition-transform" />
+            <span className="text-[9px] font-black uppercase tracking-widest">Builds</span>
+          </button>
+
           {neuralStatus !== 'IDLE' && (
             <motion.div 
               initial={{ opacity: 0, scale: 0.9 }}
@@ -1518,17 +1547,6 @@ export default function App() {
       </div>
 
       {/* --- CONTENT LAYER --- */}
-
-      {/* --- RIGHT SIDEBAR TOGGLE --- */}
-      <div className="absolute top-1/2 -translate-y-1/2 right-2 md:right-4 z-40">
-        <button 
-          onClick={() => setIsRepoOpen(true)}
-          className="w-12 h-20 md:w-14 md:h-24 bg-white/5 backdrop-blur-xl border border-white/10 rounded-full flex flex-col items-center justify-center gap-2 md:gap-3 hover:bg-white/10 hover:border-indigo-500/50 transition-all group pointer-events-auto shadow-2xl"
-        >
-          <Database className="w-4 h-4 md:w-5 md:h-5 text-indigo-400 group-hover:scale-125 transition-transform" />
-          <span className="[writing-mode:vertical-lr] text-[7px] md:text-[8px] font-black uppercase tracking-[2px] md:tracking-[3px] text-white/40 group-hover:text-white transition-colors">Builds</span>
-        </button>
-      </div>
 
       {/* --- REPO SIDEBAR --- */}
       <AnimatePresence>
@@ -2063,96 +2081,164 @@ export default function App() {
                           </button>
                     </div>
                   ) : (
-                    <div className="text-center space-y-8 py-10">
-                      <div className="relative inline-block">
-                        <div className="w-24 h-24 rounded-full overflow-hidden mx-auto border-4 border-indigo-500/50 shadow-[0_0_30px_rgba(99,102,241,0.3)] relative z-10 bg-black">
-                          <img 
-                            src={user.photoURL || `https://api.dicebear.com/7.x/bottts/svg?seed=${user.email}`} 
-                            alt="Profile Avatar"
-                            referrerPolicy="no-referrer"
-                            className="w-full h-full object-cover"
+                    <div className="space-y-12 py-6 max-w-4xl mx-auto">
+                      {/* Profile Header section */}
+                      <div className="flex flex-col md:flex-row items-center md:items-start gap-8 md:gap-12">
+                        <div className="relative shrink-0">
+                          <div className="w-24 h-24 md:w-32 md:h-32 rounded-full overflow-hidden border-4 border-indigo-500/50 shadow-[0_0_50px_rgba(99,102,241,0.2)] relative z-10 bg-black">
+                            <img 
+                              src={user.photoURL || `https://api.dicebear.com/7.x/bottts/svg?seed=${user.email}`} 
+                              alt="Profile Avatar"
+                              referrerPolicy="no-referrer"
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                          <motion.div 
+                            animate={{ rotate: 360 }}
+                            transition={{ duration: 15, repeat: Infinity, ease: "linear" }}
+                            className="absolute -inset-3 md:-inset-4 border border-dashed border-indigo-500/20 rounded-full"
                           />
                         </div>
-                        {/* Status Ring */}
-                        <motion.div 
-                          animate={{ rotate: 360 }}
-                          transition={{ duration: 10, repeat: Infinity, ease: "linear" }}
-                          className="absolute -inset-2 border border-dashed border-indigo-500/30 rounded-full"
-                        />
-                      </div>
 
-                      <div className="space-y-4">
-                         <h3 className="text-xl font-black uppercase tracking-[8px] text-white">{user.email?.split('@')[0]}</h3>
-                         <div className="flex flex-col items-center gap-2">
-                          <div 
-                            className="px-6 py-1.5 rounded-full text-[10px] font-black uppercase tracking-[4px] inline-block shadow-lg border"
-                            style={{ backgroundColor: `${appRank.color}20`, color: appRank.color, borderColor: `${appRank.color}40` }}
-                          >
-                            {appRank.title}
-                          </div>
-                          <div className="flex gap-1 justify-center">
-                            {[...Array(5)].map((_, i) => (
-                              <div 
-                                key={i} 
-                                className={`w-2 h-2 rounded-full ${i < appRank.level ? 'bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.8)]' : 'bg-white/10'}`} 
-                              />
-                            ))}
+                        <div className="text-center md:text-left space-y-4 pt-2">
+                           <h3 className="text-2xl md:text-4xl font-black uppercase tracking-[10px] md:tracking-[15px] text-white leading-tight">
+                             {user.email?.split('@')[0]}
+                           </h3>
+                           
+                           <div className="flex flex-col md:flex-row items-center gap-6">
+                            <div 
+                              className="px-6 py-2.5 rounded-full text-[11px] md:text-[12px] font-black uppercase tracking-[5px] inline-block shadow-xl border backdrop-blur-md"
+                              style={{ backgroundColor: `${appRank.color}15`, color: appRank.color, borderColor: `${appRank.color}30` }}
+                            >
+                              {appRank.title}
+                            </div>
+                            <div className="space-y-2">
+                              <div className="flex gap-2 px-4 py-2.5 bg-black/40 rounded-full border border-white/10 shadow-inner">
+                                {[...Array(5)].map((_, i) => (
+                                  <div 
+                                    key={i} 
+                                    className={`w-2.5 h-2.5 rounded-full transition-all duration-700 ${i < appRank.level ? 'bg-indigo-500 shadow-[0_0_15px_rgba(99,102,241,1)]' : 'bg-white/5'}`} 
+                                  />
+                                ))}
+                              </div>
+                              <div className="text-[7px] text-white/20 uppercase tracking-[3px] font-black text-center md:text-left pl-1">Evolution Level {appRank.level}/5</div>
+                            </div>
                           </div>
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 md:gap-6 max-w-lg mx-auto">
-                        <div className="p-4 md:p-6 bg-white/[0.03] border border-white/5 rounded-2xl md:rounded-3xl group">
-                          <div className="text-[8px] md:text-[10px] text-white/20 uppercase tracking-widest font-black mb-1 md:mb-2 group-hover:text-indigo-400 transition-colors text-center md:text-left">Ideas</div>
-                          <div className="text-xl md:text-2xl text-white font-black tracking-tighter text-center md:text-left">
+                      {/* Stats Overview */}
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 md:gap-10">
+                        <motion.div 
+                          whileHover={{ y: -8, scale: 1.02 }}
+                          className="p-8 md:p-10 bg-gradient-to-br from-[#0a0a20] to-[#050510] border border-white/5 rounded-[2.5rem] group transition-all hover:border-indigo-500/40 hover:shadow-[0_30px_60px_rgba(0,0,0,0.6),0_0_20px_rgba(99,102,241,0.1)] relative overflow-hidden"
+                        >
+                          <div className="absolute top-0 right-0 p-6 opacity-[0.03] group-hover:opacity-10 transition-opacity">
+                            <History size={80} />
+                          </div>
+                          <div className="flex items-center justify-between mb-6">
+                             <div className="text-[11px] text-white/30 uppercase tracking-[5px] font-black group-hover:text-indigo-400 transition-colors">Neural Ideas</div>
+                             <div className="p-2.5 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20"><History className="w-5 h-5" /></div>
+                          </div>
+                          <div className="text-5xl md:text-6xl text-white font-black tracking-tighter mb-2">
                             {suggestions.filter(s => s.user_id === user.uid).length}
                           </div>
-                        </div>
-                        <div className="p-4 md:p-6 bg-white/[0.03] border border-white/5 rounded-2xl md:rounded-3xl group">
-                          <div className="text-[8px] md:text-[10px] text-white/20 uppercase tracking-widest font-black mb-1 md:mb-2 group-hover:text-pink-400 transition-colors text-center md:text-left">Builds</div>
-                          <div className="text-xl md:text-2xl text-white font-black tracking-tighter text-center md:text-left">
-                      {suggestions.filter(s => s.user_id === user.uid && s.status === 'built').length}
-                    </div>
-                  </div>
-                  
-                  {/* System Diagnostics */}
-                  <div className="col-span-1 md:col-span-2 p-4 md:p-6 bg-indigo-500/[0.05] border border-indigo-500/20 rounded-2xl md:rounded-3xl">
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="text-[8px] md:text-[10px] text-indigo-400 uppercase tracking-widest font-black">Neural Diagnostics</div>
-                      <div className="flex gap-2">
-                        <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-                        <div className="text-[10px] text-green-500 font-mono">ONLINE</div>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      <div>
-                        <div className="text-[8px] text-white/20 uppercase mb-1">Synapses</div>
-                        <div className="text-sm font-mono text-white/80">{diagnostics.synapses}</div>
-                      </div>
-                      <div>
-                        <div className="text-[8px] text-white/20 uppercase mb-1">Connectivity</div>
-                        <div className="text-sm font-mono text-white/80">{diagnostics.connectivity.toFixed(1)}%</div>
-                      </div>
-                      <div>
-                        <div className="text-[8px] text-white/20 uppercase mb-1">Entropy</div>
-                        <div className="text-sm font-mono text-white/80">{diagnostics.entropy.toFixed(3)}</div>
-                      </div>
-                      <div>
-                        <div className="text-[8px] text-white/20 uppercase mb-1">System Load</div>
-                        <div className="text-sm font-mono text-white/80">{diagnostics.load.toFixed(1)}%</div>
-                      </div>
-                    </div>
-                  </div>
-                        <div className="p-4 md:p-6 bg-white/[0.03] border border-white/5 rounded-2xl md:rounded-3xl group">
-                          <div className="text-[8px] md:text-[10px] text-white/20 uppercase tracking-widest font-black mb-1 md:mb-2 group-hover:text-yellow-400 transition-colors text-center md:text-left">Build Power</div>
-                          <div className="text-xl md:text-2xl text-white font-black tracking-tighter text-center md:text-left">
+                          <div className="text-[8px] text-white/20 uppercase tracking-widest font-bold">Epoch Record</div>
+                        </motion.div>
+
+                        <motion.div 
+                          whileHover={{ y: -8, scale: 1.02 }}
+                          className="p-8 md:p-10 bg-gradient-to-br from-[#0a0a20] to-[#050510] border border-white/5 rounded-[2.5rem] group transition-all hover:border-pink-500/40 hover:shadow-[0_30px_60px_rgba(0,0,0,0.6),0_0_20px_rgba(236,72,153,0.1)] relative overflow-hidden"
+                        >
+                          <div className="absolute top-0 right-0 p-6 opacity-[0.03] group-hover:opacity-10 transition-opacity">
+                            <Box size={80} />
+                          </div>
+                          <div className="flex items-center justify-between mb-6">
+                             <div className="text-[11px] text-white/30 uppercase tracking-[5px] font-black group-hover:text-pink-400 transition-colors">Master Builds</div>
+                             <div className="p-2.5 rounded-xl bg-pink-500/10 text-pink-400 border border-pink-500/20"><Box className="w-5 h-5" /></div>
+                          </div>
+                          <div className="text-5xl md:text-6xl text-white font-black tracking-tighter mb-2">
+                            {suggestions.filter(s => s.user_id === user.uid && s.status === 'built').length}
+                          </div>
+                          <div className="text-[8px] text-white/20 uppercase tracking-widest font-bold">Deployed Apps</div>
+                        </motion.div>
+
+                        <motion.div 
+                          whileHover={{ y: -8, scale: 1.02 }}
+                          className="p-8 md:p-10 bg-gradient-to-br from-[#0a0a20] to-[#050510] border border-white/5 rounded-[2.5rem] group transition-all hover:border-yellow-500/40 hover:shadow-[0_30px_60px_rgba(0,0,0,0.6),0_0_20px_rgba(234,179,8,0.1)] relative overflow-hidden"
+                        >
+                          <div className="absolute top-0 right-0 p-6 opacity-[0.03] group-hover:opacity-10 transition-opacity">
+                            <Zap size={80} />
+                          </div>
+                          <div className="flex items-center justify-between mb-6">
+                             <div className="text-[11px] text-white/30 uppercase tracking-[5px] font-black group-hover:text-yellow-400 transition-colors">Core Energy</div>
+                             <div className="p-2.5 rounded-xl bg-yellow-500/10 text-yellow-400 border border-yellow-500/20"><Zap className="w-5 h-5" /></div>
+                          </div>
+                          <div className="text-5xl md:text-6xl text-white font-black tracking-tighter mb-2">
                             {suggestions.filter(s => s.user_id === user.uid).reduce((acc, curr) => acc + (curr.votes || 0), 0)}
+                          </div>
+                          <div className="text-[8px] text-white/20 uppercase tracking-widest font-bold">Neural Credits</div>
+                        </motion.div>
+                      </div>
+
+                      {/* Technical Layer */}
+                      <div className="p-6 md:p-10 bg-indigo-500/[0.03] border border-indigo-500/10 rounded-[3rem] relative overflow-hidden backdrop-blur-md">
+                        <div className="absolute top-0 right-0 p-4 opacity-5">
+                          <Cpu className="w-32 h-32 text-indigo-400" />
+                        </div>
+
+                        <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-8 gap-4 border-b border-white/5 pb-6">
+                          <div>
+                            <h4 className="text-[11px] font-black uppercase tracking-[6px] text-indigo-400">Telemetry Diagnostics</h4>
+                            <p className="text-[9px] text-white/30 lowercase italic">real-time sync: protocol v4.0.1</p>
+                          </div>
+                          <div className="flex items-center gap-3 px-4 py-2 bg-black/40 rounded-full border border-indigo-500/30">
+                            <motion.div 
+                              animate={{ opacity: [1, 0.4, 1] }} 
+                              transition={{ duration: 1.5, repeat: Infinity }}
+                              className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]" 
+                            />
+                            <span className="text-[10px] text-green-500 font-black tracking-[3px]">ACTIVE_BRIDGE</span>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2 text-white/20">
+                              <Database className="w-3 h-3" />
+                              <span className="text-[9px] uppercase font-bold tracking-widest">Synapses</span>
+                            </div>
+                            <div className="text-2xl font-mono text-white tracking-widest">{diagnostics.synapses}</div>
+                          </div>
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2 text-white/20">
+                              <Globe className="w-3 h-3" />
+                              <span className="text-[9px] uppercase font-bold tracking-widest">Connect</span>
+                            </div>
+                            <div className="text-2xl font-mono text-white tracking-widest">{diagnostics.connectivity.toFixed(1)}%</div>
+                          </div>
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2 text-white/20">
+                              <Activity className="w-3 h-3" />
+                              <span className="text-[9px] uppercase font-bold tracking-widest">Entropy</span>
+                            </div>
+                            <div className="text-2xl font-mono text-white tracking-widest">{diagnostics.entropy.toFixed(3)}</div>
+                          </div>
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2 text-white/20">
+                              <Cpu className="w-3 h-3" />
+                              <span className="text-[9px] uppercase font-bold tracking-widest">Load</span>
+                            </div>
+                            <div className="text-2xl font-mono text-white tracking-widest">{diagnostics.load.toFixed(1)}%</div>
                           </div>
                         </div>
                       </div>
 
-                      <div className="bg-white/[0.03] p-4 md:p-8 rounded-[2rem] md:rounded-[3rem] border border-white/5 space-y-8 text-left">
-                        <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-white/5 pb-4 gap-4">
+                      <div className="bg-white/[0.03] p-4 md:p-10 rounded-[3rem] border border-white/5 space-y-10 text-left backdrop-blur-sm relative overflow-hidden">
+                        {/* Decorative element */}
+                        <div className="absolute top-0 left-1/4 w-px h-full bg-gradient-to-b from-indigo-500/10 via-transparent to-transparent hidden md:block" />
+                        
+                        <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-white/10 pb-6 gap-6">
                           <div className="space-y-1">
                             <h4 className="text-[10px] font-black uppercase tracking-[4px] text-white">Neural Hub</h4>
                             <p className="text-[7px] text-white/30 uppercase tracking-widest font-medium">Control AI Engines & Online Bridges</p>
@@ -2295,6 +2381,30 @@ export default function App() {
                                   </>
                                 )}
                               </button>
+
+                              <div className="pt-6 border-t border-white/5 mt-6">
+                                <div className="flex items-center justify-between mb-4">
+                                  <label className="text-[9px] font-black uppercase tracking-[3px] text-white/40">Default Evolution Archetype</label>
+                                  <div className={`px-2 py-0.5 rounded-full text-[7px] font-black uppercase tracking-widest border border-white/5 bg-white/5 text-white/40`}>
+                                    {newAppType}
+                                  </div>
+                                </div>
+                                <div className="grid grid-cols-4 gap-2">
+                                   {(['phone', 'desktop', 'game', 'terminal'] as const).map(type => (
+                                      <button 
+                                        key={type}
+                                        onClick={() => setNewAppType(type)}
+                                        className={`flex flex-col items-center gap-2 p-3 rounded-xl border transition-all ${newAppType === type ? 'bg-indigo-500/20 border-indigo-500/50 text-indigo-400' : 'bg-white/5 border-white/5 text-white/20 hover:border-white/10'}`}
+                                      >
+                                        {type === 'phone' && <Layout className="w-3.5 h-3.5" />}
+                                        {type === 'desktop' && <Monitor className="w-3.5 h-3.5" />}
+                                        {type === 'game' && <Sparkles className="w-3.5 h-3.5" />}
+                                        {type === 'terminal' && <Terminal className="w-3.5 h-3.5" />}
+                                        <span className="text-[7px] font-black uppercase tracking-tighter">{type}</span>
+                                      </button>
+                                   ))}
+                                </div>
+                              </div>
 
                               {testResponse && (
                                 <motion.div 
