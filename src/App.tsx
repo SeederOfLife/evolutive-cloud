@@ -121,7 +121,8 @@ import {
   signOut, 
   onAuthStateChanged,
   signInWithPopup,
-  GoogleAuthProvider
+  GoogleAuthProvider,
+  GithubAuthProvider
 } from "firebase/auth";
 import { auth, db } from "./lib/firebase";
 import { 
@@ -1018,6 +1019,19 @@ export default function App() {
       await signInWithPopup(auth, provider);
     } catch (err: any) {
       console.error("Google Auth Error:", err);
+      setAuthError(err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleGithubAuth = async () => {
+    setIsLoading(true);
+    try {
+      const provider = new GithubAuthProvider();
+      await signInWithPopup(auth, provider);
+    } catch (err: any) {
+      console.error("GitHub Auth Error:", err);
       setAuthError(err.message);
     } finally {
       setIsLoading(false);
@@ -2066,6 +2080,16 @@ export default function App() {
                         </button>
 
                         <button 
+                          onClick={handleGithubAuth}
+                          className="w-full py-5 bg-[#333] text-white text-[11px] font-black uppercase tracking-[4px] rounded-full hover:bg-black transition-all shadow-xl flex items-center justify-center gap-3 border border-white/10"
+                        >
+                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.11.825-.26.825-.58 0-.285-.015-1.23-.015-2.23-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.285 0 .32.225.7.825.58C20.565 21.795 24 17.31 24 12c0-6.63-5.37-12-12-12z"/>
+                          </svg>
+                          Continue with GitHub
+                        </button>
+
+                        <button 
                           onClick={() => setIsSignUp(!isSignUp)}
                           className="text-[10px] text-white/30 hover:text-indigo-400 uppercase tracking-widest font-black transition-colors"
                         >
@@ -2073,16 +2097,19 @@ export default function App() {
                         </button>
                       </div>
 
-                      <div className="relative py-4">
-                        <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-white/5"></div></div>
-                        <div className="relative flex justify-center"><span className="bg-[#050510] px-4 text-[10px] text-white/20 uppercase tracking-[4px] font-black">Social Login</span></div>
-                      </div>
+                          <div className="relative py-4">
+                            <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-white/5"></div></div>
+                            <div className="relative flex justify-center"><span className="bg-[#050510] px-4 text-[10px] text-white/20 uppercase tracking-[4px] font-black">Authorized Providers</span></div>
+                          </div>
 
                           <button 
-                            onClick={handleGoogleAuth}
-                            className="w-full px-6 py-5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-[11px] font-black uppercase tracking-[4px] rounded-full hover:rotate-1 transition-all flex items-center justify-center gap-3 disabled:opacity-30"
+                            onClick={handleGithubAuth}
+                            className="w-full px-6 py-5 bg-gradient-to-r from-gray-800 to-black text-white text-[11px] font-black uppercase tracking-[4px] rounded-full hover:scale-[1.02] transition-all flex items-center justify-center gap-3 disabled:opacity-30 border border-white/10"
                           >
-                            Sign in with Google
+                            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                              <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.11.825-.26.825-.58 0-.285-.015-1.23-.015-2.23-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.285 0 .32.225.7.825.58C20.565 21.795 24 17.31 24 12c0-6.63-5.37-12-12-12z"/>
+                            </svg>
+                            Connect GitHub Hub
                           </button>
                     </div>
                   ) : (
@@ -2386,12 +2413,18 @@ export default function App() {
                                   <Key className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/10 group-focus-within:text-indigo-400 transition-colors" />
                                   <input 
                                     type="password" 
-                                    placeholder="Identity Token Required"
+                                    placeholder={aiProvider === 'google' ? "ENTER GOOGLE API KEY (REQUIRED FOR EXTERNAL HOSTING)" : "Identity Token Required"}
                                     value={userApiKey}
                                     onChange={(e) => saveApiKeyToAccount(e.target.value)}
                                     className="w-full bg-black/40 border border-white/5 rounded-2xl py-4 pl-12 pr-4 text-[11px] text-white outline-none focus:border-indigo-500/30 transition-all font-mono"
                                   />
                                 </div>
+                              )}
+
+                              {aiProvider === 'google' && !process.env.GEMINI_API_KEY && !userApiKey && (
+                                <p className="mt-2 text-[8px] text-pink-500/60 font-black uppercase tracking-widest text-center">
+                                  System key not detected. Provide your own key to manifest ideas.
+                                </p>
                               )}
 
                               {!(aiProvider === 'web-llm' || aiProvider === 'gemini-nano') && (
@@ -2485,13 +2518,14 @@ export default function App() {
                                     <>
                                       <option value="gemini-3-flash-preview">Gemini 3 Flash (Swift)</option>
                                       <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (Deep)</option>
+                                      <option value="gemini-1.5-flash">Gemini 1.5 Flash (Standard)</option>
                                     </>
                                   )}
                                   {aiProvider === 'openai' && (
                                     <>
-                                      <option value="gpt-4o">GPT-4o (Production)</option>
-                                      <option value="gpt-4o-mini">GPT-4o Mini (Efficient)</option>
-                                      <option value="o1-preview">o1 Preview (Reasoning)</option>
+                                      <option value="gpt-4o">GPT-4 Omni (Prime)</option>
+                                      <option value="gpt-4o-mini">GPT-4o Mini (Efficiency)</option>
+                                      <option value="o1-preview">OpenAI o1 Reasoning</option>
                                     </>
                                   )}
                                   {aiProvider === 'anthropic' && (
