@@ -256,7 +256,7 @@ export default function App() {
   useEffect(() => {
     // When provider changes, ensure the selected model is valid for that provider
     const providers: Record<string, string[]> = {
-      google: ['gemini-3-flash-preview', 'gemini-3.1-pro-preview'],
+      google: ['gemini-3-flash-preview', 'gemini-3.1-pro-preview', 'gemma-2-9b-it', 'gemma-2-27b-it'],
       openai: ['gpt-4o', 'gpt-4o-mini', 'o1-preview'],
       anthropic: ['claude-3-5-sonnet-20240620', 'claude-3-opus-20240229'],
       'web-llm': ['Llama-3-8B-Instruct-v0.1-q4f32_1-MLC', 'Phi-3-mini-4k-instruct-q4f16_1-MLC', 'Gemma-2b-it-q4f16_1-MLC', 'Mistral-7B-Instruct-v0.2-q4f16_1-MLC'],
@@ -607,7 +607,7 @@ export default function App() {
         if (aiProvider === 'google') {
           const ai = new GoogleGenAI({ apiKey: googleKey || "" });
           let modelId = selectedModel;
-          if (!modelId.startsWith('gemini-')) modelId = "gemini-3-flash-preview"; 
+          if (!modelId.startsWith('gemini-') && !modelId.startsWith('gemma-')) modelId = "gemini-3-flash-preview"; 
           
           try {
             const response = await ai.models.generateContent({
@@ -2115,19 +2115,19 @@ export default function App() {
                       </div>
                     </div>
                   ) : (
-                    <div className="space-y-10 py-12 max-w-[1400px] mx-auto px-6 lg:px-12">
+                    <div className="space-y-32 py-24 max-w-[1400px] mx-auto px-6 lg:px-12 w-full flex flex-col items-center">
                       {/* --- DASHBOARD HEADER & IDENTITY --- */}
-                      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
+                      <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-stretch w-full">
                         
                         {/* Profile Identity Card */}
                         <motion.div 
-                          initial={{ opacity: 0, scale: 0.95 }}
-                          animate={{ opacity: 1, scale: 1 }}
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
                           className="lg:col-span-5 bg-gradient-to-br from-[#0a0a25] via-[#050510] to-[#010105] p-10 lg:p-14 rounded-[4rem] border border-white/5 relative overflow-hidden group flex flex-col justify-between shadow-[0_50px_100px_rgba(0,0,0,0.6)]"
                         >
                           <div className="absolute -top-20 -right-20 w-80 h-80 bg-indigo-500/10 rounded-full blur-[100px] group-hover:bg-indigo-500/20 transition-all duration-700" />
                           
-                          <div className="flex flex-col lg:flex-row items-center lg:items-start gap-10 relative z-10">
+                          <div className="flex flex-col items-center lg:items-start gap-10 relative z-10">
                             <div className="relative shrink-0">
                               <div className="w-32 h-32 lg:w-44 lg:h-44 rounded-[3.5rem] overflow-hidden border-4 border-indigo-500/30 shadow-[0_0_50px_rgba(99,102,241,0.2)] bg-black rotate-[-3deg] group-hover:rotate-0 transition-transform duration-700">
                                 <img 
@@ -2146,7 +2146,7 @@ export default function App() {
 
                             <div className="text-center lg:text-left space-y-4 pt-4">
                               <div className="space-y-1">
-                                <h3 className="text-3xl lg:text-5xl font-black uppercase tracking-[15px] lg:tracking-[25px] text-white leading-none">
+                                <h3 className="text-3xl lg:text-4xl font-black uppercase tracking-[15px] lg:tracking-[20px] text-white leading-none">
                                   {user.email?.split('@')[0]}
                                 </h3>
                                 <p className="text-indigo-400 font-mono text-[9px] uppercase tracking-[6px] opacity-40">Neural Node: {user.uid.substring(0, 16).toUpperCase()}</p>
@@ -2161,7 +2161,7 @@ export default function App() {
 
                           <div className="mt-16 lg:mt-24 space-y-8 relative z-10 border-t border-white/5 pt-10">
                             <div className="flex items-center justify-between">
-                               <div className="space-y-1">
+                               <div className="space-y-1 text-left">
                                  <div className="text-[11px] font-black uppercase tracking-[5px] text-indigo-400">{appRank.title}</div>
                                  <div className="text-[8px] text-white/20 uppercase tracking-[3px] font-bold">Evolution Level {appRank.level}/5</div>
                                </div>
@@ -2174,7 +2174,7 @@ export default function App() {
                                   ))}
                                </div>
                             </div>
-                            <div className="h-1 w-full bg-white/5 rounded-full overflow-hidden">
+                            <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
                                <motion.div 
                                  initial={{ width: 0 }}
                                  animate={{ width: `${(appRank.level / 5) * 100}%` }}
@@ -2185,101 +2185,104 @@ export default function App() {
                         </motion.div>
 
                         {/* Stats Bento Grid */}
-                        <div className="lg:col-span-7 grid grid-cols-1 sm:grid-cols-2 gap-8 content-start">
+                        <div className="lg:col-span-7 grid grid-cols-1 sm:grid-cols-2 gap-10 content-start">
                           {[
-                            { label: 'Neural Ideas', icon: History, color: 'indigo', val: suggestions.filter(s => s.user_id === user.uid).length, desc: 'Conceptual blueprints generated', bg: 'from-blue-600/20 to-indigo-600/20' },
-                            { label: 'Master Builds', icon: Box, color: 'pink', val: suggestions.filter(s => s.user_id === user.uid && s.status === 'built').length, desc: 'Manifested applications', bg: 'from-pink-600/20 to-purple-600/20' },
-                            { label: 'Core Energy', icon: Zap, color: 'yellow', val: suggestions.filter(s => s.user_id === user.uid).reduce((acc, curr) => acc + (curr.votes || 0), 0), desc: 'Network contribution credits', bg: 'from-yellow-600/20 to-orange-600/20', span: 'sm:col-span-2' }
+                            { label: 'Neural Ideas', icon: History, color: 'indigo', val: suggestions.filter(s => s.user_id === user.uid).length, desc: 'Blueprints generated', bg: 'from-blue-600/20 to-indigo-600/20' },
+                            { label: 'Master Builds', icon: Box, color: 'pink', val: suggestions.filter(s => s.user_id === user.uid && s.status === 'built').length, desc: 'Applications manifested', bg: 'from-pink-600/20 to-purple-600/20' },
+                            { label: 'Core Energy', icon: Zap, color: 'yellow', val: suggestions.filter(s => s.user_id === user.uid).reduce((acc, curr) => acc + (curr.votes || 0), 0), desc: 'Network credits & reputation', bg: 'from-yellow-600/20 to-orange-600/20', span: 'sm:col-span-2' }
                           ].map((stat, i) => (
                             <motion.div 
                               key={i}
                               whileHover={{ y: -8, scale: 1.01 }}
-                              className={`p-10 bg-gradient-to-br from-[#0a0a20] to-black border border-white/5 rounded-[3.5rem] group transition-all relative overflow-hidden flex flex-col justify-between hover:border-white/10 hover:shadow-[0_40px_80px_rgba(0,0,0,0.6)] ${stat.span || ''}`}
+                              className={`p-12 bg-gradient-to-br from-[#0a0a20] to-black border border-white/5 rounded-[4rem] group transition-all relative overflow-hidden flex flex-col justify-between hover:border-indigo-500/20 hover:shadow-[0_40px_80px_rgba(0,0,0,0.6)] ${stat.span || ''}`}
                             >
-                              <div className={`absolute -top-10 -right-10 p-12 bg-gradient-to-br ${stat.bg} rounded-full blur-[80px] opacity-20 group-hover:opacity-40 transition-opacity`} />
+                              <div className={`absolute -top-10 -right-10 p-16 bg-gradient-to-br ${stat.bg} rounded-full blur-[100px] opacity-10 group-hover:opacity-30 transition-opacity`} />
                               
-                              <div className="flex items-center justify-between mb-10 relative z-10">
-                                <div className="p-4 rounded-2xl bg-white/5 text-white/50 border border-white/5 group-hover:text-white group-hover:border-white/20 transition-all">
-                                  <stat.icon className="w-5 h-5" />
+                              <div className="flex items-center justify-between mb-12 relative z-10">
+                                <div className="p-5 rounded-2xl bg-white/5 text-white/30 border border-white/5 group-hover:text-white group-hover:border-white/20 transition-all">
+                                  <stat.icon className="w-6 h-6" />
                                 </div>
-                                <div className="text-[10px] font-black uppercase tracking-[5px] text-white/20 group-hover:text-white/40 transition-colors">Stat_Unit_{i+1}</div>
+                                <div className="text-[10px] font-black uppercase tracking-[5px] text-white/10 group-hover:text-white/30 transition-colors">Unit_{i+1}_Metric</div>
                               </div>
                               
-                              <div className="relative z-10 space-y-1">
-                                <div className="text-6xl lg:text-7xl text-white font-black tracking-tighter leading-none mb-4">
+                              <div className="relative z-10 space-y-2 text-center sm:text-left">
+                                <div className="text-7xl lg:text-8xl text-white font-black tracking-tighter leading-none mb-6">
                                   {stat.val}
                                 </div>
-                                <div className="text-[13px] text-white/40 uppercase tracking-[6px] font-black group-hover:text-white transition-colors">{stat.label}</div>
-                                <div className="text-[9px] text-white/15 uppercase tracking-widest font-bold mt-1 max-w-[200px]">{stat.desc}</div>
+                                <div className="text-[14px] text-white/30 uppercase tracking-[8px] font-black group-hover:text-white transition-colors">{stat.label}</div>
+                                <div className="text-[10px] text-white/15 uppercase tracking-[4px] font-bold mt-2 max-w-[280px] leading-relaxed mx-auto sm:mx-0">{stat.desc}</div>
                               </div>
                             </motion.div>
                           ))}
                         </div>
+                      </div>
 
                       {/* --- LOWER TECH SECTION --- */}
-                      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+                      <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-start w-full">
                          
                         {/* Diagnostics Module */}
-                        <div className="lg:col-span-7 bg-[#050510] border border-white/5 p-10 lg:p-12 rounded-[4rem] relative overflow-hidden group">
-                          <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between mb-12 gap-6 border-b border-white/5 pb-8">
-                             <div className="space-y-1">
-                                <h4 className="text-[12px] font-black uppercase tracking-[12px] text-indigo-400">Neural Infrastructure</h4>
-                                <p className="text-[9px] text-white/20 uppercase tracking-[4px] font-mono">Consensus: v4.2.8-beta-stable</p>
+                        <div className="lg:col-span-7 bg-[#050510] border border-white/5 p-12 lg:p-16 rounded-[4.5rem] relative overflow-hidden group shadow-2xl">
+                          <div className="flex flex-col lg:flex-row items-center justify-between mb-16 gap-8 border-b border-white/5 pb-12">
+                             <div className="space-y-2 text-center lg:text-left">
+                                <h4 className="text-[14px] font-black uppercase tracking-[15px] text-indigo-400">Neural Infrastructure</h4>
+                                <p className="text-[10px] text-white/20 uppercase tracking-[5px] font-mono">Consensus Cluster: v4.3.0_ALPHA</p>
                              </div>
-                             <div className="flex items-center gap-4 px-6 py-2.5 bg-black/40 rounded-2xl border border-indigo-500/10">
+                             <div className="flex items-center gap-5 px-8 py-3 bg-black/40 rounded-full border border-indigo-500/10 backdrop-blur-xl">
                                 <motion.div 
-                                  animate={{ opacity: [1, 0.4, 1], scale: [1, 1.1, 1] }} 
+                                  animate={{ opacity: [1, 0.4, 1], scale: [1, 1.2, 1] }} 
                                   transition={{ duration: 2, repeat: Infinity }}
-                                  className="w-2.5 h-2.5 rounded-full bg-green-500 shadow-[0_0_15px_rgba(34,197,94,0.6)]" 
+                                  className="w-3 h-3 rounded-full bg-green-500 shadow-[0_0_20px_rgba(34,197,94,0.8)]" 
                                 />
-                                <span className="text-[11px] text-green-500 font-black tracking-[4px] uppercase">Nexus_Linked</span>
+                                <span className="text-[12px] text-green-500 font-black tracking-[5px] uppercase">Nexus_Linked_Secure</span>
                              </div>
                           </div>
 
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-10">
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-12">
                             {[
                               { label: 'Synapses', icon: Database, val: diagnostics.synapses },
-                              { label: 'Quantum', icon: Globe, val: `${diagnostics.connectivity.toFixed(1)}%` },
+                              { label: 'Connectivity', icon: Globe, val: `${diagnostics.connectivity.toFixed(1)}%` },
                               { label: 'Entropy', icon: Activity, val: diagnostics.entropy.toFixed(3) },
-                              { label: 'Load', icon: Cpu, val: `${diagnostics.load.toFixed(1)}%` }
+                              { label: 'System Load', icon: Cpu, val: `${diagnostics.load.toFixed(1)}%` }
                             ].map((item, i) => (
-                              <div key={i} className="space-y-3 group/item">
-                                <div className="flex items-center gap-3 text-white/10 group/item:text-indigo-400/40 transition-colors">
-                                  <item.icon className="w-3.5 h-3.5" />
-                                  <span className="text-[9px] uppercase font-bold tracking-[3px]">{item.label}</span>
+                              <div key={i} className="space-y-4 group/item text-center">
+                                <div className="flex flex-col items-center gap-4 text-white/10 group-hover/item:text-indigo-400 transition-all">
+                                  <div className="p-3 bg-white/5 rounded-xl border border-white/5">
+                                    <item.icon className="w-5 h-5" />
+                                  </div>
+                                  <span className="text-[10px] uppercase font-black tracking-[4px]">{item.label}</span>
                                 </div>
-                                <div className="text-3xl font-mono text-white tracking-[1px] group-hover/item:translate-x-1 transition-transform">{item.val}</div>
+                                <div className="text-4xl font-mono text-white tracking-[2px] group-hover/item:translate-y-[-4px] transition-all">{item.val}</div>
                               </div>
                             ))}
                           </div>
                         </div>
 
                         {/* Hub Settings Module */}
-                        <div className="lg:col-span-5 bg-white/[0.02] border border-white/5 p-10 lg:p-12 rounded-[4rem] flex flex-col justify-between">
-                           <div className="space-y-8 mb-12">
+                        <div className="lg:col-span-5 bg-white/[0.02] border border-white/5 p-12 lg:p-16 rounded-[4.5rem] flex flex-col justify-between shadow-2xl">
+                           <div className="space-y-10 mb-16">
                              <div className="flex items-center justify-between">
-                                <div className="space-y-1">
-                                  <h4 className="text-[11px] font-black uppercase tracking-[8px] text-white">Neural Hub Settings</h4>
-                                  <p className="text-[8px] text-white/30 uppercase tracking-[4px] font-medium">Regional_Bridge_v.1.0.4</p>
+                                <div className="space-y-2">
+                                  <h4 className="text-[13px] font-black uppercase tracking-[10px] text-white">Neural Hub Config</h4>
+                                  <p className="text-[9px] text-white/30 uppercase tracking-[5px] font-medium">Internal_Bridge_STABLE_v1.2</p>
                                 </div>
-                                <Settings className="w-5 h-5 text-white/20" />
+                                <Settings className="w-6 h-6 text-white/20" />
                              </div>
                              
-                             <div className="space-y-6">
-                               <div className="flex items-center justify-between p-4 bg-black/40 rounded-2xl border border-white/5">
-                                  <div className="flex items-center gap-4">
-                                     <div className="p-3 bg-indigo-500/10 rounded-xl">
-                                        <Cloud className="w-4 h-4 text-indigo-400" />
+                             <div className="space-y-8">
+                               <div className="flex flex-col sm:flex-row items-center justify-between p-6 bg-black/40 rounded-3xl border border-white/5 gap-6">
+                                  <div className="flex items-center gap-5">
+                                     <div className="p-4 bg-indigo-500/10 rounded-2xl border border-indigo-500/20">
+                                        <Cloud className="w-5 h-5 text-indigo-400" />
                                      </div>
-                                     <div className="space-y-0.5">
-                                        <div className="text-[10px] font-black uppercase tracking-widest text-white/80">Processing Priority</div>
-                                        <div className="text-[8px] text-white/30 tracking-widest uppercase">Cloud Compute Allocation</div>
+                                     <div className="space-y-1">
+                                        <div className="text-[11px] font-black uppercase tracking-[4px] text-white/80">Processing Priority</div>
+                                        <div className="text-[9px] text-white/20 tracking-widest uppercase">Energy Allocation</div>
                                      </div>
                                   </div>
-                                  <div className="flex bg-black/60 rounded-full p-1 border border-white/5">
+                                  <div className="flex bg-black/60 rounded-full p-1.5 border border-white/5 shrink-0">
                                     <button 
                                       onClick={() => setForceCloud(false)}
-                                      className={`px-4 py-1.5 rounded-full text-[8px] font-black uppercase tracking-widest transition-all ${
+                                      className={`px-6 py-2 rounded-full text-[9px] font-black uppercase tracking-widest transition-all ${
                                         !forceCloud ? 'bg-indigo-500 text-white shadow-xl' : 'text-white/40 hover:text-white'
                                       }`}
                                     >
@@ -2287,7 +2290,7 @@ export default function App() {
                                     </button>
                                     <button 
                                       onClick={() => setForceCloud(true)}
-                                      className={`px-4 py-1.5 rounded-full text-[8px] font-black uppercase tracking-widest transition-all ${
+                                      className={`px-6 py-2 rounded-full text-[9px] font-black uppercase tracking-widest transition-all ${
                                         forceCloud ? 'bg-indigo-500 text-white shadow-xl' : 'text-white/40 hover:text-white'
                                       }`}
                                     >
@@ -2296,53 +2299,54 @@ export default function App() {
                                   </div>
                                </div>
 
-                               <div className="p-6 bg-indigo-500/5 rounded-[2.5rem] border border-indigo-500/10 flex items-center justify-between group cursor-pointer hover:bg-indigo-500/10 transition-all">
-                                  <div className="flex items-center gap-5">
-                                     <div className="w-12 h-12 bg-black/40 rounded-2xl border border-indigo-500/20 flex items-center justify-center text-indigo-400">
-                                        <Shield className="w-5 h-5" />
+                               <div className="p-8 bg-indigo-500/5 rounded-[3rem] border border-indigo-500/10 flex items-center justify-between group cursor-pointer hover:bg-indigo-500/10 transition-all">
+                                  <div className="flex items-center gap-6">
+                                     <div className="w-14 h-14 bg-black/40 rounded-2xl border border-indigo-500/20 flex items-center justify-center text-indigo-400">
+                                        <Shield className="w-6 h-6" />
                                      </div>
                                      <div className="space-y-1">
-                                        <div className="text-[11px] font-black uppercase tracking-[4px] text-white">Quantum Encryption</div>
-                                        <div className="text-[8px] text-indigo-400/60 font-mono">STATUS: AES-256_ACTIVE</div>
+                                        <div className="text-[12px] font-black uppercase tracking-[5px] text-white">Quantum Encryption</div>
+                                        <div className="text-[9px] text-indigo-400/60 font-mono tracking-widest">AES-GCM-256_ACTIVE</div>
                                      </div>
                                   </div>
-                                  <div className="w-2 h-2 rounded-full bg-indigo-500 group-hover:scale-150 transition-transform" />
+                                  <div className="w-2.5 h-2.5 rounded-full bg-indigo-500 group-hover:scale-150 transition-all shadow-[0_0_15px_rgba(99,102,241,1)]" />
                                </div>
                              </div>
                            </div>
 
                            <button 
                              onClick={() => auth.signOut()}
-                             className="w-full py-4 bg-red-500/5 border border-red-500/20 rounded-full text-[10px] font-black uppercase tracking-[10px] text-red-500/60 hover:bg-red-500 hover:text-white hover:border-red-500 transition-all shadow-xl"
+                             className="w-full py-5 bg-red-500/5 border border-red-500/20 rounded-full text-[11px] font-black uppercase tracking-[12px] text-red-500/60 hover:bg-red-500 hover:text-white hover:border-red-500 transition-all shadow-2xl"
                            >
-                             Terminate_Session
+                             TERMINATE_MANIFESTATION
                            </button>
                         </div>
 
                       </div>
 
-                      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+                      <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-start w-full">
                         {/* Individual Provider Identity Page */}
-                        <div className="lg:col-span-12 bg-white/[0.03] p-4 md:p-10 rounded-[4rem] border border-white/5 space-y-10 text-left backdrop-blur-sm relative overflow-hidden">
-                          {/* Decorative element */}
-                          <div className="absolute top-0 left-1/4 w-px h-full bg-gradient-to-b from-indigo-500/10 via-transparent to-transparent hidden md:block" />
+                        <div className="lg:col-span-12 bg-white/[0.03] p-10 lg:p-20 rounded-[5rem] border border-white/5 space-y-16 text-left relative overflow-hidden w-full shadow-2xl">
+                          <div className="absolute top-0 right-0 w-full h-full bg-gradient-to-br from-indigo-500/5 via-transparent to-transparent opacity-50" />
+                          {/* Decorative vertical line */}
+                          <div className="absolute top-0 left-1/4 w-px h-full bg-gradient-to-b from-white/10 via-transparent to-transparent hidden xl:block" />
                           
-                          <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-white/10 pb-8 gap-6">
-                            <div className="space-y-1">
-                              <h4 className="text-[12px] font-black uppercase tracking-[8px] text-white">Neural Orchestrator</h4>
-                              <p className="text-[8px] text-white/30 uppercase tracking-[4px] font-medium">Cluster Config: {aiProvider}</p>
+                          <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-white/10 pb-12 gap-10 relative z-10">
+                            <div className="space-y-2">
+                              <h4 id="neural-orchestrator-title" className="text-[16px] font-black uppercase tracking-[15px] text-white">Neural Orchestrator</h4>
+                              <p className="text-[10px] text-white/30 uppercase tracking-[6px] font-medium">Model Cluster Intelligence: {aiProvider.toUpperCase()}</p>
                             </div>
-                            <div className="flex flex-wrap gap-3 items-center justify-center md:justify-end">
-                              <div className="flex gap-2 p-1.5 bg-black/40 rounded-full border border-white/5">
-                                {(['google', 'openai', 'anthropic', 'custom', 'web-llm', 'gemini-nano', 'mlc-mobile'] as const).map((p) => (
+                            <div className="flex flex-wrap gap-4 items-center justify-center md:justify-end">
+                              <div className="flex gap-3 p-2 bg-black/60 rounded-full border border-white/10 backdrop-blur-xl">
+                                {(['google', 'openai', 'anthropic', 'custom', 'web-llm', 'mlc-mobile'] as const).map((p) => (
                                   <button
                                     key={p}
                                     onClick={() => setAiProvider(p)}
-                                    className={`w-5 h-5 rounded-full transition-all flex items-center justify-center relative ${aiProvider === p ? 'bg-indigo-500 ring-2 ring-indigo-500/20 scale-110 shadow-lg' : 'bg-white/5 hover:bg-white/10'}`}
+                                    className={`w-7 h-7 rounded-full transition-all flex items-center justify-center relative ${aiProvider === p ? 'bg-indigo-500 ring-2 ring-indigo-500/20 scale-110 shadow-[0_0_20px_rgba(99,102,241,0.5)]' : 'bg-white/5 hover:bg-white/10'}`}
                                     title={p.toUpperCase()}
                                   >
                                     {providerHealth[p]?.status === 'online' && (
-                                       <div className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-green-500 rounded-full border border-black" />
+                                       <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-black" />
                                     )}
                                   </button>
                                 ))}
@@ -2352,52 +2356,50 @@ export default function App() {
 
                           <motion.div 
                             key={aiProvider}
-                            initial={{ opacity: 0, x: 20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            className="space-y-10"
+                            initial={{ opacity: 0, scale: 0.98 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            className="space-y-16 relative z-10"
                           >
-                          <div className="flex items-start justify-between">
-                            <div className="space-y-3">
-                              <div className="flex items-center gap-3">
-                                <h2 className="text-2xl md:text-3xl font-black uppercase tracking-[6px] text-white">{aiProvider.replace('-', ' ')}</h2>
-                                {aiProvider === 'google' && <span className="px-2 py-0.5 bg-indigo-500/10 text-indigo-400 text-[7px] font-black uppercase tracking-widest border border-indigo-500/20 rounded-full">Primary</span>}
+                          <div className="flex flex-col lg:flex-row items-center lg:items-end justify-between gap-10">
+                            <div className="space-y-6 text-center lg:text-left">
+                              <div className="flex flex-col sm:flex-row items-center gap-6">
+                                <h2 className="text-4xl md:text-5xl font-black uppercase tracking-[10px] text-white leading-none">{aiProvider.replace('-', ' ')}</h2>
+                                {aiProvider === 'google' && <span className="px-4 py-1 bg-indigo-500/10 text-indigo-400 text-[9px] font-black uppercase tracking-widest border border-indigo-500/20 rounded-full">Core Architecture</span>}
                               </div>
-                              <div className="flex items-center gap-4">
-                                <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-[8px] font-black uppercase tracking-widest ${
+                              <div className="flex items-center justify-center lg:justify-start gap-6">
+                                <div className={`flex items-center gap-3 px-5 py-2 rounded-full border text-[10px] font-black uppercase tracking-widest ${
                                   providerHealth[aiProvider]?.status === 'online' ? 'bg-green-500/10 text-green-400 border-green-500/20' : 
                                   providerHealth[aiProvider]?.status === 'offline' ? 'bg-pink-500/10 text-pink-400 border-pink-500/20' :
-                                  providerHealth[aiProvider]?.status === 'checking' ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20' :
                                   'bg-white/5 text-white/20 border-white/5'
                                 }`}>
-                                  <div className={`w-1.5 h-1.5 rounded-full ${
-                                    providerHealth[aiProvider]?.status === 'online' ? 'bg-green-400 animate-pulse' : 
-                                    providerHealth[aiProvider]?.status === 'offline' ? 'bg-pink-400' : 
-                                    providerHealth[aiProvider]?.status === 'checking' ? 'bg-yellow-400 animate-spin' : 'bg-white/20'
+                                  <div className={`w-2 h-2 rounded-full ${
+                                    providerHealth[aiProvider]?.status === 'online' ? 'bg-green-400 animate-pulse shadow-[0_0_10px_rgba(74,222,128,0.5)]' : 
+                                    providerHealth[aiProvider]?.status === 'offline' ? 'bg-pink-400' : 'bg-white/20'
                                   }`} />
                                   {providerHealth[aiProvider]?.status || 'Idle'}
                                 </div>
                                 {providerHealth[aiProvider]?.ping && (
-                                  <span className="text-[9px] font-mono text-white/40 tracking-tighter">{providerHealth[aiProvider].ping}ms link latency</span>
+                                  <span className="text-[11px] font-mono text-white/30 tracking-tight">{providerHealth[aiProvider].ping}ms link latency</span>
                                 )}
                               </div>
                             </div>
                             <button 
                               onClick={() => checkHealth(aiProvider)}
                               disabled={providerHealth[aiProvider]?.status === 'checking'}
-                              className="p-4 rounded-[1.5rem] bg-white/5 border border-white/10 text-white/40 hover:bg-white hover:text-black hover:border-white transition-all hover:scale-105 active:scale-95 disabled:opacity-50 group"
-                              title="Nexus Sync Check"
+                              className="p-6 rounded-[2rem] bg-white/5 border border-white/10 text-white/40 hover:bg-white hover:text-black hover:border-white transition-all hover:scale-105 active:scale-95 disabled:opacity-50 group shadow-xl"
+                              title="Neural Sync Check"
                             >
-                              <Activity className={`w-5 h-5 group-hover:scale-110 transition-transform ${providerHealth[aiProvider]?.status === 'checking' ? 'animate-spin' : ''}`} />
+                              <Activity className={`w-8 h-8 group-hover:scale-110 transition-transform ${providerHealth[aiProvider]?.status === 'checking' ? 'animate-spin text-indigo-400' : ''}`} />
                             </button>
                           </div>
 
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div className="bg-black/20 p-6 rounded-[2rem] border border-white/5 space-y-4 group text-center md:text-left">
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                            <div className="bg-black/20 p-8 rounded-[2.5rem] border border-white/5 space-y-6 group text-center md:text-left hover:border-indigo-500/20 transition-all">
                               <div className="flex items-center justify-between">
-                                <label className="text-[9px] font-black uppercase tracking-[3px] text-white/40 group-focus-within:text-indigo-400 transition-colors">
+                                <label className="text-[10px] font-black uppercase tracking-[4px] text-white/40 group-focus-within:text-indigo-400 transition-colors">
                                   {aiProvider === 'web-llm' || aiProvider === 'gemini-nano' ? 'Hardware Engine' : 'Energy Secret'}
                                 </label>
-                                <Lock className="w-3 h-3 text-white/10" />
+                                <Lock className="w-4 h-4 text-white/10" />
                               </div>
                               
                               {aiProvider === 'web-llm' || aiProvider === 'gemini-nano' ? (
@@ -2464,18 +2466,20 @@ export default function App() {
                                     {newAppType}
                                   </div>
                                 </div>
-                                <div className="grid grid-cols-4 gap-2">
-                                   {(['phone', 'desktop', 'game', 'terminal'] as const).map(type => (
+                                <div className="grid grid-cols-3 xs:grid-cols-4 lg:grid-cols-6 gap-3">
+                                   {(['phone', 'desktop', 'game', 'terminal', 'vr', 'watch'] as const).map(type => (
                                       <button 
                                         key={type}
-                                        onClick={() => setNewAppType(type)}
-                                        className={`flex flex-col items-center gap-2 p-3 rounded-xl border transition-all ${newAppType === type ? 'bg-indigo-500/20 border-indigo-500/50 text-indigo-400' : 'bg-white/5 border-white/5 text-white/20 hover:border-white/10'}`}
+                                        onClick={() => setNewAppType(type as any)}
+                                        className={`flex flex-col items-center gap-3 p-4 rounded-xl border transition-all ${newAppType === type ? 'bg-indigo-500/20 border-indigo-500/50 text-indigo-400' : 'bg-white/5 border-white/5 text-white/20 hover:border-white/10'}`}
                                       >
-                                        {type === 'phone' && <Layout className="w-3.5 h-3.5" />}
-                                        {type === 'desktop' && <Monitor className="w-3.5 h-3.5" />}
-                                        {type === 'game' && <Sparkles className="w-3.5 h-3.5" />}
-                                        {type === 'terminal' && <Terminal className="w-3.5 h-3.5" />}
-                                        <span className="text-[7px] font-black uppercase tracking-tighter">{type}</span>
+                                        {type === 'phone' && <Layout className="w-4 h-4" />}
+                                        {type === 'desktop' && <Monitor className="w-4 h-4" />}
+                                        {type === 'game' && <Sparkles className="w-4 h-4" />}
+                                        {type === 'terminal' && <Terminal className="w-4 h-4" />}
+                                        {type === 'vr' && <Globe className="w-4 h-4" />}
+                                        {type === 'watch' && <History className="w-4 h-4" />}
+                                        <span className="text-[8px] font-black uppercase tracking-widest">{type}</span>
                                       </button>
                                    ))}
                                 </div>
@@ -2504,10 +2508,10 @@ export default function App() {
                               )}
                             </div>
 
-                            <div className="bg-black/20 p-6 rounded-[2rem] border border-white/5 space-y-4 group text-center md:text-left">
+                            <div className="bg-black/20 p-8 rounded-[2.5rem] border border-white/5 space-y-6 group text-center md:text-left hover:border-pink-500/20 transition-all">
                               <div className="flex items-center justify-between">
-                                <label className="text-[9px] font-black uppercase tracking-[3px] text-white/40 group-focus-within:text-pink-400 transition-colors">Evolution Model</label>
-                                <Cpu className="w-3 h-3 text-white/10" />
+                                <label className="text-[10px] font-black uppercase tracking-[4px] text-white/40 group-focus-within:text-pink-400 transition-colors">Evolution Model</label>
+                                <Cpu className="w-4 h-4 text-white/10" />
                               </div>
                               <div className="relative">
                                 <Zap className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/10 group-focus-within:text-pink-400 transition-colors" />
@@ -2516,10 +2520,13 @@ export default function App() {
                                   onChange={(e) => setSelectedModel(e.target.value)}
                                   className="w-full bg-black/40 border border-white/5 rounded-2xl py-4 pl-12 pr-4 text-[11px] text-white outline-none focus:border-pink-500/30 transition-all appearance-none uppercase font-black"
                                 >
-                                  {aiProvider === 'google' && (
+                                   {aiProvider === 'google' && (
                                     <>
                                       <option value="gemini-3-flash-preview">Gemini 3 Flash (Swift)</option>
                                       <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (Deep)</option>
+                                      <option value="gemma-2-9b-it">Gemma 2 9B (Efficient)</option>
+                                      <option value="gemma-2-27b-it">Gemma 2 27B (Powerful)</option>
+                                      <option value="gemma-4-preview">Gemma 4 (EXPERIMENTAL)</option>
                                       <option value="gemini-1.5-flash">Gemini 1.5 Flash (Standard)</option>
                                     </>
                                   )}
@@ -2542,10 +2549,10 @@ export default function App() {
                                 </select>
                               </div>
                               <div className="flex flex-wrap gap-1 md:gap-1.5 justify-center md:justify-start">
-                                {(aiProvider === 'google' ? ['gemini-3-flash-preview', 'gemini-3.1-pro-preview'] : 
-                                  aiProvider === 'openai' ? ['gpt-4o', 'o1-mini'] :
-                                  aiProvider === 'anthropic' ? ['claude-3-5-sonnet-20240620'] :
-                                  aiProvider === 'custom' ? ['llama3', 'mistral', 'phi3'] : []).map(m => (
+                                 {(aiProvider === 'google' ? ['gemini-3-flash-preview', 'gemini-3.1-pro-preview', 'gemma-2-9b-it', 'gemma-2-27b-it', 'gemma-4-preview'] : 
+                                   aiProvider === 'openai' ? ['gpt-4o', 'o1-mini', 'o1-preview'] :
+                                   aiProvider === 'anthropic' ? ['claude-3-5-sonnet-20240620', 'claude-3-opus-20240229'] :
+                                   aiProvider === 'custom' ? ['llama3', 'mistral', 'phi3'] : []).map(m => (
                                   <button 
                                     key={m} 
                                     onClick={() => setSelectedModel(m)}
@@ -2677,14 +2684,12 @@ export default function App() {
                           </div>
                         </motion.div>
                       </div>
-
-                        </div>
-                      </div>
                     </div>
-                  )}
-                </div>
-              )}
-            </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
 
             {/* Intent Input area (Cubic Structure) */}
             <div className="p-4 md:p-10 border-t border-white/10 shrink-0 bg-white/10">
