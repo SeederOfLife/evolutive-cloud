@@ -2117,13 +2117,13 @@ export default function App() {
                   ) : (
                     <div className="space-y-10 py-12 max-w-[1400px] mx-auto px-6 lg:px-12">
                       {/* --- DASHBOARD HEADER & IDENTITY --- */}
-                      <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 items-stretch">
+                      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
                         
                         {/* Profile Identity Card */}
                         <motion.div 
                           initial={{ opacity: 0, scale: 0.95 }}
                           animate={{ opacity: 1, scale: 1 }}
-                          className="xl:col-span-5 bg-gradient-to-br from-[#0a0a25] via-[#050510] to-[#010105] p-10 lg:p-14 rounded-[4rem] border border-white/5 relative overflow-hidden group flex flex-col justify-between shadow-[0_50px_100px_rgba(0,0,0,0.6)]"
+                          className="lg:col-span-5 bg-gradient-to-br from-[#0a0a25] via-[#050510] to-[#010105] p-10 lg:p-14 rounded-[4rem] border border-white/5 relative overflow-hidden group flex flex-col justify-between shadow-[0_50px_100px_rgba(0,0,0,0.6)]"
                         >
                           <div className="absolute -top-20 -right-20 w-80 h-80 bg-indigo-500/10 rounded-full blur-[100px] group-hover:bg-indigo-500/20 transition-all duration-700" />
                           
@@ -2185,7 +2185,7 @@ export default function App() {
                         </motion.div>
 
                         {/* Stats Bento Grid */}
-                        <div className="xl:col-span-7 grid grid-cols-1 sm:grid-cols-2 gap-8 content-start">
+                        <div className="lg:col-span-7 grid grid-cols-1 sm:grid-cols-2 gap-8 content-start">
                           {[
                             { label: 'Neural Ideas', icon: History, color: 'indigo', val: suggestions.filter(s => s.user_id === user.uid).length, desc: 'Conceptual blueprints generated', bg: 'from-blue-600/20 to-indigo-600/20' },
                             { label: 'Master Builds', icon: Box, color: 'pink', val: suggestions.filter(s => s.user_id === user.uid && s.status === 'built').length, desc: 'Manifested applications', bg: 'from-pink-600/20 to-purple-600/20' },
@@ -2217,10 +2217,10 @@ export default function App() {
                         </div>
 
                       {/* --- LOWER TECH SECTION --- */}
-                      <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 items-start">
+                      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
                          
                         {/* Diagnostics Module */}
-                        <div className="xl:col-span-7 bg-[#050510] border border-white/5 p-10 lg:p-12 rounded-[4rem] relative overflow-hidden group">
+                        <div className="lg:col-span-7 bg-[#050510] border border-white/5 p-10 lg:p-12 rounded-[4rem] relative overflow-hidden group">
                           <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between mb-12 gap-6 border-b border-white/5 pb-8">
                              <div className="space-y-1">
                                 <h4 className="text-[12px] font-black uppercase tracking-[12px] text-indigo-400">Neural Infrastructure</h4>
@@ -2255,7 +2255,7 @@ export default function App() {
                         </div>
 
                         {/* Hub Settings Module */}
-                        <div className="xl:col-span-5 bg-white/[0.02] border border-white/5 p-10 lg:p-12 rounded-[4rem] flex flex-col justify-between">
+                        <div className="lg:col-span-5 bg-white/[0.02] border border-white/5 p-10 lg:p-12 rounded-[4rem] flex flex-col justify-between">
                            <div className="space-y-8 mb-12">
                              <div className="flex items-center justify-between">
                                 <div className="space-y-1">
@@ -2321,9 +2321,9 @@ export default function App() {
 
                       </div>
 
-                      <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 items-start">
+                      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
                         {/* Individual Provider Identity Page */}
-                        <div className="xl:col-span-12 bg-white/[0.03] p-4 md:p-10 rounded-[4rem] border border-white/5 space-y-10 text-left backdrop-blur-sm relative overflow-hidden">
+                        <div className="lg:col-span-12 bg-white/[0.03] p-4 md:p-10 rounded-[4rem] border border-white/5 space-y-10 text-left backdrop-blur-sm relative overflow-hidden">
                           {/* Decorative element */}
                           <div className="absolute top-0 left-1/4 w-px h-full bg-gradient-to-b from-indigo-500/10 via-transparent to-transparent hidden md:block" />
                           

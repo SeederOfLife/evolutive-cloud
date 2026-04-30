@@ -728,7 +728,7 @@ export function ModulePlayer({
               <div className="flex-1 bg-black/40 flex items-center justify-center overflow-hidden p-2 sm:p-4 lg:p-12">
                  <div className={`relative transition-all duration-700 ease-[cubic-bezier(0.23,1,0.32,1)] ${
                    deviceFrame === 'phone' 
-                   ? 'w-full max-w-[320px] aspect-[9/19] max-h-full rounded-[2.5rem] sm:rounded-[3.5rem] border-[10px] sm:border-[14px] border-white/10 shadow-[0_60px_120px_rgba(0,0,0,0.6)] bg-black overflow-hidden' 
+                   ? 'w-full max-w-[380px] aspect-[9/19] max-h-full rounded-[2.5rem] sm:rounded-[3.5rem] border-[10px] sm:border-[14px] border-white/10 shadow-[0_60px_120px_rgba(0,0,0,0.6)] bg-black overflow-hidden' 
                    : 'w-full h-full rounded-2xl lg:rounded-[3rem] border border-white/10 bg-black shadow-[0_40px_80px_rgba(0,0,0,0.4)]'
                  }`}>
                     {/* Phone Status Bar Mockup */}
