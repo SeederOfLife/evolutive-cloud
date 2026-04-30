@@ -51,12 +51,38 @@ npm run dev
 
 The server will match the full-stack configuration and serve the frontend while proxing any backend needs.
 
-## 4. Deployment (Vercel/Netlify)
+## 5. Security Hardening (CRITICAL)
 
-1. Connect your GitHub repository to Vercel/Netlify.
-2. In the deployment settings, add every variable listed in `.env.example`.
-3. Set the build command to `npm run build`.
-4. Set the output directory to `build`.
+To prevent others from "stealing" your resources or data:
+
+### Environment Variables
+- **NEVER** commit your `.env` file. It is already in `.gitignore`.
+- If you use a host like Vercel or Netlify, enter the keys in their **Environment Variables** dashboard.
+
+### API Key Restrictions
+1. Go to the [Google Cloud Console Credentials page](https://console.cloud.google.com/apis/credentials).
+2. Find the API Key used for Firebase.
+3. Set **Website Restrictions** (Referrers) to your production URL (e.g., `https://yourdomain.com/*`).
+4. This prevents others from using your key on their own sites.
+
+### Database Rules
+- **Firestore**: Always use the provided `firestore.rules`.
+- **Realtime Database**: Do not leave rules as `true`. Use identity-based rules:
+  ```json
+  {
+    "rules": {
+      "users": {
+        "$uid": {
+          ".read": "$uid === auth.uid",
+          ".write": "$uid === auth.uid"
+        }
+      }
+    }
+  }
+  ```
+
+### Supabase
+- Always enable **Row Level Security (RLS)** in the Supabase dashboard for all tables.
 
 ---
 
