@@ -26,6 +26,17 @@ To make GitHub and Google login work in your own environment:
 1. Create a new "OAuth App" in your GitHub settings.
 2. Set the "Authorization callback URL" to the one provided in your Firebase Console (usually `https://[project-id].firebaseapp.com/__/auth/handler`).
 
+### How to find these values:
+1. Go to the [Firebase Console](https://console.firebase.google.com/).
+2. Click the **Project Settings** (gear icon) next to "Project Overview".
+3. Scroll down to the **Your apps** section.
+4. Select your Web App (or create one if you haven't).
+5. Choose the **SDK setup and configuration** > **Config** radio button.
+6. You will see a `firebaseConfig` object:
+   - `measurementId` &rarr; `VITE_FIREBASE_MEASUREMENT_ID` (Only if Analytics is enabled).
+   - `databaseURL` &rarr; `VITE_FIREBASE_DATABASE_URL` (Found in the **Realtime Database** tab if initialized). If you only use Firestore, you can leave this empty.
+   - `apiKey`, `authDomain`, `projectId`, etc. map directly to the variables in `.env.example`.
+
 ## 3. Local Development
 
 Run the following commands to start the app locally:
