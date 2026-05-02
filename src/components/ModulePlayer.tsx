@@ -445,81 +445,80 @@ export function ModulePlayer({
       className="fixed inset-0 z-50 flex flex-col bg-[#050508] text-white overflow-hidden font-sans"
     >
       {/* --- TOP BAR --- */}
-      <div className="h-14 border-b border-white/5 flex items-center justify-between px-2 sm:px-4 bg-black/40 backdrop-blur-2xl shrink-0">
-        <div className="flex items-center gap-2 sm:gap-4 flex-1">
-          <div className="flex items-center gap-2">
+      <div className="h-16 border-b border-white/5 flex items-center justify-between px-4 sm:px-8 bg-black/40 backdrop-blur-3xl shrink-0 z-50">
+        <div className="flex items-center gap-4 sm:gap-8 flex-1">
+          <div className="flex items-center gap-4">
             <button 
               onClick={onClose}
-              className="md:hidden w-8 h-8 flex items-center justify-center rounded-lg bg-white/5 border border-white/10 text-white/60 active:scale-90 transition-all"
+              className="md:hidden w-10 h-10 flex items-center justify-center rounded-xl bg-white/5 border border-white/10 text-white/60 active:scale-90 transition-all"
               title="Close"
             >
-              <X className="w-4 h-4" />
+              <X className="w-5 h-5" />
             </button>
-            <button 
-              onClick={() => setIsExplorerOpen(!isExplorerOpen)}
-              className="md:hidden w-8 h-8 flex items-center justify-center rounded-lg bg-white/5 border border-white/10 text-white/60 active:scale-90 transition-all"
-              title="Menu"
-            >
-              <FolderTree className="w-4 h-4" />
-            </button>
-            <div className="w-8 h-8 rounded-lg bg-indigo-500/20 hidden sm:flex items-center justify-center border border-indigo-500/30">
-              <Sparkles className="w-4 h-4 text-indigo-400" />
-            </div>
-            <div className="hidden lg:block">
-              <h1 className="text-[10px] font-black uppercase tracking-[3px] leading-none mb-0.5">EVOLUTIONARY_STUDIO</h1>
-              <p className="text-[8px] text-white/30 uppercase tracking-[2px] font-bold">Rev: {suggestion.version || 1}.0</p>
+            <div className="flex items-center gap-4">
+              <div className="w-10 h-10 rounded-xl bg-indigo-500/20 flex items-center justify-center border border-indigo-500/30 shadow-[0_0_20px_rgba(99,102,241,0.2)]">
+                <Sparkles className="w-5 h-5 text-indigo-400" />
+              </div>
+              <div className="hidden sm:block text-left">
+                <h1 className="text-[12px] font-black uppercase tracking-[5px] leading-none mb-1 text-white/90">Neural Manifestation</h1>
+                <p className="text-[9px] text-indigo-400/60 uppercase tracking-[3px] font-mono">Revision Layer: {suggestion.id.substring(0, 8)}</p>
+              </div>
             </div>
           </div>
           
-          <div className="flex items-center gap-1 bg-white/5 p-0.5 sm:p-1 rounded-lg ml-0 sm:ml-4">
+          <div className="flex items-center gap-1.5 bg-black/40 p-1 rounded-xl ml-4 border border-white/5">
             <button 
               onClick={() => setShowPreview(true)}
-              className={`px-3 sm:px-4 py-1.5 rounded-md text-[8px] sm:text-[9px] font-black uppercase tracking-widest transition-all ${showPreview ? 'bg-indigo-500 text-white shadow-lg' : 'text-white/40 hover:text-white'}`}
+              className={`px-6 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${showPreview ? 'bg-indigo-500 text-white shadow-[0_0_20px_rgba(99,102,241,0.4)]' : 'text-white/30 hover:text-white hover:bg-white/5'}`}
             >
-              Preview
+              Manifest
             </button>
             <button 
               onClick={() => setShowPreview(false)}
-              className={`px-3 sm:px-4 py-1.5 rounded-md text-[8px] sm:text-[9px] font-black uppercase tracking-widest transition-all ${!showPreview ? 'bg-indigo-500 text-white shadow-lg' : 'text-white/40 hover:text-white'}`}
+              className={`px-6 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${!showPreview ? 'bg-indigo-500 text-white shadow-[0_0_20px_rgba(99,102,241,0.4)]' : 'text-white/30 hover:text-white hover:bg-white/5'}`}
             >
-              Code
+              Source
             </button>
           </div>
 
           {showPreview && (
-            <div className="flex items-center gap-1 bg-white/5 p-0.5 sm:p-1 rounded-lg ml-1 sm:ml-2">
+            <div className="hidden lg:flex items-center gap-1.5 bg-black/40 p-1 rounded-xl ml-2 border border-white/5">
               <button 
                 onClick={() => setDeviceFrame('phone')}
-                className={`w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center rounded-md transition-all ${deviceFrame === 'phone' ? 'bg-indigo-500 text-white' : 'text-white/20'}`}
+                className={`w-9 h-9 flex items-center justify-center rounded-lg transition-all ${deviceFrame === 'phone' ? 'bg-indigo-500 text-white shadow-[0_0_20px_rgba(99,102,241,0.4)]' : 'text-white/20 hover:text-white hover:bg-white/5'}`}
                 title="Phone Preview"
               >
-                 <Layout className="w-3 h-3" />
+                 <Layout className="w-4 h-4" />
               </button>
               <button 
                 onClick={() => setDeviceFrame('desktop')}
-                className={`w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center rounded-md transition-all ${deviceFrame === 'desktop' ? 'bg-indigo-500 text-white' : 'text-white/20'}`}
+                className={`w-9 h-9 flex items-center justify-center rounded-lg transition-all ${deviceFrame === 'desktop' ? 'bg-indigo-500 text-white shadow-[0_0_20px_rgba(99,102,241,0.4)]' : 'text-white/20 hover:text-white hover:bg-white/5'}`}
                 title="Desktop Preview"
               >
-                 <Monitor className="w-3 h-3" />
+                 <Monitor className="w-4 h-4" />
               </button>
             </div>
           )}
         </div>
 
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div className="flex items-center gap-4 sm:gap-6">
+          <div className="hidden xl:flex items-center gap-3 px-4 py-2 bg-indigo-500/5 rounded-full border border-indigo-500/10">
+             <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+             <span className="text-[9px] font-black text-indigo-400 uppercase tracking-widest">BRIDGE_STABLE</span>
+          </div>
           <button 
             onClick={handleSave}
             disabled={isSaving || code === suggestion.built_code}
-            className={`px-3 sm:px-4 py-2 rounded-lg text-[8px] sm:text-[9px] font-black uppercase tracking-[2px] transition-all flex items-center gap-2 ${code === suggestion.built_code ? 'bg-white/5 text-white/20' : 'bg-white text-black hover:scale-105 active:scale-95'}`}
+            className={`px-8 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-[4px] transition-all flex items-center gap-3 shadow-xl ${code === suggestion.built_code ? 'bg-white/5 text-white/10 cursor-not-allowed' : 'bg-white text-black hover:bg-indigo-400 hover:text-white'}`}
           >
-            {isSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Database className="w-3 h-3" />}
-            <span className="hidden xs:inline">Commit</span>
+            {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Database className="w-4 h-4" />}
+            <span className="hidden sm:inline">COMMIT_REVISION</span>
           </button>
           <button 
             onClick={onClose} 
-            className="hidden md:flex w-9 h-9 items-center justify-center hover:bg-white/10 rounded-lg transition-all text-white/40 hover:text-white border border-white/10"
+            className="hidden md:flex w-10 h-10 items-center justify-center hover:bg-white/10 rounded-xl transition-all text-white/40 hover:text-white border border-white/10"
           >
-            <X className="w-5 h-5" />
+            <X className="w-6 h-6" />
           </button>
         </div>
       </div>

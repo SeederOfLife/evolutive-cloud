@@ -244,8 +244,8 @@ export default function App() {
   
   const [selectedModel, setSelectedModel] = useState(() => {
     try {
-      return localStorage.getItem('app_model') || "gemini-1.5-flash";
-    } catch { return "gemini-1.5-flash"; }
+      return localStorage.getItem('app_model') || "gemini-3-flash-preview";
+    } catch { return "gemini-3-flash-preview"; }
   });
   const [aiProvider, setAiProvider] = useState<'google' | 'openai' | 'anthropic' | 'custom' | 'web-llm' | 'gemini-nano' | 'mlc-mobile'>(() => {
     try {
@@ -486,21 +486,30 @@ export default function App() {
     return { title: "New Member", color: "#94a3b8", level: 0 };
   }, [suggestions, user]);
 
+  const [aiError, setAiError] = useState<string | null>(null);
+  
   // Cloud Fallback Helper - Uses server-side proxy for security
   const callGeminiCloud = async (prompt: string): Promise<string> => {
+    setAiError(null);
     try {
       const response = await fetch("/api/neural-link", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           prompt,
-          model: "gemini-3.1-pro-preview" 
+          model: "gemini-3-flash-preview" 
         })
       });
 
       const data = await response.json();
       
       if (!response.ok) {
+        if (response.status === 429) {
+          const msg = "NEURAL_QUOTA_EXHAUSTED: The cloud intelligence link has reached its limit. This is a platform-wide limit. Please wait a few minutes or use your own API Key in Settings.";
+          setAiError(msg);
+          throw new Error(msg);
+        }
+
         // If server fallback fails because of mission key or invalid key, attempt user key fallback
         if (data.error === "SYSTEM_KEY_MISSING" || data.error === "NEURAL_NODE_ERROR" || [400, 401, 403].includes(response.status)) {
           const userGoogleKey = providerKeys['google'];
@@ -508,16 +517,20 @@ export default function App() {
             console.log("Cloud link restricted, switching to user neural key...");
             const ai = new GoogleGenAI({ apiKey: userGoogleKey });
             const result = await ai.models.generateContent({
-              model: "gemini-3.1-pro-preview",
+              model: "gemini-3-flash-preview",
               contents: prompt
             });
             return result.text;
           }
           
           if (data.error === "SYSTEM_KEY_MISSING") {
-             throw new Error("System Cloud Key missing. Enable the Neural Hub and provide a Google API Key.");
+             const msg = "System Cloud Key missing. Enable the Neural Hub and provide a Google API Key.";
+             setAiError(msg);
+             throw new Error(msg);
           }
-          throw new Error(data.message || "Neural link denied. Check your API Hub credentials.");
+          const msg = data.message || "Neural link denied. Check your API Hub credentials.";
+          setAiError(msg);
+          throw new Error(msg);
         }
         throw new Error(data.message || "Unknown neural link protocol error.");
       }
@@ -525,7 +538,9 @@ export default function App() {
       return data.text;
     } catch (err: any) {
       console.error("Cloud Fallback Failure:", err);
-      throw new Error(`Cloud neural link failed: ${err.message}`);
+      const cleanMsg = err.message.length > 500 ? err.message.substring(0, 500) + "..." : err.message;
+      if (!aiError) setAiError(cleanMsg);
+      throw new Error(cleanMsg);
     }
   };
 
@@ -609,9 +624,9 @@ export default function App() {
           let modelId = selectedModel;
           if (!modelId.startsWith('gemini-') && !modelId.startsWith('gemma-')) modelId = "gemini-3-flash-preview"; 
           
-          try {
+          const attemptCall = async (targetModel: string) => {
             const response = await ai.models.generateContent({
-              model: modelId,
+              model: targetModel,
               contents: prompt,
               config: {
                 temperature: aiConfig.temperature,
@@ -620,29 +635,45 @@ export default function App() {
                 maxOutputTokens: aiConfig.maxTokens,
               }
             });
+            return response.text;
+          };
 
-            const text = response.text;
+          try {
+            const text = await attemptCall(modelId);
             if (!text) throw new Error("The AI Engine returned an empty response.");
             setIsRateLimited(false);
             setRateLimitCountdown(0);
             return text;
           } catch (err: any) {
-            // Check for rate limit error (429)
-            if (err?.message?.includes('429') || err?.status === 429) {
+            // Check for rate limit error (429) or quota error
+            if (err?.message?.includes('429') || err?.status === 429 || err?.message?.includes('quota') || err?.message?.includes('RESOURCE_EXHAUSTED')) {
+              console.warn(`Model ${modelId} failed quota, attempting fallback to gemini-3-flash-preview...`);
+              
+              if (modelId !== 'gemini-3-flash-preview') {
+                 try {
+                   const fallbackText = await attemptCall('gemini-3-flash-preview');
+                   if (fallbackText) {
+                     setAiError("Warning: Neural Sync downgraded to Flash version due to Pro quota exhaustion.");
+                     return fallbackText;
+                   }
+                 } catch (fallbackErr) {
+                   console.error("Flash fallback also failed:", fallbackErr);
+                 }
+              }
+
               if (retryCount < maxRetries) {
                 retryCount++;
                 const waitTime = Math.pow(2, retryCount) * 1000 + Math.random() * 1000;
                 setIsRateLimited(true);
                 setRateLimitCountdown(Math.ceil(waitTime / 1000));
                 
-                // Countdown timer for UI
                 const timer = setInterval(() => {
                   setRateLimitCountdown(prev => Math.max(0, prev - 1));
                 }, 1000);
                 
                 await sleep(waitTime);
                 clearInterval(timer);
-                continue; // Retry while loop
+                continue; 
               }
             }
             throw err;
@@ -870,6 +901,7 @@ export default function App() {
       return "INITIALIZING LOCAL AI";
     }
     if (isRateLimited) return `RATE LIMITED (${rateLimitCountdown}s)`;
+    if (aiError) return "NEURAL_ERROR / QUOTA_HIT";
     if (isManifesting) return "MANIFESTING";
     if (isBuilding) return "SYNTHESIZING";
     if (isRefining) return "REFINING";
@@ -1565,7 +1597,41 @@ export default function App() {
         })}
       </div>
 
-      {/* --- CONTENT LAYER --- */}
+      {/* --- ERROR OVERLAY --- */}
+      <AnimatePresence>
+        {aiError && (
+          <motion.div 
+            initial={{ opacity: 0, y: -50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -50 }}
+            className="fixed top-20 left-1/2 -translate-x-1/2 w-[90%] md:w-auto md:min-w-[400px] max-w-2xl z-[110] bg-red-950/90 backdrop-blur-2xl border border-red-500/30 p-6 rounded-3xl shadow-[0_0_50px_rgba(0,0,0,0.5)]"
+          >
+            <div className="flex items-center gap-4 text-red-400">
+              <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center border border-red-500/30">
+                 <Lock className="w-5 h-5" />
+              </div>
+              <div className="flex-1">
+                <h4 className="text-[10px] font-black uppercase tracking-widest text-red-200">Neural Sync Error</h4>
+                <p className="text-[10px] text-red-400/80 font-medium leading-relaxed">{aiError}</p>
+              </div>
+              <button 
+                onClick={() => setAiError(null)}
+                className="text-white/20 hover:text-white transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            {aiError.includes('QUOTA') && (
+              <button 
+                onClick={() => setActiveTab('identity')}
+                className="w-full py-3 bg-red-500 text-white text-[9px] font-black uppercase tracking-widest rounded-xl hover:bg-red-400 transition-colors"
+              >
+                Connect Personal API Hub
+              </button>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* --- REPO SIDEBAR --- */}
       <AnimatePresence>
@@ -1688,22 +1754,22 @@ export default function App() {
         <OrbitControls enableZoom={false} enablePan={false} maxPolarAngle={Math.PI / 1.5} minPolarAngle={Math.PI / 3} />
       </Canvas>
 
-      {/* --- HUD: UPDATE INPUT --- */}
-      {!isOpen && !currentSuggestion && (
-        <div className="absolute bottom-28 md:bottom-10 left-1/2 -translate-x-1/2 z-20 w-[90%] sm:w-[320px]">
-          <form onSubmit={sendMessage} className="relative group">
-            <input 
-              type="text"
-              placeholder="Post a thought..."
-              value={messageInput}
-              onChange={(e) => setMessageInput(e.target.value)}
-              className="w-full bg-white/5 border border-white/10 px-6 py-3 rounded-full text-[10px] text-white/60 focus:text-white focus:border-indigo-500/50 focus:bg-white/10 outline-none text-center backdrop-blur-md transition-all placeholder:text-white/20 font-black uppercase tracking-[2px]"
-            />
-            <div className="absolute -inset-0.5 bg-indigo-500/10 rounded-full blur group-hover:bg-indigo-500/20 transition-all -z-10" />
-            <button type="submit" className="hidden" />
-          </form>
-        </div>
-      )}
+                      {/* --- HUD: UPDATE INPUT --- */}
+                      {!isOpen && !currentSuggestion && messageInput === '' && (
+                        <div className="absolute bottom-28 md:bottom-12 left-1/2 -translate-x-1/2 z-20 w-[90%] sm:w-[360px]">
+                          <form onSubmit={sendMessage} className="relative group">
+                            <input 
+                              type="text"
+                              placeholder="SYNC_NEURAL_THOUGHT..."
+                              value={messageInput}
+                              onChange={(e) => setMessageInput(e.target.value)}
+                              className="w-full bg-black/40 border-2 border-white/5 px-8 py-4 rounded-full text-[11px] text-white focus:text-white focus:border-indigo-500/50 focus:bg-indigo-500/5 outline-none text-center backdrop-blur-3xl transition-all placeholder:text-white/10 font-black uppercase tracking-[4px] shadow-2xl"
+                            />
+                            <div className="absolute -inset-1 bg-indigo-500/10 rounded-full blur-xl group-hover:bg-indigo-500/20 transition-all -z-10" />
+                            <button type="submit" className="hidden" />
+                          </form>
+                        </div>
+                      )}
 
       {/* --- SYSTEM INTERFACE (THE LIBRARY) --- */}
       <AnimatePresence>
@@ -1762,45 +1828,47 @@ export default function App() {
               {activeTab === 'library' ? (
                 <div className="max-w-6xl mx-auto p-6">
                   {/* Search and Filters */}
-                  <div className="flex flex-col md:flex-row gap-6 mb-8 items-center justify-between">
-                    <div className="relative w-full max-w-sm group">
-                      <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20 group-focus-within:text-indigo-400 transition-colors" />
+                  <div className="flex flex-col md:flex-row gap-8 mb-12 items-center justify-between border-b border-white/5 pb-8">
+                    <div className="relative w-full max-w-md group">
+                      <Search className="absolute left-6 top-1/2 -translate-y-1/2 w-5 h-5 text-indigo-500/40 group-focus-within:text-indigo-400 transition-colors" />
                       <input 
                         type="text" 
-                        placeholder="Search the library..." 
+                        placeholder="SEARCH NEURAL NETWORK..." 
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full bg-white/5 border border-white/10 rounded-full py-3 pl-12 pr-6 text-[11px] text-white focus:border-indigo-500 focus:bg-white/10 outline-none transition-all uppercase tracking-widest font-black"
+                        className="w-full bg-white/5 border-2 border-white/5 rounded-full py-4 pl-14 pr-8 text-[11px] text-white focus:border-indigo-500/50 focus:bg-indigo-500/5 outline-none transition-all uppercase tracking-[4px] font-black placeholder:text-white/10"
                       />
                     </div>
                     
-                    <div className="flex gap-2 p-1 bg-white/5 rounded-full border border-white/10 shrink-0">
-                      <button 
-                        onClick={() => setViewMode('FEED')}
-                        className={`w-10 h-10 flex items-center justify-center rounded-full transition-all ${viewMode === 'FEED' ? 'bg-indigo-500 text-white shadow-lg' : 'text-white/40 hover:text-white'}`}
-                        title="Discovery Feed"
-                      >
-                        <Layout className="w-4 h-4" />
-                      </button>
-                      <button 
-                        onClick={() => setViewMode('EXPLORER')}
-                        className={`w-10 h-10 flex items-center justify-center rounded-full transition-all ${viewMode === 'EXPLORER' ? 'bg-indigo-500 text-white shadow-lg' : 'text-white/40 hover:text-white'}`}
-                        title="Table View"
-                      >
-                        <Search className="w-4 h-4" />
-                      </button>
-                    </div>
-
-                    <div className="flex gap-2 p-1 bg-white/5 rounded-full border border-white/10 shrink-0">
-                      {(['all', 'built', 'pending', 'mine'] as const).map((type) => (
+                    <div className="flex items-center gap-6">
+                      <div className="flex gap-2 p-1.5 bg-black/40 rounded-full border border-white/5 shadow-inner backdrop-blur-md">
                         <button 
-                          key={type}
-                          onClick={() => setFilterType(type as any)}
-                          className={`px-4 py-2 rounded-full text-[9px] font-black uppercase tracking-widest transition-all ${filterType === type ? 'bg-indigo-500 text-white shadow-[0_0_20px_rgba(99,102,241,0.4)]' : 'text-white/40 hover:text-white'}`}
+                          onClick={() => setViewMode('FEED')}
+                          className={`w-12 h-12 flex items-center justify-center rounded-full transition-all ${viewMode === 'FEED' ? 'bg-indigo-500 text-white shadow-[0_0_20px_rgba(99,102,241,0.5)]' : 'text-white/40 hover:text-white hover:bg-white/5'}`}
+                          title="Discovery Feed"
                         >
-                          {type}
+                          <Layout className="w-5 h-5" />
                         </button>
-                      ))}
+                        <button 
+                          onClick={() => setViewMode('EXPLORER')}
+                          className={`w-12 h-12 flex items-center justify-center rounded-full transition-all ${viewMode === 'EXPLORER' ? 'bg-indigo-500 text-white shadow-[0_0_20px_rgba(99,102,241,0.5)]' : 'text-white/40 hover:text-white hover:bg-white/5'}`}
+                          title="Technical Explorer"
+                        >
+                          <Search className="w-5 h-5" />
+                        </button>
+                      </div>
+
+                      <div className="flex gap-2 p-1.5 bg-black/40 rounded-full border border-white/5 shadow-inner backdrop-blur-md">
+                        {(['all', 'built', 'pending', 'mine'] as const).map((type) => (
+                          <button 
+                            key={type}
+                            onClick={() => setFilterType(type as any)}
+                            className={`px-6 py-2.5 rounded-full text-[10px] font-black uppercase tracking-[3px] transition-all ${filterType === type ? 'bg-indigo-500 text-white shadow-[0_0_25px_rgba(99,102,241,0.4)]' : 'text-white/30 hover:text-white hover:bg-white/5'}`}
+                          >
+                            {type}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
 
@@ -1813,206 +1881,214 @@ export default function App() {
                   </div>
 
                   {viewMode === 'EXPLORER' ? (
-                    <>
-                      {/* Explorer Header */}
-                      <div className="hidden md:grid grid-cols-[1fr_120px_100px_160px] gap-4 px-6 py-3 border-b border-white/10 text-[10px] uppercase tracking-[0.2em] font-black text-white/30 mb-4">
-                        <div className="flex items-center gap-2"><Box className="w-3 h-3" /> Idea / Application</div>
-                        <div className="text-center">Complexity</div>
-                        <div className="text-center">Status</div>
-                        <div className="text-right">Operations</div>
-                      </div>
-
+                    <div className="flex flex-col gap-4">
+                      {/* Explorer List */}
                       <div className="flex flex-col gap-3">
-                      {displaySuggestions.length === 0 && (
-                        <div className="py-12 md:py-20 text-center border-2 border-dashed border-white/5 rounded-[1.5rem] md:rounded-[2rem]">
-                          <p className="text-white/20 italic tracking-widest text-[10px] md:text-xs uppercase px-6">The global library is currently empty. Awaiting an idea...</p>
-                        </div>
-                      )}
-                      {displaySuggestions.map((s, idx) => {
-                        const isApp = s.status === 'built';
-                        const isCreator = s.user_id && user?.uid && s.user_id === user.uid;
+                        {displaySuggestions.length === 0 && (
+                          <div className="py-24 text-center border-2 border-dashed border-white/5 rounded-[4rem] bg-white/[0.01]">
+                            <p className="text-white/20 italic tracking-[10px] text-[12px] uppercase px-6">The global library is currently empty. Awaiting an idea...</p>
+                          </div>
+                        )}
+                        {displaySuggestions.map((s, idx) => {
+                          const isApp = s.status === 'built';
+                          const isCreator = s.user_id && user?.uid && s.user_id === user.uid;
 
-                        return (
-                          <motion.div 
-                            key={s.id}
-                            initial={{ opacity: 0, x: -10 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            transition={{ delay: idx * 0.03 }}
-                            className="group relative"
-                          >
-                            <div className="flex flex-col md:grid md:grid-cols-[1fr_120px_100px_160px] gap-4 items-stretch md:items-center p-4 md:px-6 md:py-4 rounded-2xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.05] hover:border-indigo-500/30 transition-all cursor-default">
-                              {/* Main Info */}
-                              <div className="flex items-start gap-3 md:gap-4 overflow-hidden">
-                                <div className={`w-8 h-8 md:w-10 md:h-10 rounded-lg md:rounded-xl flex items-center justify-center shrink-0 ${isApp ? 'bg-indigo-500/20 text-indigo-400' : 'bg-white/5 text-white/40 shadow-inner'}`}>
-                                  {isApp ? <Layout className="w-4 h-4 md:w-5 md:h-5" /> : <DraftingCompass className="w-4 h-4 md:w-5 md:h-5" />}
-                                </div>
-                                <div className="overflow-hidden flex-1">
-                                  <h3 className="text-white font-bold text-xs md:text-sm truncate group-hover:text-indigo-300 transition-colors">
-                                    {s.content}
-                                  </h3>
-                                  <div className="text-[8px] md:text-[10px] text-white/20 uppercase tracking-widest mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
-                                    <span className={isApp ? 'text-indigo-500' : ''}>#{s.id}</span> 
-                                    <span className="hidden md:inline w-1 h-1 rounded-full bg-white/10" />
-                                    <span>{isApp ? `VERSION V${s.version || 1}` : 'PROPOSAL DRAFT'}</span>
-                                    <span className="hidden md:inline w-1 h-1 rounded-full bg-white/10" />
-                                    <span className={`uppercase ${s.app_type === 'phone' ? 'text-pink-400' : s.app_type === 'game' ? 'text-green-400' : 'text-white/40'}`}>
-                                      {s.app_type || 'desktop'}
-                                    </span>
-                                    {(s.pledged_by || []).length > 0 && (
-                                      <>
-                                        <span className="w-1 h-1 rounded-full bg-white/10" />
-                                        <span className="flex items-center gap-1 text-yellow-500/50"><Zap className="w-2 md:w-2.5 h-2 md:h-2.5 fill-current" /> SUPPORTED</span>
-                                      </>
-                                    )}
+                          return (
+                            <motion.div 
+                              key={s.id}
+                              initial={{ opacity: 0, x: -10 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              transition={{ delay: idx * 0.03 }}
+                              className="group relative"
+                            >
+                              <div className="flex flex-col md:grid md:grid-cols-[1fr_120px_100px_180px] gap-6 items-stretch md:items-center p-6 md:p-8 rounded-3xl md:rounded-[2.5rem] bg-white/[0.02] border border-white/5 hover:bg-white/[0.04] hover:border-indigo-500/20 hover:shadow-[0_20px_40px_rgba(0,0,0,0.4)] transition-all cursor-default neural-border">
+                                {/* Main Info */}
+                                <div className="flex items-center gap-6 overflow-hidden">
+                                  <div className={`w-12 h-12 md:w-16 md:h-16 rounded-2xl flex items-center justify-center shrink-0 ${isApp ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 shadow-[0_0_20px_rgba(99,102,241,0.1)]' : 'bg-white/5 text-white/20 border border-white/5 shadow-inner'}`}>
+                                    {isApp ? <Box className="w-6 h-6" /> : <DraftingCompass className="w-6 h-6" />}
+                                  </div>
+                                  <div className="overflow-hidden flex-1 text-left">
+                                    <h3 className="text-white font-black text-[13px] md:text-[15px] truncate group-hover:text-indigo-400 transition-colors uppercase tracking-[1px]">
+                                      {s.content}
+                                    </h3>
+                                    <div className="text-[10px] text-white/20 uppercase tracking-[4px] mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 font-mono">
+                                      <span className={isApp ? 'text-indigo-500' : ''}>#{s.id.substring(0, 8)}</span> 
+                                      <span className="w-1 h-1 rounded-full bg-white/10" />
+                                      <span>{isApp ? `REV_V${s.version || 1}` : 'PROPOSAL_DRAFT'}</span>
+                                      <span className="w-1 h-1 rounded-full bg-white/10" />
+                                      <span className={`uppercase font-black ${s.app_type === 'phone' ? 'text-pink-500/60' : s.app_type === 'game' ? 'text-emerald-500/60' : 'text-white/20'}`}>
+                                        {s.app_type || 'desktop'}
+                                      </span>
+                                    </div>
                                   </div>
                                 </div>
-                              </div>
 
-                              {/* Data Column: Stats */}
-                              <div className="flex flex-col items-center md:items-center gap-1">
-                                <div className="w-full bg-white/5 h-1 rounded-full overflow-hidden">
-                                  <motion.div 
-                                    initial={{ width: 0 }}
-                                    animate={{ width: `${s.energy || 0}%` }}
-                                    className="h-full bg-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.5)]"
-                                  />
+                                {/* Data Column: Stats */}
+                                <div className="flex flex-col items-center gap-2">
+                                  <div className="w-full bg-white/5 h-1.5 rounded-full overflow-hidden border border-white/5">
+                                    <motion.div 
+                                      initial={{ width: 0 }}
+                                      animate={{ width: `${Math.min(100, (s.energy || 0))}%` }}
+                                      className="h-full bg-gradient-to-r from-indigo-600 to-indigo-400 shadow-[0_0_15px_rgba(99,102,241,0.5)]"
+                                    />
+                                  </div>
+                                  <span className="text-[9px] font-mono text-white/30 tracking-widest uppercase truncate w-full text-center">
+                                    PWR_{s.energy || 0}%_SYNC
+                                  </span>
                                 </div>
-                                <span className="text-[7px] md:text-[9px] font-mono text-white/40 tracking-tighter uppercase whitespace-nowrap">
-                                  {s.votes || 0} Votes / {s.energy || 0}% Power
-                                </span>
-                              </div>
 
-                              {/* Data Column: Status */}
-                              <div className="flex justify-start md:justify-center">
-                                <div className={`px-2 py-0.5 md:py-1 rounded text-[7px] md:text-[8px] font-black uppercase tracking-widest border ${
-                                  isApp 
-                                  ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' 
-                                  : 'bg-white/5 text-white/30 border-white/10'
-                                }`}>
-                                  {s.status.toUpperCase()}
+                                {/* Data Column: Status */}
+                                <div className="flex justify-start md:justify-center">
+                                  <div className={`px-4 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-[3px] border ${
+                                    isApp 
+                                    ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20 shadow-[0_0_15px_rgba(99,102,241,0.1)]' 
+                                    : 'bg-white/5 text-white/20 border-white/5'
+                                  }`}>
+                                    {s.status}
+                                  </div>
                                 </div>
-                              </div>
 
-                              {/* Actions */}
-                              <div className="flex justify-end gap-2 md:pr-2 mt-2 md:mt-0 pt-2 md:pt-0 border-t md:border-t-0 border-white/5">
-                                {isApp ? (
-                                  <>
-                                    <button onClick={() => setCurrentSuggestion(s)} className="flex-1 md:flex-none p-2 md:p-2.5 rounded-lg bg-white text-black hover:scale-105 md:hover:scale-110 active:scale-95 transition-all flex items-center justify-center gap-2 group/launch" title="Launch App">
-                                      <Play className="w-3.5 md:w-4 h-3.5 md:h-4 fill-current group-hover/launch:animate-pulse" />
-                                      <span className="text-[9px] font-black uppercase tracking-widest">Execute</span>
+                                {/* Actions */}
+                                <div className="flex justify-end gap-3 mt-4 md:mt-0 pt-6 md:pt-0 border-t md:border-t-0 border-white/5">
+                                  {isApp ? (
+                                    <button 
+                                      onClick={() => setCurrentSuggestion(s)} 
+                                      className="flex-1 md:flex-none px-6 py-4 rounded-2xl bg-white text-black hover:bg-indigo-500 hover:text-white hover:scale-105 active:scale-95 transition-all flex items-center justify-center gap-3 font-black shadow-xl"
+                                    >
+                                      <Play className="w-4 h-4 fill-current" />
+                                      <span className="text-[10px] uppercase tracking-[4px]">Execute</span>
                                     </button>
-                                  </>
-                                ) : (
-                                  s.status === 'pending' && (
-                                    <>
-                                      {!isCreator && (
-                                        <button 
-                                          onClick={() => handleVote(s.id, s.votes)}
-                                          className="flex-1 md:flex-none p-2 md:p-2.5 rounded-lg border border-white/10 text-white/40 hover:border-white hover:text-white transition-all hover:bg-white/5 flex items-center justify-center gap-2"
-                                          title="Upvote"
-                                        >
-                                          <ChevronUp className="w-3.5 md:w-4 h-3.5 md:h-4" />
-                                          <span className="text-[9px] font-black uppercase tracking-widest">Vote</span>
-                                        </button>
-                                      )}
+                                  ) : (
+                                    <div className="flex gap-2 w-full md:w-auto">
+                                      <button 
+                                        onClick={() => handleVote(s.id, s.votes)}
+                                        className="p-4 rounded-2xl bg-white/5 border border-white/10 text-white/40 hover:bg-white hover:text-black hover:border-white transition-all shadow-lg"
+                                        title="Upvote Node"
+                                      >
+                                        <ChevronUp className="w-5 h-5" />
+                                      </button>
                                       <button 
                                         onClick={() => handlePledge(s)}
-                                        disabled={!!isRefining || !!isBuilding || (!isCreator && !userApiKey)}
-                                        className={`flex-1 md:flex-none p-2 md:p-2.5 rounded-lg border flex items-center justify-center transition-all gap-2 relative overflow-hidden group/pledge ${
+                                        disabled={!!isRefining || !!isBuilding}
+                                        className={`flex-1 md:flex-none px-6 py-4 rounded-2xl border transition-all flex items-center justify-center gap-3 font-black shadow-2xl relative overflow-hidden ${
                                           isCreator 
-                                          ? 'bg-gradient-to-r from-indigo-600 to-indigo-800 border-indigo-500 text-white hover:scale-105 shadow-[0_0_20px_rgba(79,70,229,0.3)]' 
-                                          : 'bg-white/5 border-white/10 text-yellow-500/50 hover:bg-indigo-500 hover:text-white hover:border-indigo-500'
+                                          ? 'bg-indigo-500 border-indigo-600 text-white hover:bg-indigo-600' 
+                                          : 'bg-white/5 border-white/10 text-white hover:bg-indigo-500 hover:border-indigo-600'
                                         }`}
-                                        title={isCreator ? "Manifest Module" : "Manifest with Your Power"}
                                       >
-                                        {(isRefining === s.id || isBuilding === s.id) ? (
-                                          <Loader2 className="w-3.5 md:w-4 h-3.5 md:h-4 animate-spin" />
-                                        ) : isCreator ? (
-                                          <Zap className="w-3.5 md:w-4 h-3.5 md:h-4 fill-current animate-pulse text-yellow-400" />
+                                        {isRefining === s.id || isBuilding === s.id ? (
+                                          <Loader2 className="w-4 h-4 animate-spin" />
                                         ) : (
-                                          <Sparkles className="w-3.5 md:w-4 h-3.5 md:h-4" />
+                                          <Zap className="w-4 h-4" />
                                         )}
-                                        <span className="text-[9px] font-black uppercase tracking-widest">
-                                          {isRefining === s.id || isBuilding === s.id ? 'Manifesting...' : isCreator ? 'MANIFEST NOW' : 'Power-Up'}
-                                        </span>
+                                        <span className="text-[10px] uppercase tracking-[4px]">MANIFEST</span>
                                       </button>
-                                    </>
-                                  )
-                                )}
+                                    </div>
+                                  )}
+                                </div>
                               </div>
-                            </div>
-                          </motion.div>
-                        );
-                      })}
+                            </motion.div>
+                          );
+                        })}
                       </div>
-                    </>
+                    </div>
                   ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
                        {displaySuggestions.map((s, idx) => (
                          <motion.div 
                            key={s.id}
-                           initial={{ opacity: 0, scale: 0.9 }}
-                           animate={{ opacity: 1, scale: 1 }}
-                           transition={{ delay: idx * 0.1 }}
-                           className="group aspect-[4/5] bg-gradient-to-b from-white/10 to-white/5 rounded-[2rem] border border-white/10 overflow-hidden relative flex flex-col hover:border-indigo-500/50 transition-all cursor-pointer shadow-2xl"
+                           initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                           animate={{ opacity: 1, scale: 1, y: 0 }}
+                           transition={{ delay: idx * 0.08 }}
+                           whileHover={{ y: -10 }}
+                           className="group aspect-[4/5] bg-[#0a0a20] rounded-[3.5rem] border border-white/5 overflow-hidden relative flex flex-col hover:border-indigo-500/30 transition-all cursor-pointer shadow-[0_30px_60px_rgba(0,0,0,0.4)] neural-card-glow"
                            onClick={() => s.status === 'built' && setCurrentSuggestion(s)}
                          >
                             {/* App Preview Mock/Visual */}
                             <div className="flex-1 bg-black/40 flex items-center justify-center relative overflow-hidden">
-                               <div className="absolute inset-0 opacity-20 pointer-events-none">
-                                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(99,102,241,0.2),transparent_70%)]" />
+                               <div className="absolute inset-0 opacity-30 pointer-events-none">
+                                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(99,102,241,0.2),transparent_70%)]" />
+                                  <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-black to-transparent" />
                                </div>
-                               {s.app_type === 'phone' ? (
-                                 <div className="w-1/2 aspect-[9/19] rounded-[2rem] border-4 border-white/20 bg-white/5 flex flex-col items-center justify-center gap-2 p-4 animate-pulse">
-                                    <div className="w-full h-1 bg-white/10 rounded-full" />
-                                    <div className="flex-1 w-full bg-white/5 rounded-lg" />
-                                 </div>
-                               ) : s.app_type === 'game' ? (
-                                 <Activity className="w-16 h-16 text-indigo-400/20" />
-                               ) : (
-                                 <Layout className="w-16 h-16 text-indigo-400/20" />
-                               )}
                                
-                               <div className="absolute top-6 left-6 flex items-center gap-2">
-                                  <div className={`px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest border border-white/10 transition-all ${s.status === 'built' ? 'bg-indigo-500 text-white' : 'bg-white/5 text-white/40'}`}>
+                               <motion.div 
+                                 animate={{ rotate: [0, 5, 0, -5, 0] }}
+                                 transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
+                                 className="relative"
+                               >
+                                 {s.app_type === 'phone' ? (
+                                   <div className="w-32 h-64 md:w-36 md:h-72 rounded-[2.5rem] border-[6px] border-white/10 bg-white/5 flex flex-col p-4 shadow-2xl">
+                                      <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto mb-4" />
+                                      <div className="flex-1 w-full bg-white/[0.02] rounded-2xl border border-white/5 relative overflow-hidden">
+                                        <div className="absolute top-4 left-4 w-1/2 h-2 bg-indigo-500/20 rounded-full" />
+                                      </div>
+                                   </div>
+                                 ) : s.app_type === 'game' ? (
+                                   <div className="w-48 h-32 md:w-56 md:h-40 bg-white/5 rounded-[2rem] border-4 border-white/10 flex items-center justify-center shadow-2xl relative">
+                                      <Play className="w-12 h-12 text-indigo-500/40" />
+                                      <div className="absolute inset-4 border border-dashed border-white/5 rounded-xl" />
+                                   </div>
+                                 ) : (
+                                   <div className="w-48 h-40 md:w-56 md:h-48 bg-white/5 rounded-[2rem] border-4 border-white/10 flex flex-col p-6 shadow-2xl">
+                                      <div className="flex gap-2 mb-4">
+                                        <div className="w-2 h-2 rounded-full bg-pink-500/40" />
+                                        <div className="w-2 h-2 rounded-full bg-yellow-500/40" />
+                                        <div className="w-2 h-2 rounded-full bg-green-500/40" />
+                                      </div>
+                                      <div className="flex-1 w-full bg-white/[0.02] rounded-xl border border-white/5 p-4 space-y-3">
+                                        <div className="w-full h-1 bg-white/10 rounded-full" />
+                                        <div className="w-3/4 h-1 bg-white/10 rounded-full" />
+                                      </div>
+                                   </div>
+                                 )}
+                               </motion.div>
+                               
+                               <div className="absolute top-8 left-8 flex items-center gap-4">
+                                  <div className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-[4px] border transition-all ${s.status === 'built' ? 'bg-indigo-500 text-white border-indigo-600 shadow-[0_0_20px_rgba(99,102,241,0.5)]' : 'bg-white/10 text-white/40 border-white/10'}`}>
                                      {s.status}
-                                  </div>
-                                  <div className="px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest border border-white/10 bg-black/50 text-white/70">
-                                     {s.app_type || 'desktop'}
                                   </div>
                                </div>
                             </div>
 
                             {/* Card Content */}
-                            <div className="p-8 bg-gradient-to-t from-black to-transparent space-y-4">
-                               <h3 className="text-lg font-black text-white uppercase leading-tight tracking-tight line-clamp-2">{s.content}</h3>
-                               <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-3">
-                                     <div className="w-8 h-8 rounded-full bg-white/10 overflow-hidden">
-                                        <img src={`https://api.dicebear.com/7.x/identicon/svg?seed=${s.user_id || s.id}`} alt="User" />
-                                     </div>
-                                     <span className="text-[10px] font-black text-white/40 uppercase tracking-widest">@{s.user_id?.slice(0, 6) || 'anonymous'}</span>
-                                  </div>
+                            <div className="p-10 bg-gradient-to-t from-[#050510] via-[#050510] to-transparent space-y-6">
+                               <div className="space-y-4 text-left">
+                                 <h3 className="text-xl font-black text-white uppercase tracking-tight leading-tight line-clamp-2 md:group-hover:text-indigo-400 transition-colors uppercase whitespace-pre-wrap">{s.content}</h3>
+                                 <p className="text-[10px] text-white/20 uppercase tracking-[5px] font-mono">Neural_Node_ID: {s.id.substring(0, 12)}</p>
+                               </div>
+                               
+                               <div className="flex items-center justify-between border-t border-white/5 pt-8">
                                   <div className="flex items-center gap-4">
-                                     <div className="flex items-center gap-1.5 text-indigo-400">
-                                        <Zap className="w-3 h-3 fill-current" />
-                                        <span className="text-[10px] font-black">{s.energy || 0}%</span>
+                                     <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 overflow-hidden flex items-center justify-center p-1">
+                                        <img src={`https://api.dicebear.com/7.x/bottts/svg?seed=${s.user_id || s.id}`} alt="User" className="w-full h-full object-cover" />
                                      </div>
-                                     <div className="flex items-center gap-1.5 text-white/40">
-                                        <ChevronUp className="w-3 h-3" />
-                                        <span className="text-[10px] font-black">{s.votes || 0}</span>
+                                     <div className="text-left">
+                                       <span className="text-[11px] font-black text-white/30 uppercase tracking-[4px] block">Manifestor</span>
+                                       <span className="text-[9px] font-black text-indigo-400 uppercase tracking-widest">@{s.user_id?.slice(0, 8) || 'SYSTEM'}</span>
+                                     </div>
+                                  </div>
+                                  <div className="flex flex-col items-end gap-2">
+                                     <div className="flex items-center gap-3 text-indigo-400 bg-indigo-500/10 px-4 py-2 rounded-xl border border-indigo-500/20">
+                                        <Zap className="w-4 h-4 fill-current animate-pulse" />
+                                        <span className="text-[11px] font-black tracking-widest">{s.energy || 0}%</span>
                                      </div>
                                   </div>
                                </div>
                                
-                               {s.status === 'pending' && (
-                                 <button 
-                                   onClick={(e) => { e.stopPropagation(); handlePledge(s); }}
-                                   className="w-full py-4 bg-indigo-500 text-white rounded-2xl text-[10px] font-black uppercase tracking-[4px] hover:bg-indigo-400 transition-all shadow-lg active:scale-95"
-                                 >
-                                   Fuel Manifestation
-                                 </button>
-                               )}
+                               <div className="pt-4">
+                                 {s.status === 'built' ? (
+                                   <button className="w-full py-5 bg-white text-black rounded-3xl text-[11px] font-black uppercase tracking-[8px] hover:bg-indigo-500 hover:text-white transition-all shadow-2xl active:scale-95">
+                                      Execute_App
+                                   </button>
+                                 ) : (
+                                   <button 
+                                     onClick={(e) => { e.stopPropagation(); handlePledge(s); }}
+                                     className="w-full py-5 bg-indigo-500 text-white rounded-3xl text-[11px] font-black uppercase tracking-[8px] hover:bg-indigo-600 transition-all shadow-2xl active:scale-95"
+                                   >
+                                     Fuel_Manifest
+                                   </button>
+                                 )}
+                               </div>
                             </div>
                          </motion.div>
                        ))}
@@ -2115,46 +2191,49 @@ export default function App() {
                       </div>
                     </div>
                   ) : (
-                    <div className="space-y-32 py-24 max-w-[1400px] mx-auto px-6 lg:px-12 w-full flex flex-col items-center">
+                    <div className="space-y-24 py-16 max-w-[1400px] mx-auto px-6 lg:px-12 w-full flex flex-col items-center relative">
+                      <div className="neural-bg-glow top-0 left-1/2 -translate-x-1/2 opacity-20" />
+                      
                       {/* --- DASHBOARD HEADER & IDENTITY --- */}
-                      <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-stretch w-full">
+                      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-stretch w-full">
                         
                         {/* Profile Identity Card */}
                         <motion.div 
-                          initial={{ opacity: 0, y: 20 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          className="lg:col-span-5 bg-gradient-to-br from-[#0a0a25] via-[#050510] to-[#010105] p-10 lg:p-14 rounded-[4rem] border border-white/5 relative overflow-hidden group flex flex-col justify-between shadow-[0_50px_100px_rgba(0,0,0,0.6)]"
+                          initial={{ opacity: 0, x: -20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          className="lg:col-span-5 bg-gradient-to-br from-[#0a0a25] via-[#050510] to-[#010105] p-12 lg:p-14 rounded-[4rem] border border-white/5 relative overflow-hidden group flex flex-col justify-between shadow-[0_50px_100px_rgba(0,0,0,0.6)] neural-card-glow"
                         >
                           <div className="absolute -top-20 -right-20 w-80 h-80 bg-indigo-500/10 rounded-full blur-[100px] group-hover:bg-indigo-500/20 transition-all duration-700" />
                           
                           <div className="flex flex-col items-center lg:items-start gap-10 relative z-10">
                             <div className="relative shrink-0">
-                              <div className="w-32 h-32 lg:w-44 lg:h-44 rounded-[3.5rem] overflow-hidden border-4 border-indigo-500/30 shadow-[0_0_50px_rgba(99,102,241,0.2)] bg-black rotate-[-3deg] group-hover:rotate-0 transition-transform duration-700">
+                              <div className="w-32 h-32 lg:w-44 lg:h-44 rounded-[3.5rem] overflow-hidden border-4 border-indigo-500/30 shadow-[0_0_50px_rgba(99,102,241,0.2)] bg-black rotate-[-3deg] group-hover:rotate-0 transition-transform duration-700 relative">
                                 <img 
                                   src={user.photoURL || `https://api.dicebear.com/7.x/bottts/svg?seed=${user.email}`} 
                                   alt="Profile Avatar"
                                   referrerPolicy="no-referrer"
                                   className="w-full h-full object-cover"
                                 />
+                                <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
                               </div>
                               <motion.div 
                                 animate={{ rotate: 360 }}
                                 transition={{ duration: 30, repeat: Infinity, ease: "linear" }}
-                                className="absolute -inset-10 border border-dashed border-indigo-500/5 rounded-full"
+                                className="absolute -inset-10 border border-dashed border-indigo-500/10 rounded-full"
                               />
                             </div>
 
                             <div className="text-center lg:text-left space-y-4 pt-4">
                               <div className="space-y-1">
-                                <h3 className="text-3xl lg:text-4xl font-black uppercase tracking-[15px] lg:tracking-[20px] text-white leading-none">
+                                <h3 className="text-3xl lg:text-4xl font-black uppercase tracking-[15px] lg:tracking-[22px] text-white leading-none">
                                   {user.email?.split('@')[0]}
                                 </h3>
                                 <p className="text-indigo-400 font-mono text-[9px] uppercase tracking-[6px] opacity-40">Neural Node: {user.uid.substring(0, 16).toUpperCase()}</p>
                               </div>
                               
                               <div className="inline-flex items-center gap-4 bg-white/5 px-6 py-2 rounded-2xl border border-white/5 backdrop-blur-md">
-                                <div className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.5)]" />
-                                <span className="text-[10px] font-black uppercase tracking-[5px] text-white/60">Node_Online</span>
+                                <div className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.5)] animate-pulse" />
+                                <span className="text-[10px] font-black uppercase tracking-[5px] text-white/60">Node_Active_Manifestation</span>
                               </div>
                             </div>
                           </div>
@@ -2221,10 +2300,11 @@ export default function App() {
                       <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-start w-full">
                          
                         {/* Diagnostics Module */}
-                        <div className="lg:col-span-7 bg-[#050510] border border-white/5 p-12 lg:p-16 rounded-[4.5rem] relative overflow-hidden group shadow-2xl">
-                          <div className="flex flex-col lg:flex-row items-center justify-between mb-16 gap-8 border-b border-white/5 pb-12">
-                             <div className="space-y-2 text-center lg:text-left">
-                                <h4 className="text-[14px] font-black uppercase tracking-[15px] text-indigo-400">Neural Infrastructure</h4>
+                        <div className="lg:col-span-7 bg-[#050510] border border-white/5 p-12 lg:p-16 rounded-[4.5rem] relative overflow-hidden group shadow-2xl neural-border">
+                          <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
+                          <div className="flex flex-col lg:flex-row items-center justify-between mb-16 gap-8 border-b border-white/5 pb-12 relative z-10">
+                             <div className="space-y-3 text-center lg:text-left">
+                                <h4 className="text-[16px] font-black uppercase tracking-[15px] text-indigo-400">Neural Infrastructure</h4>
                                 <p className="text-[10px] text-white/20 uppercase tracking-[5px] font-mono">Consensus Cluster: v4.3.0_ALPHA</p>
                              </div>
                              <div className="flex items-center gap-5 px-8 py-3 bg-black/40 rounded-full border border-indigo-500/10 backdrop-blur-xl">
@@ -2237,61 +2317,63 @@ export default function App() {
                              </div>
                           </div>
 
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-12">
+                          <div className="grid grid-cols-2 lg:grid-cols-4 gap-12 relative z-10">
                             {[
-                              { label: 'Synapses', icon: Database, val: diagnostics.synapses },
-                              { label: 'Connectivity', icon: Globe, val: `${diagnostics.connectivity.toFixed(1)}%` },
-                              { label: 'Entropy', icon: Activity, val: diagnostics.entropy.toFixed(3) },
-                              { label: 'System Load', icon: Cpu, val: `${diagnostics.load.toFixed(1)}%` }
+                              { label: 'Synapses', icon: Database, val: diagnostics.synapses, color: 'text-indigo-400' },
+                              { label: 'Connectivity', icon: Globe, val: `${diagnostics.connectivity.toFixed(1)}%`, color: 'text-emerald-400' },
+                              { label: 'Entropy', icon: Activity, val: diagnostics.entropy.toFixed(3), color: 'text-pink-400' },
+                              { label: 'Load', icon: Cpu, val: `${diagnostics.load.toFixed(1)}%`, color: 'text-blue-400' }
                             ].map((item, i) => (
-                              <div key={i} className="space-y-4 group/item text-center">
-                                <div className="flex flex-col items-center gap-4 text-white/10 group-hover/item:text-indigo-400 transition-all">
-                                  <div className="p-3 bg-white/5 rounded-xl border border-white/5">
-                                    <item.icon className="w-5 h-5" />
+                              <div key={i} className="space-y-6 group/item text-center">
+                                <div className="flex flex-col items-center gap-5">
+                                  <div className={`p-4 bg-white/5 rounded-2xl border border-white/5 group-hover/item:scale-110 transition-all duration-500 ${item.color}`}>
+                                    <item.icon className="w-6 h-6" />
                                   </div>
-                                  <span className="text-[10px] uppercase font-black tracking-[4px]">{item.label}</span>
+                                  <span className="text-[10px] uppercase font-black tracking-[5px] text-white/20 group-hover/item:text-white transition-colors">{item.label}</span>
                                 </div>
-                                <div className="text-4xl font-mono text-white tracking-[2px] group-hover/item:translate-y-[-4px] transition-all">{item.val}</div>
+                                <div className="text-4xl lg:text-5xl font-mono text-white tracking-[2px] group-hover/item:translate-y-[-4px] transition-all">{item.val}</div>
                               </div>
                             ))}
                           </div>
                         </div>
 
                         {/* Hub Settings Module */}
-                        <div className="lg:col-span-5 bg-white/[0.02] border border-white/5 p-12 lg:p-16 rounded-[4.5rem] flex flex-col justify-between shadow-2xl">
-                           <div className="space-y-10 mb-16">
+                        <div className="lg:col-span-5 bg-white/[0.02] border border-white/5 p-12 lg:p-16 rounded-[4.5rem] flex flex-col justify-between shadow-2xl neural-card-glow transition-all">
+                           <div className="space-y-12 mb-16">
                              <div className="flex items-center justify-between">
-                                <div className="space-y-2">
-                                  <h4 className="text-[13px] font-black uppercase tracking-[10px] text-white">Neural Hub Config</h4>
+                                <div className="space-y-3">
+                                  <h4 className="text-[14px] font-black uppercase tracking-[10px] text-white">Neural Hub Config</h4>
                                   <p className="text-[9px] text-white/30 uppercase tracking-[5px] font-medium">Internal_Bridge_STABLE_v1.2</p>
                                 </div>
-                                <Settings className="w-6 h-6 text-white/20" />
+                                <div className="p-4 bg-white/5 rounded-2xl border border-white/5">
+                                  <Settings className="w-6 h-6 text-white/20" />
+                                </div>
                              </div>
                              
                              <div className="space-y-8">
-                               <div className="flex flex-col sm:flex-row items-center justify-between p-6 bg-black/40 rounded-3xl border border-white/5 gap-6">
-                                  <div className="flex items-center gap-5">
-                                     <div className="p-4 bg-indigo-500/10 rounded-2xl border border-indigo-500/20">
-                                        <Cloud className="w-5 h-5 text-indigo-400" />
+                               <div className="flex flex-col sm:flex-row items-center justify-between p-8 bg-black/40 rounded-3xl border border-white/5 gap-8">
+                                  <div className="flex items-center gap-6">
+                                     <div className="p-5 bg-indigo-500/10 rounded-2xl border border-indigo-500/20 shadow-[0_0_30px_rgba(99,102,241,0.1)]">
+                                        <Cloud className="w-6 h-6 text-indigo-400" />
                                      </div>
                                      <div className="space-y-1">
-                                        <div className="text-[11px] font-black uppercase tracking-[4px] text-white/80">Processing Priority</div>
-                                        <div className="text-[9px] text-white/20 tracking-widest uppercase">Energy Allocation</div>
+                                        <div className="text-[12px] font-black uppercase tracking-[4px] text-white/80">Priority</div>
+                                        <div className="text-[9px] text-white/20 tracking-widest uppercase font-mono">Energy_Allocation</div>
                                      </div>
                                   </div>
-                                  <div className="flex bg-black/60 rounded-full p-1.5 border border-white/5 shrink-0">
+                                  <div className="flex bg-black/60 rounded-full p-2 border border-white/5 shrink-0 shadow-inner">
                                     <button 
                                       onClick={() => setForceCloud(false)}
-                                      className={`px-6 py-2 rounded-full text-[9px] font-black uppercase tracking-widest transition-all ${
-                                        !forceCloud ? 'bg-indigo-500 text-white shadow-xl' : 'text-white/40 hover:text-white'
+                                      className={`px-8 py-3 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${
+                                        !forceCloud ? 'bg-indigo-500 text-white shadow-[0_10px_30px_rgba(99,102,241,0.3)]' : 'text-white/40 hover:text-white'
                                       }`}
                                     >
                                       LOCAL
                                     </button>
                                     <button 
                                       onClick={() => setForceCloud(true)}
-                                      className={`px-6 py-2 rounded-full text-[9px] font-black uppercase tracking-widest transition-all ${
-                                        forceCloud ? 'bg-indigo-500 text-white shadow-xl' : 'text-white/40 hover:text-white'
+                                      className={`px-8 py-3 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${
+                                        forceCloud ? 'bg-indigo-500 text-white shadow-[0_10px_30px_rgba(99,102,241,0.3)]' : 'text-white/40 hover:text-white'
                                       }`}
                                     >
                                       CLOUD
@@ -2299,26 +2381,26 @@ export default function App() {
                                   </div>
                                </div>
 
-                               <div className="p-8 bg-indigo-500/5 rounded-[3rem] border border-indigo-500/10 flex items-center justify-between group cursor-pointer hover:bg-indigo-500/10 transition-all">
-                                  <div className="flex items-center gap-6">
-                                     <div className="w-14 h-14 bg-black/40 rounded-2xl border border-indigo-500/20 flex items-center justify-center text-indigo-400">
-                                        <Shield className="w-6 h-6" />
+                               <div className="p-10 bg-indigo-500/5 rounded-[3.5rem] border border-indigo-500/10 flex items-center justify-between group cursor-pointer hover:bg-indigo-500/10 transition-all shadow-[inset_0_0_40px_rgba(99,102,241,0.02)]">
+                                  <div className="flex items-center gap-8">
+                                     <div className="w-16 h-16 bg-black/40 rounded-2xl border border-indigo-500/20 flex items-center justify-center text-indigo-400 group-hover:scale-110 transition-all">
+                                        <Shield className="w-8 h-8" />
                                      </div>
-                                     <div className="space-y-1">
-                                        <div className="text-[12px] font-black uppercase tracking-[5px] text-white">Quantum Encryption</div>
+                                     <div className="space-y-1 text-left">
+                                        <div className="text-[14px] font-black uppercase tracking-[5px] text-white">Quantum Encryption</div>
                                         <div className="text-[9px] text-indigo-400/60 font-mono tracking-widest">AES-GCM-256_ACTIVE</div>
                                      </div>
                                   </div>
-                                  <div className="w-2.5 h-2.5 rounded-full bg-indigo-500 group-hover:scale-150 transition-all shadow-[0_0_15px_rgba(99,102,241,1)]" />
+                                  <div className="w-3 h-3 rounded-full bg-indigo-500 group-hover:scale-150 transition-all shadow-[0_0_20px_rgba(99,102,241,1)]" />
                                </div>
                              </div>
                            </div>
 
                            <button 
                              onClick={() => auth.signOut()}
-                             className="w-full py-5 bg-red-500/5 border border-red-500/20 rounded-full text-[11px] font-black uppercase tracking-[12px] text-red-500/60 hover:bg-red-500 hover:text-white hover:border-red-500 transition-all shadow-2xl"
+                             className="w-full py-6 bg-red-500/5 border border-red-500/10 rounded-full text-[12px] font-black uppercase tracking-[15px] text-red-500/40 hover:bg-red-500 hover:text-white hover:border-red-500 transition-all hover:tracking-[18px] lg:mt-10"
                            >
-                             TERMINATE_MANIFESTATION
+                             TERMINATE_Manifestation
                            </button>
                         </div>
 
@@ -2326,28 +2408,39 @@ export default function App() {
 
                       <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-start w-full">
                         {/* Individual Provider Identity Page */}
-                        <div className="lg:col-span-12 bg-white/[0.03] p-10 lg:p-20 rounded-[5rem] border border-white/5 space-y-16 text-left relative overflow-hidden w-full shadow-2xl">
-                          <div className="absolute top-0 right-0 w-full h-full bg-gradient-to-br from-indigo-500/5 via-transparent to-transparent opacity-50" />
-                          {/* Decorative vertical line */}
-                          <div className="absolute top-0 left-1/4 w-px h-full bg-gradient-to-b from-white/10 via-transparent to-transparent hidden xl:block" />
-                          
-                          <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-white/10 pb-12 gap-10 relative z-10">
-                            <div className="space-y-2">
-                              <h4 id="neural-orchestrator-title" className="text-[16px] font-black uppercase tracking-[15px] text-white">Neural Orchestrator</h4>
-                              <p className="text-[10px] text-white/30 uppercase tracking-[6px] font-medium">Model Cluster Intelligence: {aiProvider.toUpperCase()}</p>
+                        <div className="lg:col-span-12 bg-gradient-to-br from-[#080815] to-[#010105] p-6 md:p-14 rounded-[2.5rem] md:rounded-[4.5rem] border border-white/5 space-y-10 md:space-y-16 text-left relative overflow-hidden w-full shadow-2xl neural-border">
+                          <div className="absolute top-0 right-0 w-full h-full bg-gradient-to-br from-indigo-500/5 via-transparent to-transparent opacity-30" />
+                          <div className="flex flex-col items-center border-b border-white/10 pb-10 gap-8 relative z-10 text-center">
+                            <div className="space-y-4 flex flex-col items-center w-full max-w-2xl mx-auto">
+                              <div className="flex flex-col sm:flex-row items-center gap-5 justify-center">
+                                <div className="w-12 h-12 rounded-2xl bg-indigo-500/20 flex items-center justify-center text-indigo-400 border border-indigo-500/30 shadow-[0_0_20px_rgba(99,102,241,0.2)]">
+                                  <Cpu className="w-6 h-6" />
+                                </div>
+                                <h4 id="neural-orchestrator-title" className="text-[18px] md:text-[22px] font-black uppercase tracking-[8px] md:tracking-[15px] text-white">Neural Orchestrator</h4>
+                              </div>
+                              <p className="text-[10px] text-white/30 uppercase tracking-[4px] md:tracking-[6px] font-medium italic opacity-60 leading-relaxed">
+                                Cognitive Manifestation Engine: {aiProvider.toUpperCase()} - Stabilizing Neural Paths for Environment Optimization
+                              </p>
                             </div>
-                            <div className="flex flex-wrap gap-4 items-center justify-center md:justify-end">
-                              <div className="flex gap-3 p-2 bg-black/60 rounded-full border border-white/10 backdrop-blur-xl">
+                            <div className="flex flex-wrap gap-3 items-center justify-center">
+                              <div className="flex gap-3 p-2 bg-black/60 rounded-full border border-white/5 backdrop-blur-3xl shadow-[0_0_50px_rgba(0,0,0,0.5)]">
                                 {(['google', 'openai', 'anthropic', 'custom', 'web-llm', 'mlc-mobile'] as const).map((p) => (
                                   <button
                                     key={p}
                                     onClick={() => setAiProvider(p)}
-                                    className={`w-7 h-7 rounded-full transition-all flex items-center justify-center relative ${aiProvider === p ? 'bg-indigo-500 ring-2 ring-indigo-500/20 scale-110 shadow-[0_0_20px_rgba(99,102,241,0.5)]' : 'bg-white/5 hover:bg-white/10'}`}
+                                    className={`w-10 h-10 rounded-full transition-all flex items-center justify-center relative group/provider ${aiProvider === p ? 'bg-indigo-500 ring-4 ring-indigo-500/20 scale-110 shadow-[0_0_20px_rgba(99,102,241,0.5)]' : 'bg-white/5 hover:bg-white/10 hover:scale-105'}`}
                                     title={p.toUpperCase()}
                                   >
+                                    <span className="text-[8px] font-black text-white group-hover/provider:opacity-100 opacity-0 absolute -bottom-6 transition-opacity tracking-widest">{p.substring(0, 3)}</span>
                                     {providerHealth[p]?.status === 'online' && (
-                                       <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-black" />
+                                       <div className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-green-500 rounded-full border-2 border-[#050510] shadow-[0_0_10px_rgba(34,197,94,0.5)]" />
                                     )}
+                                    {p === 'google' && <Globe className="w-4 h-4 text-white" />}
+                                    {p === 'openai' && <Zap className="w-4 h-4 text-white" />}
+                                    {p === 'anthropic' && <Sparkles className="w-4 h-4 text-white" />}
+                                    {p === 'custom' && <Code className="w-4 h-4 text-white" />}
+                                    {p === 'web-llm' && <Cpu className="w-4 h-4 text-white" />}
+                                    {p === 'mlc-mobile' && <Monitor className="w-4 h-4 text-white" />}
                                   </button>
                                 ))}
                               </div>

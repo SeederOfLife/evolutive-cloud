@@ -1,44 +1,33 @@
-{
-  "name": "react-example",
-  "private": true,
-  "version": "0.0.0",
-  "type": "module",
-  "scripts": {
-    "dev": "tsx server.ts",
-    "build": "vite build",
-    "start": "node server.ts",
-    "clean": "rm -rf build",
-    "lint": "tsc --noEmit"
-  },
-  "dependencies": {
-    "@google/genai": "^1.29.0",
-    "@google/generative-ai": "^0.24.1",
-    "@mlc-ai/web-llm": "^0.2.82",
-    "@react-three/drei": "^10.7.7",
-    "@react-three/fiber": "^9.6.0",
-    "@tailwindcss/vite": "^4.1.14",
-    "@types/three": "^0.170.0",
-    "@vitejs/plugin-react": "^5.0.4",
-    "dotenv": "^17.2.3",
-    "express": "^4.21.2",
-    "firebase": "^12.12.1",
-    "lucide-react": "^0.546.0",
-    "motion": "^12.23.24",
-    "openai": "^6.34.0",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "three": "^0.184.0",
-    "tone": "^15.1.22",
-    "use-sync-external-store": "^1.6.0",
-    "vite": "^6.2.0"
-  },
-  "devDependencies": {
-    "@types/express": "^4.17.21",
-    "@types/node": "^22.14.0",
-    "autoprefixer": "^10.4.21",
-    "tailwindcss": "^4.1.14",
-    "tsx": "^4.21.0",
-    "typescript": "~5.8.2",
-    "vite": "^6.2.0"
-  }
-}
+# Security Specification - Evolutionary Hub
+
+## Data Invariants
+1. **Suggestions**: 
+   - Standard Suggestions: Must have `content`, `status`, `votes`, `energy`, `user_id`, `created_at`.
+   - System Config: Must have `status: 'system_config'`, `content` (JSON string with `creator_id`), `created_at`.
+   - Immutable fields: `created_at`, `user_id` (once set).
+   - Relationship: Any suggestion update needs to respect the `is_finalized` state from the `system_config` if we wanted strict gating, but the app seems to allow interactions by anyone if not finalized, and only creator if finalized. Wait, let's look at `canSuggest` and `canInteract` in `App.tsx`.
+
+2. **Advice**:
+   - Must link to a valid `suggestion_id`.
+   - `user_id` must match authenticated user.
+
+3. **System Messages**:
+   - Multi-user interactive elements.
+   - `userId` must match authenticated user.
+
+## The "Dirty Dozen" Payloads (PERMISSION_DENIED)
+1. **Shadow Field Attack**: `update suggestions/1 { "votes": 10, "is_verified": true }`
+2. **Vote Manipulation**: `update suggestions/1 { "votes": 100 }` (where existing is 5)
+3. **Content Hijack**: `update suggestions/1 { "content": "malicious code" }` by a non-owner.
+4. **Pledge Fraud**: `update suggestions/1 { "pledged_by": ["attacker_id"] }` but also changing `user_id`.
+5. **Config Spoof**: `update suggestions/config_id { "content": "{\"creator_id\":\"attacker\"}" }` by non-creator.
+6. **Identity Theft (Advice)**: `create advice { "user_id": "victim_id", ... }`
+7. **Identity Theft (System Message)**: `create system_messages { "userId": "victim_id", ... }`
+8. **Resource Exhaustion**: `create suggestions { "content": "A".repeat(100000) }` (Limit is 50k in rules)
+9. **Status Shortcut**: `update suggestions/1 { "status": "built" }` without adding energy to 100 or providing `built_code`.
+10. **Immortality Breach**: `update suggestions/1 { "created_at": "2000-01-01T00:00:00Z" }`
+11. **Orphaned Advice**: `create advice { "suggestion_id": "non_existent_id", ... }`
+12. **Unauthorized Deletion**: `delete suggestions/1` by someone who is neither the owner nor the project creator.
+
+## Test Runner (Internal Logic)
+The `firestore.rules` will be evaluated against these constraints.

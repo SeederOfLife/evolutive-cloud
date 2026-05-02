@@ -1,8 +1,116 @@
-node_modules/
-build/
-dist/
-coverage/
-.DS_Store
-*.log
-.env*
-!.env.example
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- Suggestion Rules ---
+    match /suggestions/{suggestionId} {
+      allow read: if true; 
+
+      allow create: if isSignedIn() && 
+        isValidSuggestion(incoming()) && 
+        (
+          // Standard creation
+          (incoming().status == 'pending' && (!('user_id' in incoming()) || incoming().user_id == request.auth.uid)) ||
+          // Config creation (only if it doesn't exist yet, but rules can't easily check 'only if none exist' without collection group or similar, 
+          // but we can allow any signed in user to create the first one)
+          (incoming().status == 'system_config')
+        );
+
+      allow update: if isSignedIn() && (
+        // Action: Owner/Creator Update
+        (
+          (isOwner(existing().get('user_id', '')) || isProjectCreator()) && 
+          isValidSuggestion(incoming()) && 
+          incoming().diff(existing()).affectedKeys().hasOnly(['content', 'status', 'votes', 'energy', 'built_code', 'pledged_by', 'history', 'chat_thread', 'is_deleted'])
+        ) ||
+        // Action: Vote
+        (
+          incoming().diff(existing()).affectedKeys().hasOnly(['votes']) && 
+          incoming().votes == (existing().get('votes', 0) + 1)
+        ) ||
+        // Action: Pledge / Build
+        (
+          incoming().diff(existing()).affectedKeys().hasOnly(['pledged_by', 'energy', 'status', 'built_code']) &&
+          incoming().get('pledged_by', []).size() >= existing().get('pledged_by', []).size() &&
+          (incoming().energy >= existing().get('energy', 0))
+        )
+      );
+
+      allow delete: if isSignedIn() && (isOwner(existing().get('user_id', '')) || isProjectCreator());
+    }
+
+    function isValidSuggestion(data) {
+      return data.get('content', '') is string && data.get('content', '').size() <= 100000 &&
+             data.get('status', '') is string && data.get('status', '').size() <= 50 &&
+             (!('user_id' in data) || (data.user_id is string && data.user_id.size() <= 128));
+    }
+
+    // Helper to check if user is the project creator via the config document
+    // We assume the project creator's ID is stored in a document where status == 'system_config'
+    // Since we can't easily find a doc by field in a rule without knowing its ID, 
+    // and if we don't have its ID, we can't 'get' it.
+    // However, the app can be modified to use a fixed ID for the config, OR we can rely on the fact 
+    // that the app passes creatorId around.
+    // For now, let's allow the owner of the first system_config doc to be "the" creator if we use user_id there.
+    function isProjectCreator() {
+      // This is a placeholder logic. In production, you'd likely check a specific 'admins' collection.
+      // Or if the suggestion has no user_id (system config), we might store it in a way we can check.
+      return false; // Will be optimized if user_id is added to config doc
+    }
+
+    // --- User Profile Rules ---
+    match /user_profiles/{userId} {
+      allow read: if isOwner(userId);
+      allow write: if isOwner(userId) && isValidUserProfile(incoming());
+    }
+
+    function isValidUserProfile(data) {
+      return data.get('personal_api_key', '') is string && data.get('personal_api_key', '').size() <= 5000;
+    }
+
+    // --- Advice Rules ---
+    match /advice/{adviceId} {
+      allow read: if true;
+      allow create: if isSignedIn() && incoming().user_id == request.auth.uid && 
+                       isValidAdvice(incoming()) &&
+                       exists(/databases/$(database)/documents/suggestions/$(incoming().suggestion_id));
+      allow delete: if isOwner(existing().user_id);
+    }
+
+    function isValidAdvice(data) {
+      return data.suggestion_id is string && data.content is string && data.content.size() <= 5000;
+    }
+
+    // --- System Messages ---
+    match /system_messages/{messageId} {
+      allow read: if true;
+      allow create: if isSignedIn() && incoming().userId == request.auth.uid && 
+                       incoming().text is string && incoming().text.size() <= 500;
+      allow delete: if isOwner(existing().userId);
+    }
+  }
+}
