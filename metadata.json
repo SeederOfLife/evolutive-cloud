@@ -1,13 +1,81 @@
 {
-  "name": "Evolution Engine: Grand Manifestation",
-  "description": "A self-evolving neural hub where ideas are manifested through recursive intelligence and collaborative architectural growth.",
-  "requestFramePermissions": [
-    "camera",
-    "microphone"
-  ],
-  "majorCapabilities": [
-    "AI Code Generation",
-    "Real-time Collaboration",
-    "3D Spatial Interface"
-  ]
+  "entities": {
+    "Suggestion": {
+      "title": "Module Suggestion",
+      "description": "A generated application or module suggestion.",
+      "type": "object",
+      "properties": {
+        "content": { "type": "string" },
+        "votes": { "type": "number" },
+        "energy": { "type": "number" },
+        "status": { "type": "string" },
+        "user_id": { "type": "string" },
+        "built_code": { "type": "string" },
+        "created_at": { "type": "string", "format": "date-time" },
+        "pledged_by": { "type": "array", "items": { "type": "string" } },
+        "parent_id": { "type": "string" },
+        "version": { "type": "number" },
+        "is_deleted": { "type": "boolean" },
+        "history": { "type": "array" },
+        "chat_thread": { "type": "array" }
+      },
+      "required": ["content", "status"]
+    },
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "User account information and preferences.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "full_name": { "type": "string" },
+        "avatar_url": { "type": "string" },
+        "personal_api_key": { "type": "string" }
+      },
+      "required": ["id"]
+    },
+    "Advice": {
+      "title": "Advice",
+      "description": "Collaborative feedback on a suggestion.",
+      "type": "object",
+      "properties": {
+        "suggestion_id": { "type": "string" },
+        "user_id": { "type": "string" },
+        "user_email": { "type": "string" },
+        "content": { "type": "string" },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["suggestion_id", "user_id", "content"]
+    },
+    "SystemMessage": {
+      "title": "System Message",
+      "description": "Real-time messages in the nebula workspace.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "text": { "type": "string" },
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["userId", "text"]
+    }
+  },
+  "firestore": {
+    "suggestions": {
+      "schema": "Suggestion",
+      "description": "Collection of all generated modules and evolutionary paths."
+    },
+    "user_profiles": {
+      "schema": "UserProfile",
+      "description": "Private and public user metadata."
+    },
+    "advice": {
+      "schema": "Advice",
+      "description": "Collaborative feedback threads."
+    },
+    "system_messages": {
+      "schema": "SystemMessage",
+      "description": "Transient interactive elements in the virtual space."
+    }
+  }
 }
