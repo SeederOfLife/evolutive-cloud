@@ -150,17 +150,17 @@ export function ModulePlayer({
       <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <script crossorigin="anonymous" src="https://unpkg.com/react@18.2.0/umd/react.production.min.js"></script>
-        <script crossorigin="anonymous" src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+        <script crossorigin="anonymous" src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+        <script crossorigin="anonymous" src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
         <script crossorigin="anonymous" src="https://unpkg.com/@babel/standalone@7.23.4/babel.min.js"></script>
         <script src="https://cdn.tailwindcss.com"></script>
         <script crossorigin="anonymous" src="https://unpkg.com/lucide-react@0.453.0/dist/umd/lucide-react.min.js"></script>
         <script crossorigin="anonymous" src="https://unpkg.com/framer-motion@10.16.4/dist/framer-motion.js"></script>
         <script crossorigin="anonymous" src="https://unpkg.com/recharts@2.10.3/umd/Recharts.js"></script>
-        <script crossorigin="anonymous" src="https://unpkg.com/d3@7"></script>
-        <script crossorigin="anonymous" src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.170.0/three.min.js"></script>
-        <script crossorigin="anonymous" src="https://unpkg.com/@react-three/fiber@8.13.0/dist/react-three-fiber.umd.js"></script>
-        <script crossorigin="anonymous" src="https://unpkg.com/@react-three/drei@9.78.1/dist/index.umd.js"></script>
+        <script crossorigin="anonymous" src="https://unpkg.com/d3@7.8.5/dist/d3.min.js"></script>
+        <script crossorigin="anonymous" src="https://unpkg.com/three@0.170.0/build/three.min.js"></script>
+        <script crossorigin="anonymous" src="https://unpkg.com/@react-three/fiber@8.13.1/dist/react-three-fiber.umd.js"></script>
+        <script crossorigin="anonymous" src="https://unpkg.com/@react-three/drei@9.88.2/dist/index.umd.js"></script>
         <script crossorigin="anonymous" src="https://unpkg.com/react-markdown@8.0.7/react-markdown.min.js"></script>
         <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
         <script crossorigin="anonymous" src="https://unpkg.com/clsx@2.0.0/dist/clsx.min.js"></script>
@@ -200,6 +200,9 @@ export function ModulePlayer({
         <div id="root"></div>
         <script>
           (async function() {
+            // Mock process for libraries that expect it
+            window.process = { env: { NODE_ENV: 'production' } };
+            
             // Save initial window keys to filter later
             const initialKeys = new Set(Object.keys(window));
             
@@ -232,7 +235,7 @@ export function ModulePlayer({
             try {
               // Poll for dependencies with a timeout
               const start = Date.now();
-              while ((!window.Babel || !window.React || !window.ReactDOM) && Date.now() - start < 5000) {
+              while ((!window.Babel || !window.React || !window.ReactDOM) && Date.now() - start < 10000) {
                 await new Promise(r => setTimeout(r, 100));
               }
 
@@ -240,19 +243,18 @@ export function ModulePlayer({
                 throw new Error("Neural Bridge Timeout: Essential libraries failed to materialize.");
               }
 
-              const { useState, useEffect, useMemo, useRef, useCallback, createContext, useContext, useReducer, useLayoutEffect } = window.React;
-              const LucideReact = window.LucideReact || {};
-              const React = window.React;
-              const ReactDOM = window.ReactDOM;
-              const THREE = window.THREE;
-              const Motion = window.Motion || window.framerMotion || {};
-              const Fiber = window.ReactThreeFiber || {};
-              const Drei = window.Drei || {};
-              const Markdown = window.ReactMarkdown;
-              const { clsx } = window;
-              const { twMerge } = window.tailwindMerge || {};
-              const Tone = window.Tone || {};
-              const OpenAI = window.OpenAI || {};
+              var { useState, useEffect, useMemo, useRef, useCallback, createContext, useContext, useReducer, useLayoutEffect } = window.React;
+              var React = window.React;
+              var ReactDOM = window.ReactDOM;
+              var THREE = window.THREE;
+              var Motion = window.motion || window.Motion || window.framerMotion || {};
+              var Fiber = window.ReactThreeFiber || {};
+              var Drei = window.Drei || {};
+              var Markdown = window.ReactMarkdown;
+              var { clsx } = window;
+              var { twMerge } = (window.tailwindMerge || {});
+              var Tone = window.Tone || {};
+              var OpenAI = window.OpenAI || {};
               
               // Handle potential CommonJS output from Babel
               window.exports = window.exports || {};
@@ -263,8 +265,8 @@ export function ModulePlayer({
                   'react-dom': window.ReactDOM,
                   'react-dom/client': window.ReactDOM,
                   'lucide-react': window.LucideReact,
-                  'framer-motion': window.Motion,
-                  'motion/react': window.Motion,
+                  'framer-motion': Motion,
+                  'motion/react': Motion,
                   'recharts': window.Recharts,
                   'd3': window.d3,
                   'three': window.THREE,
@@ -281,6 +283,11 @@ export function ModulePlayer({
                 return map[name] || window[name] || {};
               };
 
+              // Map Framer Motion correctly
+              window.motion = Motion.motion || Motion;
+              window.AnimatePresence = Motion.AnimatePresence;
+              window.LayoutGroup = Motion.LayoutGroup;
+
               // Expose popular libs to global scope for AI logic
               window.React = React;
               window.ReactDOM = ReactDOM;
@@ -294,17 +301,10 @@ export function ModulePlayer({
               window.Tone = Tone;
               window.OpenAI = OpenAI;
               
-              // Standard hooks
-              window.useState = useState;
-              window.useEffect = useEffect;
-              window.useMemo = useMemo;
-              window.useRef = useRef;
-              window.useCallback = useCallback;
-              window.createContext = createContext;
-              window.useContext = useContext;
-              window.useReducer = useReducer;
-              window.useLayoutEffect = useLayoutEffect;
-              
+              var LucideReact = window.LucideReact || {};
+              window.lucide = LucideReact;
+              window.Lucide = LucideReact;
+
               // Map all Drei components
               Object.keys(Drei).forEach(key => {
                 if (/^[A-Z]/.test(key)) window[key] = Drei[key];
@@ -317,30 +317,29 @@ export function ModulePlayer({
                 if (!window[key]) window[key] = Fiber[key];
               });
 
-              // Map Framer Motion correctly
-              window.motion = Motion.motion || Motion;
-              window.AnimatePresence = Motion.AnimatePresence;
-              window.LayoutGroup = Motion.LayoutGroup;
-              // Ensure window.Motion has the shape the AI expects
-              if (!window.Motion) window.Motion = { motion: window.motion, AnimatePresence: window.AnimatePresence, LayoutGroup: window.LayoutGroup };
-
               // Expose Recharts components globally
-              const Recharts = window.Recharts || {};
+              var Recharts = window.Recharts || {};
               Object.keys(Recharts).forEach(key => {
                 window[key] = Recharts[key];
               });
 
-              // Expose Lucide icons globally and via the alias the AI expects
-              const LucideReact = window.LucideReact || {};
-              window.lucide = LucideReact;
-              window.Lucide = LucideReact;
+              // Expose Lucide icons globally
               Object.keys(LucideReact).forEach(key => { 
                 if (typeof LucideReact[key] === 'function' || typeof LucideReact[key] === 'object') {
                   if (/^[A-Z]/.test(key)) window[key] = LucideReact[key]; 
-                  // Also expose lowercase version if AI uses it (less common but safe)
-                  if (!window[key.toLowerCase()]) window[key.toLowerCase()] = LucideReact[key];
                 }
               });
+
+              // Expose hooks globally
+              window.useState = useState;
+              window.useEffect = useEffect;
+              window.useMemo = useMemo;
+              window.useRef = useRef;
+              window.useCallback = useCallback;
+              window.createContext = createContext;
+              window.useContext = useContext;
+              window.useReducer = useReducer;
+              window.useLayoutEffect = useLayoutEffect;
 
               // Inject common hooks into local scope of the script if possible
               const commonLocals = {

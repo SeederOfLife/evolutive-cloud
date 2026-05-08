@@ -1174,8 +1174,23 @@ export default function App() {
         
         const prompt = `Create a functional, professional React component titled "App" for this idea: ${s.content}. 
         The application is ${typeContext}.
-        Use Tailwind CSS. Return ONLY the code, no markdown wrappers. Include animations using framer-motion (window.Motion). 
-        Assume you have access to: window.React, window.Motion, window.Recharts, window.d3, window.confetti, window.lucide (React icons).`;
+        
+        TECHNICAL REQUIREMENTS:
+        - Use Tailwind CSS for all styling (modern, high-contrast, clean).
+        - Use Framer Motion for entrance animations and state transitions (import from 'framer-motion').
+        - Use Lucide icons (import from 'lucide-react').
+        - Avoid external assets unless they are reliable CDNs. 
+        - The code must be self-contained in one file.
+        - Return ONLY the code, no markdown code blocks.
+        
+        AVAILABLE LIBRARIES (Globally mapped, no need for complex setup):
+        - React (useState, useEffect, etc.)
+        - Framer Motion (motion, AnimatePresence)
+        - Lucide React (standard icons)
+        - Recharts / D3 (for data viz if needed)
+        - Three.js / React-Three-Fiber / Drei (for 3D if needed)
+        
+        Design Style: Futuristic, deep-space aesthetic, glassmorphism, high density, neural-network themed.`;
         
         const result = await callUnifiedAI(prompt);
         builtCode = result.replace(/```jsx|```tsx|```javascript|```/g, '').trim();
