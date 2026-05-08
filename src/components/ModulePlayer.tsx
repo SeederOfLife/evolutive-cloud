@@ -150,15 +150,15 @@ export function ModulePlayer({
       <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js"></script>
-        <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
-        <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.24.0/babel.min.js"></script>
+        <script crossorigin="anonymous" src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+        <script crossorigin="anonymous" src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+        <script crossorigin="anonymous" src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.12/babel.min.js"></script>
         <script src="https://cdn.tailwindcss.com"></script>
         <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/lucide-react@0.453.0/dist/umd/lucide-react.min.js"></script>
         <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/framer-motion@10.16.4/dist/framer-motion.js"></script>
         <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/recharts@2.12.7/umd/Recharts.js"></script>
         <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
-        <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.min.js"></script>
+        <script crossorigin="anonymous" src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r169/three.min.js"></script>
         <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/react-markdown@8.0.7/react-markdown.min.js"></script>
         <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
         <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/clsx@2.1.1/dist/clsx.min.js"></script>
@@ -231,12 +231,12 @@ export function ModulePlayer({
             try {
               // Poll for dependencies with a timeout
               const start = Date.now();
-              while ((!window.Babel || !window.React || !window.ReactDOM) && Date.now() - start < 10000) {
-                await new Promise(r => setTimeout(r, 100));
+              while ((!window.Babel || !window.React || !window.ReactDOM || !window.LucideReact) && Date.now() - start < 15000) {
+                await new Promise(r => setTimeout(r, 200));
               }
 
               if (!window.Babel || !window.React || !window.ReactDOM) {
-                throw new Error("Neural Bridge Timeout: Essential libraries failed to materialize.");
+                throw new Error("Neural Bridge Timeout: Essential core modules (React/Babel) failed to materialize.");
               }
 
               var { useState, useEffect, useMemo, useRef, useCallback, createContext, useContext, useReducer, useLayoutEffect } = window.React;
@@ -296,7 +296,7 @@ export function ModulePlayer({
               // Expose Recharts components globally
               var Recharts = window.Recharts || {};
               Object.keys(Recharts).forEach(key => {
-                window[key] = Recharts[key];
+                if (/^[A-Z]/.test(key)) window[key] = Recharts[key];
               });
 
               // Expose Lucide icons globally
@@ -423,48 +423,15 @@ export function ModulePlayer({
       exit={{ opacity: 0 }}
       className="fixed inset-0 z-50 flex flex-col bg-[#050508] text-white overflow-hidden font-sans"
     >
-      {/* --- TOP BAR --- */}
-      <div className="h-12 border-b border-white/5 flex items-center justify-between px-4 sm:px-6 bg-black/40 backdrop-blur-3xl shrink-0 z-50">
-        <div className="flex items-center gap-3">
+      <div className="flex-1 flex overflow-hidden">
+        {/* --- ACTIVITY BAR (SIDE) --- */}
+        <div className="hidden md:flex w-16 border-r border-white/5 bg-[#020205] flex-col items-center py-6 gap-8 shrink-0 relative z-50">
           <button 
             onClick={onClose}
-            className="w-10 h-10 flex items-center justify-center rounded-xl bg-white/5 border border-white/10 text-white/40 hover:text-white hover:bg-white/10 transition-all"
-            title="Close"
+            className="w-10 h-10 flex items-center justify-center rounded-xl bg-white/5 border border-white/10 text-white/40 hover:text-white transition-all mb-4"
           >
             <X className="w-5 h-5" />
           </button>
-          
-          <div className="flex items-center gap-1 bg-black/40 p-0.5 rounded-lg border border-white/5">
-            <button 
-              onClick={() => setShowPreview(true)}
-              className={`px-4 py-1.5 rounded-md text-[9px] font-black uppercase tracking-widest transition-all ${showPreview ? 'bg-indigo-500 text-white' : 'text-white/30 hover:text-white'}`}
-            >
-              Build
-            </button>
-            <button 
-              onClick={() => setShowPreview(false)}
-              className={`px-4 py-1.5 rounded-md text-[9px] font-black uppercase tracking-widest transition-all ${!showPreview ? 'bg-indigo-500 text-white' : 'text-white/30 hover:text-white'}`}
-            >
-              Source
-            </button>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <button 
-            onClick={handleSave}
-            disabled={isSaving || code === suggestion.built_code}
-            className={`px-6 py-2 rounded-xl text-[9px] font-black uppercase tracking-[2px] transition-all flex items-center gap-2 shadow-lg ${code === suggestion.built_code ? 'bg-white/5 text-white/10' : 'bg-white text-black hover:bg-indigo-500 hover:text-white'}`}
-          >
-            {isSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Database className="w-3 h-3" />}
-            <span>COMMIT</span>
-          </button>
-        </div>
-      </div>
-
-      <div className="flex-1 flex overflow-hidden">
-        {/* --- ACTIVITY BAR (SIDE) --- */}
-        <div className="hidden md:flex w-16 border-r border-white/5 bg-[#020205] flex-col items-center py-6 gap-8 shrink-0">
           {[
             { id: 'files', icon: FolderTree, label: 'File' },
             { id: 'chat', icon: MessageCircle, label: 'AI' },
@@ -483,11 +450,18 @@ export function ModulePlayer({
               {activeSideTab === btn.id && (
                 <div className="absolute left-0 w-1 h-4 bg-indigo-500 rounded-r-full" />
               )}
-              <div className="absolute left-16 px-3 py-1.5 bg-indigo-600 text-white text-[9px] font-black uppercase tracking-widest rounded-md opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50">
-                {btn.label}
-              </div>
             </button>
           ))}
+          
+          <div className="mt-auto flex flex-col gap-4">
+             <button 
+               onClick={handleSave}
+               disabled={isSaving || code === suggestion.built_code}
+               className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all ${code === suggestion.built_code ? 'bg-white/5 text-white/10' : 'bg-white text-black hover:bg-indigo-500 hover:text-white'}`}
+             >
+               {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Database className="w-4 h-4" />}
+             </button>
+          </div>
         </div>
 
         {/* --- SIDEBAR CONTENT (EXPLORER / CHAT) --- */}
