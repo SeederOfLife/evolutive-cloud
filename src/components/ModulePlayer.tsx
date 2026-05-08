@@ -150,23 +150,19 @@ export function ModulePlayer({
       <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <script crossorigin="anonymous" src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
-        <script crossorigin="anonymous" src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
-        <script crossorigin="anonymous" src="https://unpkg.com/@babel/standalone@7.23.4/babel.min.js"></script>
+        <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js"></script>
+        <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+        <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.24.0/babel.min.js"></script>
         <script src="https://cdn.tailwindcss.com"></script>
-        <script crossorigin="anonymous" src="https://unpkg.com/lucide-react@0.453.0/dist/umd/lucide-react.min.js"></script>
-        <script crossorigin="anonymous" src="https://unpkg.com/framer-motion@10.16.4/dist/framer-motion.js"></script>
-        <script crossorigin="anonymous" src="https://unpkg.com/recharts@2.10.3/umd/Recharts.js"></script>
-        <script crossorigin="anonymous" src="https://unpkg.com/d3@7.8.5/dist/d3.min.js"></script>
-        <script crossorigin="anonymous" src="https://unpkg.com/three@0.170.0/build/three.min.js"></script>
-        <script crossorigin="anonymous" src="https://unpkg.com/@react-three/fiber@8.13.1/dist/react-three-fiber.umd.js"></script>
-        <script crossorigin="anonymous" src="https://unpkg.com/@react-three/drei@9.88.2/dist/index.umd.js"></script>
-        <script crossorigin="anonymous" src="https://unpkg.com/react-markdown@8.0.7/react-markdown.min.js"></script>
-        <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
-        <script crossorigin="anonymous" src="https://unpkg.com/clsx@2.0.0/dist/clsx.min.js"></script>
-        <script crossorigin="anonymous" src="https://unpkg.com/tailwind-merge@1.14.0/dist/bundle.min.js"></script>
-        <script crossorigin="anonymous" src="https://unpkg.com/tone@14.7.77/build/Tone.js"></script>
-        <script crossorigin="anonymous" src="https://unpkg.com/openai@4.0.0/dist/index.browser.js"></script>
+        <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/lucide-react@0.453.0/dist/umd/lucide-react.min.js"></script>
+        <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/framer-motion@10.16.4/dist/framer-motion.js"></script>
+        <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/recharts@2.12.7/umd/Recharts.js"></script>
+        <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+        <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.min.js"></script>
+        <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/react-markdown@8.0.7/react-markdown.min.js"></script>
+        <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+        <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/clsx@2.1.1/dist/clsx.min.js"></script>
+        <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/tone@14.7.77/build/Tone.js"></script>
         
         <style>
           body { 
@@ -248,13 +244,10 @@ export function ModulePlayer({
               var ReactDOM = window.ReactDOM;
               var THREE = window.THREE;
               var Motion = window.motion || window.Motion || window.framerMotion || {};
-              var Fiber = window.ReactThreeFiber || {};
-              var Drei = window.Drei || {};
               var Markdown = window.ReactMarkdown;
               var { clsx } = window;
               var { twMerge } = (window.tailwindMerge || {});
               var Tone = window.Tone || {};
-              var OpenAI = window.OpenAI || {};
               
               // Handle potential CommonJS output from Babel
               window.exports = window.exports || {};
@@ -270,14 +263,11 @@ export function ModulePlayer({
                   'recharts': window.Recharts,
                   'd3': window.d3,
                   'three': window.THREE,
-                  '@react-three/fiber': window.ReactThreeFiber,
-                  '@react-three/drei': window.Drei,
                   'react-markdown': window.ReactMarkdown,
                   'canvas-confetti': window.confetti,
                   'clsx': window.clsx,
                   'tailwind-merge': window.tailwindMerge,
                   'tone': window.Tone,
-                  'openai': window.OpenAI,
                   '@google/generative-ai': window.GoogleGenAI
                 };
                 return map[name] || window[name] || {};
@@ -292,30 +282,16 @@ export function ModulePlayer({
               window.React = React;
               window.ReactDOM = ReactDOM;
               window.THREE = THREE;
-              window.Canvas = Fiber.Canvas;
               window.Markdown = Markdown;
               window.ReactMarkdown = Markdown; // Alias
               window.clsx = clsx;
               window.twMerge = twMerge;
               window.cn = (...args) => twMerge ? twMerge(clsx(...args)) : clsx(...args);
               window.Tone = Tone;
-              window.OpenAI = OpenAI;
               
               var LucideReact = window.LucideReact || {};
               window.lucide = LucideReact;
               window.Lucide = LucideReact;
-
-              // Map all Drei components
-              Object.keys(Drei).forEach(key => {
-                if (/^[A-Z]/.test(key)) window[key] = Drei[key];
-              });
-              
-              if (Drei.OrbitControls) window.OrbitControls = Drei.OrbitControls;
-
-              // Map Fiber hooks/components
-              Object.keys(Fiber).forEach(key => {
-                if (!window[key]) window[key] = Fiber[key];
-              });
 
               // Expose Recharts components globally
               var Recharts = window.Recharts || {};
