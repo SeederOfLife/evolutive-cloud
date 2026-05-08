@@ -289,9 +289,9 @@ export function ModulePlayer({
               window.cn = (...args) => twMerge ? twMerge(clsx(...args)) : clsx(...args);
               window.Tone = Tone;
               
-              var LucideReact = window.LucideReact || {};
-              window.lucide = LucideReact;
-              window.Lucide = LucideReact;
+              var __internal_Lucide = window.LucideReact || {};
+              window.lucide = __internal_Lucide;
+              window.Lucide = __internal_Lucide;
 
               // Expose Recharts components globally
               var Recharts = window.Recharts || {};
@@ -300,9 +300,9 @@ export function ModulePlayer({
               });
 
               // Expose Lucide icons globally
-              Object.keys(LucideReact).forEach(key => { 
-                if (typeof LucideReact[key] === 'function' || typeof LucideReact[key] === 'object') {
-                  if (/^[A-Z]/.test(key)) window[key] = LucideReact[key]; 
+              Object.keys(__internal_Lucide).forEach(key => { 
+                if (typeof __internal_Lucide[key] === 'function' || typeof __internal_Lucide[key] === 'object') {
+                  if (/^[A-Z]/.test(key)) window[key] = __internal_Lucide[key]; 
                 }
               });
 
@@ -321,7 +321,7 @@ export function ModulePlayer({
               const commonLocals = {
                 React, ReactDOM, useState, useEffect, useMemo, useRef, useCallback, createContext, useContext, useReducer, useLayoutEffect,
                 motion: window.motion, AnimatePresence: window.AnimatePresence, LayoutGroup: window.LayoutGroup,
-                ...LucideReact, ...Recharts
+                ...__internal_Lucide, ...Recharts
               };
 
               const scriptBody = __SCRIPT_BODY_PLACEHOLDER__;
@@ -333,9 +333,13 @@ export function ModulePlayer({
               try {
                 console.log("Transpiling logic...");
                 // Wrap in scope to provide local variables for common imports
-                const keys = Object.keys(commonLocals).filter(k => /^[a-zA-Z0-9_$]+$/.test(k) && !['default', 'module', 'exports'].includes(k));
-                const scopePrefex = 'const { ' + keys.join(', ') + ' } = window;\n';
-                const transpiled = Babel.transform(scopePrefex + scriptBody, { 
+                // Filter out problematic keys that might cause re-declaration errors
+                const keys = Object.keys(commonLocals).filter(k => 
+                  /^[a-zA-Z0-9_$]+$/.test(k) && 
+                  !['default', 'module', 'exports', 'LucideReact', 'Recharts'].includes(k)
+                );
+                const scopePrefix = 'var { ' + keys.join(', ') + ' } = window;\n';
+                const transpiled = Babel.transform(scopePrefix + scriptBody, { 
                   presets: ['env', 'react', 'typescript'],
                   filename: 'built-app.tsx'
                 }).code;
@@ -378,8 +382,8 @@ export function ModulePlayer({
                   !initialKeys.has(k) &&
                   /^[A-Z]/.test(k) && 
                   typeof window[k] === 'function' && 
-                  !['React', 'ReactDOM', 'Recharts', 'Motion', 'LucideReact', 'Babel', 'THREE', 'Icon', 'AppComp', 'Lucide', 'Drei', 'Fiber'].includes(k) &&
-                  !LucideReact[k] &&
+                  !['React', 'ReactDOM', 'Recharts', 'Motion', 'LucideReact', 'Babel', 'THREE', 'Icon', 'AppComp', 'Lucide', 'Drei', 'Fiber', '__internal_Lucide'].includes(k) &&
+                  !__internal_Lucide[k] &&
                   !k.startsWith('_')
                 );
                 if (detected) {
