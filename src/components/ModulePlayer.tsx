@@ -424,80 +424,40 @@ export function ModulePlayer({
       className="fixed inset-0 z-50 flex flex-col bg-[#050508] text-white overflow-hidden font-sans"
     >
       {/* --- TOP BAR --- */}
-      <div className="h-16 border-b border-white/5 flex items-center justify-between px-4 sm:px-8 bg-black/40 backdrop-blur-3xl shrink-0 z-50">
-        <div className="flex items-center gap-4 sm:gap-8 flex-1">
-          <div className="flex items-center gap-4">
-            <button 
-              onClick={onClose}
-              className="md:hidden w-10 h-10 flex items-center justify-center rounded-xl bg-white/5 border border-white/10 text-white/60 active:scale-90 transition-all"
-              title="Close"
-            >
-              <X className="w-5 h-5" />
-            </button>
-            <div className="flex items-center gap-4">
-              <div className="w-10 h-10 rounded-xl bg-indigo-500/20 flex items-center justify-center border border-indigo-500/30 shadow-[0_0_20px_rgba(99,102,241,0.2)]">
-                <Sparkles className="w-5 h-5 text-indigo-400" />
-              </div>
-              <div className="hidden sm:block text-left">
-                <h1 className="text-[12px] font-black uppercase tracking-[5px] leading-none mb-1 text-white/90">Neural Manifestation</h1>
-                <p className="text-[9px] text-indigo-400/60 uppercase tracking-[3px] font-mono">Revision Layer: {suggestion.id.substring(0, 8)}</p>
-              </div>
-            </div>
-          </div>
+      <div className="h-12 border-b border-white/5 flex items-center justify-between px-4 sm:px-6 bg-black/40 backdrop-blur-3xl shrink-0 z-50">
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={onClose}
+            className="w-10 h-10 flex items-center justify-center rounded-xl bg-white/5 border border-white/10 text-white/40 hover:text-white hover:bg-white/10 transition-all"
+            title="Close"
+          >
+            <X className="w-5 h-5" />
+          </button>
           
-          <div className="flex items-center gap-1.5 bg-black/40 p-1 rounded-xl ml-4 border border-white/5">
+          <div className="flex items-center gap-1 bg-black/40 p-0.5 rounded-lg border border-white/5">
             <button 
               onClick={() => setShowPreview(true)}
-              className={`px-6 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${showPreview ? 'bg-indigo-500 text-white shadow-[0_0_20px_rgba(99,102,241,0.4)]' : 'text-white/30 hover:text-white hover:bg-white/5'}`}
+              className={`px-4 py-1.5 rounded-md text-[9px] font-black uppercase tracking-widest transition-all ${showPreview ? 'bg-indigo-500 text-white' : 'text-white/30 hover:text-white'}`}
             >
-              Manifest
+              Build
             </button>
             <button 
               onClick={() => setShowPreview(false)}
-              className={`px-6 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${!showPreview ? 'bg-indigo-500 text-white shadow-[0_0_20px_rgba(99,102,241,0.4)]' : 'text-white/30 hover:text-white hover:bg-white/5'}`}
+              className={`px-4 py-1.5 rounded-md text-[9px] font-black uppercase tracking-widest transition-all ${!showPreview ? 'bg-indigo-500 text-white' : 'text-white/30 hover:text-white'}`}
             >
               Source
             </button>
           </div>
-
-          {showPreview && (
-            <div className="hidden lg:flex items-center gap-1.5 bg-black/40 p-1 rounded-xl ml-2 border border-white/5">
-              <button 
-                onClick={() => setDeviceFrame('phone')}
-                className={`w-9 h-9 flex items-center justify-center rounded-lg transition-all ${deviceFrame === 'phone' ? 'bg-indigo-500 text-white shadow-[0_0_20px_rgba(99,102,241,0.4)]' : 'text-white/20 hover:text-white hover:bg-white/5'}`}
-                title="Phone Preview"
-              >
-                 <Layout className="w-4 h-4" />
-              </button>
-              <button 
-                onClick={() => setDeviceFrame('desktop')}
-                className={`w-9 h-9 flex items-center justify-center rounded-lg transition-all ${deviceFrame === 'desktop' ? 'bg-indigo-500 text-white shadow-[0_0_20px_rgba(99,102,241,0.4)]' : 'text-white/20 hover:text-white hover:bg-white/5'}`}
-                title="Desktop Preview"
-              >
-                 <Monitor className="w-4 h-4" />
-              </button>
-            </div>
-          )}
         </div>
 
-        <div className="flex items-center gap-4 sm:gap-6">
-          <div className="hidden xl:flex items-center gap-3 px-4 py-2 bg-indigo-500/5 rounded-full border border-indigo-500/10">
-             <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-             <span className="text-[9px] font-black text-indigo-400 uppercase tracking-widest">BRIDGE_STABLE</span>
-          </div>
+        <div className="flex items-center gap-3">
           <button 
             onClick={handleSave}
             disabled={isSaving || code === suggestion.built_code}
-            className={`px-8 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-[4px] transition-all flex items-center gap-3 shadow-xl ${code === suggestion.built_code ? 'bg-white/5 text-white/10 cursor-not-allowed' : 'bg-white text-black hover:bg-indigo-400 hover:text-white'}`}
+            className={`px-6 py-2 rounded-xl text-[9px] font-black uppercase tracking-[2px] transition-all flex items-center gap-2 shadow-lg ${code === suggestion.built_code ? 'bg-white/5 text-white/10' : 'bg-white text-black hover:bg-indigo-500 hover:text-white'}`}
           >
-            {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Database className="w-4 h-4" />}
-            <span className="hidden sm:inline">COMMIT_REVISION</span>
-          </button>
-          <button 
-            onClick={onClose} 
-            className="hidden md:flex w-10 h-10 items-center justify-center hover:bg-white/10 rounded-xl transition-all text-white/40 hover:text-white border border-white/10"
-          >
-            <X className="w-6 h-6" />
+            {isSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Database className="w-3 h-3" />}
+            <span>COMMIT</span>
           </button>
         </div>
       </div>
@@ -671,7 +631,7 @@ export function ModulePlayer({
                     value={code}
                     onChange={(e) => setCode(e.target.value)}
                     spellCheck={false}
-                    className="w-full h-full bg-transparent p-8 font-mono text-[13px] text-indigo-100/70 outline-none resize-none custom-scrollbar leading-relaxed"
+                    className="w-full h-full bg-transparent p-4 font-mono text-[13px] text-indigo-100/70 outline-none resize-none custom-scrollbar leading-relaxed"
                   />
                 ) : (
                   <div className="p-10 font-mono text-[12px] text-white/40 uppercase tracking-[4px] leading-relaxed">
@@ -685,10 +645,7 @@ export function ModulePlayer({
                   </div>
                 )}
               </div>
-              <div className="h-10 border-t border-white/5 bg-black/40 flex items-center justify-between px-8 text-[9px] font-black text-white/20 uppercase tracking-[4px]">
-                 <span>{activeFile.split('.').pop()?.toUpperCase() || 'PLAINTEXT'}</span>
-                 <span>Revision Layer 1.2</span>
-              </div>
+              {/* Removed footer */}
            </div>
 
            {/* PREVIEW AREA */}
@@ -703,7 +660,7 @@ export function ModulePlayer({
                     <span className="text-[10px] font-black uppercase tracking-[4px] text-white/30">{deviceFrame.toUpperCase()} MODE</span>
                  </div>
               </div>
-              <div className="flex-1 bg-black/40 flex items-center justify-center overflow-hidden p-2 sm:p-4 lg:p-12">
+              <div className="flex-1 bg-black/40 flex items-center justify-center overflow-hidden p-2 sm:p-4 lg:p-6">
                  <div className={`relative transition-all duration-700 ease-[cubic-bezier(0.23,1,0.32,1)] ${
                    deviceFrame === 'phone' 
                    ? 'w-full max-w-[380px] aspect-[9/19] max-h-full rounded-[2.5rem] sm:rounded-[3.5rem] border-[10px] sm:border-[14px] border-white/10 shadow-[0_60px_120px_rgba(0,0,0,0.6)] bg-black overflow-hidden' 
@@ -756,22 +713,7 @@ export function ModulePlayer({
                     </button>
                   </div>
               </div>
-              <div className="h-10 sm:h-12 border-t border-white/5 bg-black/40 flex items-center px-4 sm:px-8 gap-4 sm:gap-8 overflow-hidden backdrop-blur-3xl shrink-0">
-                 <div className="flex items-center gap-3 text-[9px] font-black text-white/30 uppercase tracking-[4px] shrink-0">
-                    <Terminal className="w-3.5 h-3.5 text-indigo-500" />
-                    <span className="hidden xs:inline">Bridge_Status</span>
-                 </div>
-                 <div className="flex-1 flex items-center gap-3 min-w-0">
-                    <div className={`w-2 h-2 rounded-full shrink-0 ${runtimeStatus.includes('CRITICAL') ? 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.8)]' : 'bg-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.8)]'} animate-pulse`} />
-                    <div className="text-[10px] text-white/60 font-mono uppercase tracking-tighter truncate">
-                      {runtimeStatus}
-                    </div>
-                 </div>
-                 <div className="hidden sm:flex items-center gap-4 text-[8px] font-bold text-white/10 uppercase tracking-widest shrink-0">
-                    <span>Transpiler: Babel 7.23</span>
-                    <span>Layers: 3rd_Dimension</span>
-                 </div>
-              </div>
+              {/* Removed status bar */}
            </div>
         </div>
     </motion.div>

@@ -2206,7 +2206,7 @@ export default function App() {
                       </div>
                     </div>
                   ) : (
-                    <div className="space-y-24 py-16 max-w-[1400px] mx-auto px-6 lg:px-12 w-full flex flex-col items-center relative">
+                    <div className="space-y-12 py-8 max-w-[1400px] mx-auto px-6 lg:px-12 w-full flex flex-col items-center relative">
                       <div className="neural-bg-glow top-0 left-1/2 -translate-x-1/2 opacity-20" />
                       
                       {/* --- DASHBOARD HEADER & IDENTITY --- */}
@@ -2216,13 +2216,13 @@ export default function App() {
                         <motion.div 
                           initial={{ opacity: 0, x: -20 }}
                           animate={{ opacity: 1, x: 0 }}
-                          className="lg:col-span-5 bg-gradient-to-br from-[#0a0a25] via-[#050510] to-[#010105] p-12 lg:p-14 rounded-[4rem] border border-white/5 relative overflow-hidden group flex flex-col justify-between shadow-[0_50px_100px_rgba(0,0,0,0.6)] neural-card-glow"
+                          className="lg:col-span-5 bg-gradient-to-br from-[#0a0a25] via-[#050510] to-[#010105] p-8 lg:p-10 rounded-[3rem] border border-white/5 relative overflow-hidden group flex flex-col justify-between shadow-[0_50px_100px_rgba(0,0,0,0.6)] neural-card-glow"
                         >
                           <div className="absolute -top-20 -right-20 w-80 h-80 bg-indigo-500/10 rounded-full blur-[100px] group-hover:bg-indigo-500/20 transition-all duration-700" />
                           
                           <div className="flex flex-col items-center lg:items-start gap-10 relative z-10">
                             <div className="relative shrink-0">
-                              <div className="w-32 h-32 lg:w-44 lg:h-44 rounded-[3.5rem] overflow-hidden border-4 border-indigo-500/30 shadow-[0_0_50px_rgba(99,102,241,0.2)] bg-black rotate-[-3deg] group-hover:rotate-0 transition-transform duration-700 relative">
+                              <div className="w-24 h-24 lg:w-32 lg:h-32 rounded-[2.5rem] overflow-hidden border-4 border-indigo-500/30 shadow-[0_0_50px_rgba(99,102,241,0.2)] bg-black rotate-[-3deg] group-hover:rotate-0 transition-transform duration-700 relative">
                                 <img 
                                   src={user.photoURL || `https://api.dicebear.com/7.x/bottts/svg?seed=${user.email}`} 
                                   alt="Profile Avatar"
@@ -2240,7 +2240,7 @@ export default function App() {
 
                             <div className="text-center lg:text-left space-y-4 pt-4">
                               <div className="space-y-1">
-                                <h3 className="text-3xl lg:text-4xl font-black uppercase tracking-[15px] lg:tracking-[22px] text-white leading-none">
+                                <h3 className="text-2xl lg:text-3xl font-black uppercase tracking-[10px] lg:tracking-[15px] text-white leading-none">
                                   {user.email?.split('@')[0]}
                                 </h3>
                                 <p className="text-indigo-400 font-mono text-[9px] uppercase tracking-[6px] opacity-40">Neural Node: {user.uid.substring(0, 16).toUpperCase()}</p>
