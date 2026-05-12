@@ -154,11 +154,11 @@ export function ModulePlayer({
         <script crossorigin="anonymous" src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
         <script crossorigin="anonymous" src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.12/babel.min.js"></script>
         <script src="https://cdn.tailwindcss.com"></script>
-        <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/lucide-react@0.453.0/dist/umd/lucide-react.min.js"></script>
+        <script crossorigin="anonymous" src="https://unpkg.com/lucide-react@0.453.0/dist/umd/lucide-react.min.js"></script>
         <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/framer-motion@10.16.4/dist/framer-motion.js"></script>
         <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/recharts@2.12.7/umd/Recharts.js"></script>
         <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
-        <script crossorigin="anonymous" src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r169/three.min.js"></script>
+        <script crossorigin="anonymous" src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r170/three.min.js"></script>
         <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/react-markdown@8.0.7/react-markdown.min.js"></script>
         <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
         <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/clsx@2.1.1/dist/clsx.min.js"></script>

@@ -4,8 +4,12 @@
   --color-indigo-500: #6366f1;
   --color-indigo-600: #4f46e5;
   --color-indigo-dark: #1e1b4b;
-  --color-app-bg: #020205;
+  --color-app-bg: #000;
   --color-neural-glow: rgba(99, 102, 241, 0.5);
+}
+
+html {
+  background: #000;
 }
 
 body {

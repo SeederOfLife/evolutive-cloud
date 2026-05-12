@@ -137,6 +137,7 @@ import {
 } from "./types";
 import { EvolutionTree } from "./components/EvolutionTree";
 import { ModulePlayer } from "./components/ModulePlayer";
+import { EmulatorHub } from "./components/EmulatorHub";
 import { EvolutiveSeed, ModuleNode, Nebula } from "./components/ThreeWorld";
 
 // --- TYPES REMOVED (IMPORTED FROM ./types) ---
@@ -157,7 +158,7 @@ import { EvolutiveSeed, ModuleNode, Nebula } from "./components/ThreeWorld";
 
 export default function App() {
   const [isOpen, setIsOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'library' | 'identity' | 'evolution'>('library');
+  const [activeTab, setActiveTab] = useState<'library' | 'identity' | 'evolution' | 'emulator'>('library');
   const [input, setInput] = useState("");
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [dbFeatures, setDbFeatures] = useState<{ 
@@ -171,7 +172,7 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [isBuilding, setIsBuilding] = useState<string | null>(null);
   const [currentSuggestion, setCurrentSuggestion] = useState<Suggestion | null>(null);
-  const [viewMode, setViewMode] = useState<'EXPLORER' | 'FEED'>('FEED');
+  const [viewMode, setViewMode] = useState<'EXPLORER' | 'FEED' | 'EMULATOR'>('FEED');
   const [newAppType, setNewAppType] = useState<'phone' | 'desktop' | 'game' | 'terminal'>('desktop');
   const [devicePreview, setDevicePreview] = useState<'phone' | 'desktop'>('phone');
   const [isRepoOpen, setIsRepoOpen] = useState(false);
@@ -1396,14 +1397,14 @@ export default function App() {
   };
 
   return (
-    <div className="relative h-screen w-full bg-[#020205] text-white selection:bg-indigo-500/30 overflow-hidden font-sans">
+    <div className="relative h-screen w-full bg-black text-white selection:bg-indigo-500/30 overflow-hidden font-sans">
       <AnimatePresence>
         {isInitializing && (
           <motion.div 
             initial={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.8 }}
-            className="fixed inset-0 z-[200] bg-[#020208] flex flex-col items-center justify-center p-6 text-center"
+            className="fixed inset-0 z-[200] bg-black flex flex-col items-center justify-center p-6 text-center"
           >
             <div className="relative">
               <motion.div 
@@ -1442,7 +1443,7 @@ export default function App() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[90] bg-[#050510]/95 backdrop-blur-[120px] flex flex-col items-center justify-center p-10 overflow-hidden"
+            className="fixed inset-0 z-[90] bg-black/95 backdrop-blur-[120px] flex flex-col items-center justify-center p-10 overflow-hidden"
           >
             {/* Neural Background Effect */}
             <div className="absolute inset-0 pointer-events-none opacity-20">
@@ -1793,19 +1794,19 @@ export default function App() {
             initial={{ opacity: 0, y: 40 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 40 }}
-            className="fixed inset-0 m-auto w-full h-full md:w-[90vw] md:h-[85vh] bg-[#050510]/95 backdrop-blur-2xl border-none md:border-2 md:border-white/10 flex flex-col z-50 shadow-[0_0_100px_rgba(0,0,0,0.8)] overflow-hidden rounded-none md:rounded-none"
+            className="fixed inset-0 m-auto w-full h-full md:w-[90vw] md:h-[85vh] bg-black/95 backdrop-blur-2xl border-none md:border-2 md:border-white/10 flex flex-col z-50 shadow-[0_0_100px_rgba(0,0,0,0.8)] overflow-hidden rounded-none md:rounded-none"
           >
             {/* Dashboard Panel */}
             <div className="flex flex-col md:flex-row border-b border-white/10 p-4 md:p-6 shrink-0 bg-white/5 items-center justify-between gap-4">
               <div className="flex flex-col md:flex-row items-center gap-4 md:gap-10 w-full md:w-auto">
                     <div className="flex gap-6 md:gap-12 overflow-x-auto w-full md:w-auto px-2 md:px-0 no-scrollbar">
-                  {['library', 'evolution', 'identity'].map((tab) => (
+                  {['library', 'emulator', 'evolution', 'identity'].map((tab) => (
                     <button 
                       key={tab}
                       onClick={() => setActiveTab(tab as any)}
                       className={`text-[10px] md:text-[12px] font-black uppercase tracking-[3px] md:tracking-[6px] transition-all relative py-2 whitespace-nowrap ${activeTab === tab ? 'text-white' : 'text-white/20'}`}
                     >
-                      {tab === 'library' ? 'Hub' : tab === 'evolution' ? 'Evolution' : 'Account'}
+                      {tab === 'library' ? 'Hub' : tab === 'emulator' ? 'Emulator' : tab === 'evolution' ? 'Evolution' : 'Account'}
                       {activeTab === tab && <motion.div layoutId="tab" className="absolute -bottom-1 left-0 w-full h-[2px] md:h-[3px] bg-gradient-to-r from-indigo-500 via-pink-500 to-yellow-500" />}
                     </button>
                   ))}
@@ -1871,6 +1872,13 @@ export default function App() {
                         >
                           <Search className="w-5 h-5" />
                         </button>
+                        <button 
+                          onClick={() => setViewMode('EMULATOR')}
+                          className={`w-12 h-12 flex items-center justify-center rounded-full transition-all ${viewMode === 'EMULATOR' ? 'bg-indigo-500 text-white shadow-[0_0_20px_rgba(99,102,241,0.5)]' : 'text-white/40 hover:text-white hover:bg-white/5'}`}
+                          title="Emulator Hub"
+                        >
+                          <Monitor className="w-5 h-5" />
+                        </button>
                       </div>
 
                       <div className="flex gap-2 p-1.5 bg-black/40 rounded-full border border-white/5 shadow-inner backdrop-blur-md">
@@ -1895,7 +1903,14 @@ export default function App() {
                     <div className="text-right">Operations</div>
                   </div>
 
-                  {viewMode === 'EXPLORER' ? (
+                  {viewMode === 'EMULATOR' ? (
+                    <EmulatorHub 
+                      suggestions={suggestions} 
+                      currentUser={user} 
+                      onExecute={(s) => setCurrentSuggestion(s)} 
+                      onClose={() => setViewMode('FEED')} 
+                    />
+                  ) : viewMode === 'EXPLORER' ? (
                     <div className="flex flex-col gap-4">
                       {/* Explorer List */}
                       <div className="flex flex-col gap-3">
@@ -2110,6 +2125,16 @@ export default function App() {
                     </div>
                   )}
                 </div>
+              ) : activeTab === 'emulator' ? (
+                <EmulatorHub 
+                  suggestions={suggestions} 
+                  currentUser={user} 
+                  onExecute={(s) => {
+                    setCurrentSuggestion(s);
+                    // No need to close hub, it will be under the player
+                  }} 
+                  onClose={() => setActiveTab('library')} 
+                />
               ) : activeTab === 'evolution' ? (
                 <EvolutionTree 
                   suggestions={suggestions} 
