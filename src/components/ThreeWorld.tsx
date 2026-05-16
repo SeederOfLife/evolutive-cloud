@@ -45,13 +45,13 @@ export function ModuleNode({ suggestion, onRun }: { suggestion: Suggestion, onRu
   const { radius, speed, offset, yOffset, color } = useMemo(() => {
     const colors = ["#ff006e", "#3a86ff", "#fb5607", "#ffbe0b", "#8338ec", "#00f5d4"];
     return {
-      radius: 3.5 + Math.random() * 2,
+      radius: 3.5 + (1 - (suggestion.energy || 0) / 100) * 4,
       speed: 0.1 + Math.random() * 0.2,
       offset: Math.random() * Math.PI * 2,
       yOffset: (Math.random() - 0.5) * 2,
       color: colors[Math.floor(Math.random() * colors.length)]
     };
-  }, []);
+  }, [suggestion.energy]);
 
   useFrame((state, delta) => {
     if (!meshRef.current) return;
