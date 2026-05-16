@@ -48,7 +48,6 @@ import {
 } from "lucide-react";
 import { User } from "firebase/auth";
 import OpenAI from "openai";
-import * as webllm from "@mlc-ai/web-llm";
 
 
 enum OperationType {
@@ -97,33 +96,22 @@ const handleFirestoreError = (error: unknown, operationType: OperationType, path
   console.error('Firestore Error: ', JSON.stringify(errInfo));
   throw new Error(JSON.stringify(errInfo));
 };
-import { GoogleGenAI } from "@google/genai";
-import { 
-  collection, 
-  onSnapshot, 
-  query, 
-  orderBy, 
-  addDoc, 
-  updateDoc, 
-  doc, 
-  deleteDoc, 
-  setDoc, 
-  getDoc, 
+import {
+  collection,
+  onSnapshot,
+  query,
+  orderBy,
+  addDoc,
+  updateDoc,
+  doc,
+  deleteDoc,
   where,
   limit,
   serverTimestamp,
   Timestamp,
   getDocs
 } from "firebase/firestore";
-import { 
-  signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword, 
-  signOut, 
-  onAuthStateChanged,
-  signInWithPopup,
-  GoogleAuthProvider,
-  GithubAuthProvider
-} from "firebase/auth";
+import { } from "firebase/auth";
 import { auth, db } from "./lib/firebase";
 import { 
   Suggestion, 
@@ -139,6 +127,10 @@ import { EvolutionTree } from "./components/EvolutionTree";
 import { ModulePlayer } from "./components/ModulePlayer";
 import { EmulatorHub } from "./components/EmulatorHub";
 import { EvolutiveSeed, ModuleNode, Nebula } from "./components/ThreeWorld";
+import { useQuota } from "./hooks/useQuota";
+import { useAuth } from "./hooks/useAuth";
+import { useAI } from "./hooks/useAI";
+import { useSuggestions } from "./hooks/useSuggestions";
 
 // --- TYPES REMOVED (IMPORTED FROM ./types) ---
 
@@ -157,10 +149,27 @@ import { EvolutiveSeed, ModuleNode, Nebula } from "./components/ThreeWorld";
 // --- MAIN UI ---
 
 export default function App() {
+  const { quota: apiQuota, consume: consumeQuota } = useQuota();
+  const { user, userProfile, authError, isAuthLoading, signInWithEmail, signInWithGoogle, signInWithGithub, logout } = useAuth();
+  const {
+    aiProvider, setAiProvider,
+    selectedModel, setSelectedModel,
+    providerKeys, setProviderKeys,
+    aiConfig, setAiConfig,
+    customEndpoint, setCustomEndpoint,
+    forceCloud, setForceCloud,
+    aiError, setAiError,
+    isRateLimited, setIsRateLimited,
+    rateLimitCountdown, setRateLimitCountdown,
+    webLlmProgress, setWebLlmProgress,
+    webLlmEngineRef,
+    call: callUnifiedAI,
+    callCloud: callGeminiCloud,
+  } = useAI();
+  const { suggestions, addSuggestion, updateSuggestion, deleteSuggestion, voteSuggestion } = useSuggestions();
   const [isOpen, setIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'library' | 'identity' | 'evolution' | 'emulator'>('library');
   const [input, setInput] = useState("");
-  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [dbFeatures, setDbFeatures] = useState<{ 
     pledged_by: boolean, 
     built_code: boolean,
@@ -184,13 +193,6 @@ export default function App() {
   const [isInitializing, setIsInitializing] = useState(true);
   const [isManifesting, setIsManifesting] = useState(false);
   const [manifestingStep, setManifestingStep] = useState("");
-  const [isRateLimited, setIsRateLimited] = useState(false);
-  const [rateLimitCountdown, setRateLimitCountdown] = useState(0);
-  const [forceCloud, setForceCloud] = useState(() => {
-    try {
-      return localStorage.getItem('app_force_cloud') === 'true';
-    } catch { return false; }
-  });
   const [isTestingAI, setIsTestingAI] = useState(false);
   const [testResponse, setTestResponse] = useState<string | null>(null);
   // Expose libraries to window for ModulePlayer
@@ -239,118 +241,26 @@ export default function App() {
   const channelRef = useRef<any>(null);
   const isSyncing = useRef(false);
 
-  // Identity State
-  const [user, setUser] = useState<User | null>(null);
-  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-  
-  const [selectedModel, setSelectedModel] = useState(() => {
-    try {
-      return localStorage.getItem('app_model') || "gemini-3-flash-preview";
-    } catch { return "gemini-3-flash-preview"; }
-  });
-  const [aiProvider, setAiProvider] = useState<'google' | 'openai' | 'anthropic' | 'custom' | 'web-llm' | 'gemini-nano' | 'mlc-mobile'>(() => {
-    try {
-      return (localStorage.getItem('app_provider') as any) || "google";
-    } catch { return "google"; }
-  });
-
-  useEffect(() => {
-    // When provider changes, ensure the selected model is valid for that provider
-    const providers: Record<string, string[]> = {
-      google: ['gemini-3-flash-preview', 'gemini-3.1-pro-preview', 'gemma-2-9b-it', 'gemma-2-27b-it'],
-      openai: ['gpt-4o', 'gpt-4o-mini', 'o1-preview'],
-      anthropic: ['claude-3-5-sonnet-20240620', 'claude-3-opus-20240229'],
-      'web-llm': ['Llama-3-8B-Instruct-v0.1-q4f32_1-MLC', 'Phi-3-mini-4k-instruct-q4f16_1-MLC', 'Gemma-2b-it-q4f16_1-MLC', 'Mistral-7B-Instruct-v0.2-q4f16_1-MLC'],
-      'gemini-nano': ['built-in']
-    };
-
-    if (providers[aiProvider] && !providers[aiProvider].includes(selectedModel)) {
-      setSelectedModel(providers[aiProvider][0]);
-    }
-    localStorage.setItem('app_provider', aiProvider);
-  }, [aiProvider]);
-
-  useEffect(() => {
-    localStorage.setItem('app_model', selectedModel);
-  }, [selectedModel]);
-
-  useEffect(() => {
-    localStorage.setItem('app_force_cloud', forceCloud.toString());
-  }, [forceCloud]);
-
-  const [providerKeys, setProviderKeys] = useState<Record<string, string>>(() => {
-    try {
-      const saved = localStorage.getItem('app_hub_keys');
-      const legacy = localStorage.getItem('evolutive_energy_key');
-      const initial = saved ? JSON.parse(saved) : {};
-      if (legacy && !initial.google) initial.google = legacy;
-      return initial;
-    } catch {
-      return {};
-    }
-  });
-
-  const [aiConfig, setAiConfig] = useState<AIConfig & { systemPrompt: string }>(() => {
-    try {
-      const saved = localStorage.getItem('app_ai_config');
-      return saved ? JSON.parse(saved) : {
-        temperature: 0.7,
-        topP: 0.95,
-        topK: 40,
-        maxTokens: 4096,
-        safetyThreshold: 'BLOCK_NONE',
-        systemPrompt: "You are the Evolutionary Reactive Engine. Generate professional-grade, high-complexity interactive applications. Deep shadows, modern UI, responsive grids."
-      };
-    } catch {
-      return {
-        temperature: 0.7,
-        topP: 0.95,
-        topK: 40,
-        maxTokens: 4096,
-        safetyThreshold: 'BLOCK_NONE',
-        systemPrompt: "You are the Evolutionary Reactive Engine. Generate professional-grade, high-complexity interactive applications. Deep shadows, modern UI, responsive grids."
-      };
-    }
-  });
-
-  useEffect(() => {
-    localStorage.setItem('app_ai_config', JSON.stringify(aiConfig));
-  }, [aiConfig]);
-
   const userApiKey = useMemo(() => providerKeys[aiProvider] || "", [providerKeys, aiProvider]);
 
-  // Sync Profile on Auth
+  // Sync provider keys when profile loads from the auth hook
   useEffect(() => {
-    if (!user) return;
-
-    const fetchProfile = async () => {
-      try {
-        const docRef = doc(db, 'user_profiles', user.uid);
-        const docSnap = await getDoc(docRef);
-
-        if (docSnap.exists()) {
-          const data = docSnap.data() as UserProfile;
-          setUserProfile(data);
-          if (data.personal_api_key) {
-             try {
-                const cloudKeys = JSON.parse(data.personal_api_key);
-                setProviderKeys(prev => ({ ...prev, ...cloudKeys }));
-                localStorage.setItem('app_hub_keys', JSON.stringify({ ...providerKeys, ...cloudKeys }));
-             } catch {
-                setProviderKeys(prev => ({ ...prev, google: data.personal_api_key as string }));
-                localStorage.setItem('app_hub_keys', JSON.stringify({ ...providerKeys, google: data.personal_api_key }));
-             }
-          }
-        } else {
-          await setDoc(docRef, { id: user.uid });
-        }
-      } catch (e) {
-        console.error("Profile sync catch:", e);
-      }
-    };
-
-    fetchProfile();
-  }, [user]);
+    if (!userProfile?.personal_api_key) return;
+    try {
+      const cloudKeys = JSON.parse(userProfile.personal_api_key);
+      setProviderKeys(prev => {
+        const merged = { ...prev, ...cloudKeys };
+        localStorage.setItem('app_hub_keys', JSON.stringify(merged));
+        return merged;
+      });
+    } catch {
+      setProviderKeys(prev => {
+        const merged = { ...prev, google: userProfile.personal_api_key as string };
+        localStorage.setItem('app_hub_keys', JSON.stringify(merged));
+        return merged;
+      });
+    }
+  }, [userProfile]);
 
   const saveApiKeyToAccount = async (key: string, provider: string = aiProvider) => {
     const newKeys = { ...providerKeys, [provider]: key };
@@ -369,30 +279,15 @@ export default function App() {
 
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
-  const [authError, setAuthError] = useState<string | null>(null);
   const [isSignUp, setIsSignUp] = useState(false);
 
   // New Evolutionary States
   const [isFinalized, setIsFinalized] = useState(false);
-  const [apiQuota, setApiQuota] = useState(() => {
-    const saved = localStorage.getItem('app_quota');
-    return saved ? parseInt(saved) : 100;
-  });
-
-  useEffect(() => {
-    localStorage.setItem('app_quota', apiQuota.toString());
-  }, [apiQuota]);
   const [creatorId, setCreatorId] = useState<string | null>(null);
   const [advice, setAdvice] = useState<Advice[]>([]);
   const [isRefining, setIsRefining] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterType, setFilterType] = useState<'all' | 'built' | 'pending' | 'mine'>('all');
-  const [customEndpoint, setCustomEndpoint] = useState(() => {
-    return localStorage.getItem('app_custom_endpoint') || "";
-  });
-  const [webLlmProgress, setWebLlmProgress] = useState<string>("");
-  const webLlmEngineRef = useRef<webllm.MLCEngine | null>(null);
-
   const unwrapSuggestion = useCallback((s: Suggestion): Suggestion => {
     if (s.content && s.content.startsWith('JSON:')) {
       try {
@@ -459,12 +354,6 @@ export default function App() {
     }
   };
 
-  useEffect(() => {
-    localStorage.setItem('app_model', selectedModel);
-    localStorage.setItem('app_provider', aiProvider);
-    localStorage.setItem('app_custom_endpoint', customEndpoint);
-  }, [selectedModel, aiProvider, customEndpoint]);
-
   // Derive ghosts from presence
   // Derive ghosts from presence
   const ghosts = useMemo(() => {
@@ -487,277 +376,14 @@ export default function App() {
     return { title: "New Member", color: "#94a3b8", level: 0 };
   }, [suggestions, user]);
 
-  const [aiError, setAiError] = useState<string | null>(null);
-  
-  // Cloud Fallback Helper - Uses server-side proxy for security
-  const callGeminiCloud = async (prompt: string): Promise<string> => {
-    setAiError(null);
-    try {
-      const response = await fetch("/api/neural-link", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          prompt,
-          model: "gemini-3-flash-preview" 
-        })
-      });
-
-      const data = await response.json();
-      
-      if (!response.ok) {
-        if (response.status === 429) {
-          const msg = "NEURAL_QUOTA_EXHAUSTED: The cloud intelligence link has reached its limit. This is a platform-wide limit. Please wait a few minutes or use your own API Key in Settings.";
-          setAiError(msg);
-          throw new Error(msg);
-        }
-
-        // If server fallback fails because of mission key or invalid key, attempt user key fallback
-        if (data.error === "SYSTEM_KEY_MISSING" || data.error === "NEURAL_NODE_ERROR" || [400, 401, 403].includes(response.status)) {
-          const userGoogleKey = providerKeys['google'];
-          if (userGoogleKey) {
-            console.log("Cloud link restricted, switching to user neural key...");
-            const ai = new GoogleGenAI({ apiKey: userGoogleKey });
-            const result = await ai.models.generateContent({
-              model: "gemini-3-flash-preview",
-              contents: prompt
-            });
-            return result.text;
-          }
-          
-          if (data.error === "SYSTEM_KEY_MISSING") {
-             const msg = "System Cloud Key missing. Enable the Neural Hub and provide a Google API Key.";
-             setAiError(msg);
-             throw new Error(msg);
-          }
-          const msg = data.message || "Neural link denied. Check your API Hub credentials.";
-          setAiError(msg);
-          throw new Error(msg);
-        }
-        throw new Error(data.message || "Unknown neural link protocol error.");
-      }
-
-      return data.text;
-    } catch (err: any) {
-      console.error("Cloud Fallback Failure:", err);
-      const cleanMsg = err.message.length > 500 ? err.message.substring(0, 500) + "..." : err.message;
-      if (!aiError) setAiError(cleanMsg);
-      throw new Error(cleanMsg);
-    }
-  };
-
-  // Unified AI Bridge
-  const callUnifiedAI = async (prompt: string, force = forceCloud): Promise<string> => {
-    if (force) {
-      return await callGeminiCloud(prompt);
-    }
-
-    const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-    
-    let retryCount = 0;
-    const maxRetries = 3;
-    
-    while (retryCount <= maxRetries) {
-      try {
-        const activeKey = providerKeys[aiProvider] || "";
-        const googleKey = process.env.GEMINI_API_KEY || providerKeys['google'];
-        
-        // Offline / Specialized Mobile Handlers
-        if (aiProvider === 'gemini-nano') {
-          try {
-            const w = window as any;
-            if (!w.ai || !w.ai.assistant) {
-              throw new Error("Gemini Nano not detected.");
-            }
-            const aiSession = await w.ai.assistant.create();
-            const result = await aiSession.prompt(prompt);
-            return result;
-          } catch (err) {
-            console.warn("Gemini Nano failed, falling back to Cloud:", err);
-            return await callGeminiCloud(prompt);
-          }
-        }
-
-        if (aiProvider === 'web-llm') {
-          try {
-            if (!webLlmEngineRef.current) {
-              const w = window as any;
-              if (!w.navigator.gpu) {
-                throw new Error("WebGPU is not supported or enabled in this browser. Local AI requires WebGPU.");
-              }
-              setWebLlmProgress("Wakeing AI Engine...");
-              const engine = new webllm.MLCEngine();
-              engine.setInitProgressCallback((report) => setWebLlmProgress(report.text));
-              await engine.reload(selectedModel || "Llama-3-8B-Instruct-v0.1-q4f32_1-MLC");
-              webLlmEngineRef.current = engine;
-            }
-            const response = await webLlmEngineRef.current.chat.completions.create({
-              messages: [{ role: "user", content: prompt }]
-            });
-            return response.choices[0].message.content || "";
-          } catch (err: any) {
-            console.warn("Web-LLM failure:", err);
-            setWebLlmProgress("");
-            if (err.message?.includes("WebGPU")) throw err;
-            return await callGeminiCloud(prompt);
-          }
-        }
-
-        if (aiProvider === 'mlc-mobile') {
-          const client = new OpenAI({
-            apiKey: "no-key",
-            baseURL: customEndpoint || "http://localhost:8080/v1",
-            dangerouslyAllowBrowser: true,
-          });
-          const response = await client.chat.completions.create({
-            model: selectedModel || "main",
-            messages: [{ role: "user", content: prompt }],
-          });
-          return response.choices[0].message.content || "";
-        }
-
-        if (!googleKey && aiProvider === 'google') throw new Error("No Google API Key Found.");
-        if (!activeKey && (aiProvider === 'openai' || aiProvider === 'anthropic' || aiProvider === 'custom')) {
-           if (aiProvider !== 'custom') throw new Error(`No ${aiProvider.toUpperCase()} Key Found.`);
-        }
-
-        if (aiProvider === 'google') {
-          const ai = new GoogleGenAI({ apiKey: googleKey || "" });
-          let modelId = selectedModel;
-          if (!modelId.startsWith('gemini-') && !modelId.startsWith('gemma-')) modelId = "gemini-3-flash-preview"; 
-          
-          const attemptCall = async (targetModel: string) => {
-            const response = await ai.models.generateContent({
-              model: targetModel,
-              contents: prompt,
-              config: {
-                temperature: aiConfig.temperature,
-                topP: aiConfig.topP,
-                topK: aiConfig.topK,
-                maxOutputTokens: aiConfig.maxTokens,
-              }
-            });
-            return response.text;
-          };
-
-          try {
-            const text = await attemptCall(modelId);
-            if (!text) throw new Error("The AI Engine returned an empty response.");
-            setIsRateLimited(false);
-            setRateLimitCountdown(0);
-            return text;
-          } catch (err: any) {
-            // Check for rate limit error (429) or quota error
-            if (err?.message?.includes('429') || err?.status === 429 || err?.message?.includes('quota') || err?.message?.includes('RESOURCE_EXHAUSTED')) {
-              console.warn(`Model ${modelId} failed quota, attempting fallback to gemini-3-flash-preview...`);
-              
-              if (modelId !== 'gemini-3-flash-preview') {
-                 try {
-                   const fallbackText = await attemptCall('gemini-3-flash-preview');
-                   if (fallbackText) {
-                     setAiError("Warning: Neural Sync downgraded to Flash version due to Pro quota exhaustion.");
-                     return fallbackText;
-                   }
-                 } catch (fallbackErr) {
-                   console.error("Flash fallback also failed:", fallbackErr);
-                 }
-              }
-
-              if (retryCount < maxRetries) {
-                retryCount++;
-                const waitTime = Math.pow(2, retryCount) * 1000 + Math.random() * 1000;
-                setIsRateLimited(true);
-                setRateLimitCountdown(Math.ceil(waitTime / 1000));
-                
-                const timer = setInterval(() => {
-                  setRateLimitCountdown(prev => Math.max(0, prev - 1));
-                }, 1000);
-                
-                await sleep(waitTime);
-                clearInterval(timer);
-                continue; 
-              }
-            }
-            throw err;
-          }
-        }
-
-        if (aiProvider === 'openai' || aiProvider === 'custom') {
-          const isDeepInfra = activeKey.startsWith('nvapi-') || activeKey.startsWith('NVAPI-');
-          const isMistralDirect = activeKey.startsWith('mistral-') || activeKey.toLowerCase().includes('mistral');
-          
-          const client = new OpenAI({
-            apiKey: activeKey,
-            baseURL: isDeepInfra ? "https://api.deepinfra.com/v1" : 
-                     (isMistralDirect && !customEndpoint ? "https://api.mistral.ai/v1" : 
-                     (aiProvider === 'custom' ? customEndpoint : undefined)),
-            dangerouslyAllowBrowser: true,
-          });
-
-          const response = await client.chat.completions.create({
-            model: selectedModel,
-            messages: [{ role: "user", content: prompt }],
-            temperature: aiConfig.temperature,
-            top_p: aiConfig.topP,
-            max_tokens: aiConfig.maxTokens,
-          });
-          return response.choices[0].message.content || "";
-        }
-
-        if (aiProvider === 'anthropic') {
-          const response = await fetch("https://api.anthropic.com/v1/messages", {
-            method: "POST",
-            headers: {
-              "x-api-key": activeKey,
-              "anthropic-version": "2023-06-01",
-              "content-type": "application/json",
-              "anthropic-dangerous-direct-browser-access": "true"
-            },
-            body: JSON.stringify({
-              model: selectedModel,
-              max_tokens: 4096,
-              messages: [{ role: "user", content: prompt }]
-            })
-          });
-          const data = await response.json();
-          if (data.error) throw new Error(data.error.message);
-          return data.content[0].text;
-        }
-
-        throw new Error("AI Provider Disconnected.");
-      } catch (err: any) {
-        const msg = err.message || String(err);
-        if (msg.includes('connection error') || msg.includes('Failed to fetch')) {
-          throw new Error(`[${aiProvider}] Connection failed. If using mobile local AI, ensure the bridge app is active. Otherwise check your internet.`);
-        }
-        throw err;
-      }
-    }
-    throw new Error("Failed to reach AI after multiple attempts.");
-  };
-
-  // Gemini AI Provider (Legacy/Internal)
-  const getAI = (customKey?: string) => {
-    // Defensive check for process.env in browser environments
-    const envKey = typeof process !== 'undefined' && process.env ? (process.env.GEMINI_API_KEY as string) : undefined;
-    const key = customKey || providerKeys['google'] || envKey;
-    if (!key) throw new Error("No Energy Source Found. Connect Identity or Provide Key.");
-    return null; // Legacy helper no longer used
-  };
-
-  // Auth Session Listener
+  // Clear provider keys on logout
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-      if (!currentUser) {
-        setProviderKeys({});
-        localStorage.removeItem('app_nexus_keys');
-        localStorage.removeItem('evolutive_energy_key');
-        setUserProfile(null);
-      }
-    });
-
-    return () => unsubscribe();
-  }, []);
+    if (!user) {
+      setProviderKeys({});
+      localStorage.removeItem('app_nexus_keys');
+      localStorage.removeItem('evolutive_energy_key');
+    }
+  }, [user]);
 
   const [initStatus, setInitStatus] = useState<string>("Connecting to System Network...");
 
@@ -778,7 +404,6 @@ export default function App() {
     }, 5000);
 
     const unsubSuggestions = onSnapshot(qSuggestions, (snapshot) => {
-      const newSuggestions: Suggestion[] = [];
       let foundConfig = false;
       snapshot.forEach(docSnap => {
         const s = { id: docSnap.id, ...docSnap.data() } as Suggestion;
@@ -789,8 +414,6 @@ export default function App() {
             setIsFinalized(!!config.is_finalized);
             setCreatorId(config.creator_id || "");
           } catch(e) {}
-        } else {
-          newSuggestions.push(unwrapSuggestion(s));
         }
       });
 
@@ -809,7 +432,6 @@ export default function App() {
         });
       }
 
-      setSuggestions(newSuggestions);
       setInitStatus("System Link Established.");
       setIsInitializing(false);
       clearTimeout(initTimeout);
@@ -973,7 +595,7 @@ export default function App() {
       };
 
       await addDoc(collection(db, 'suggestions'), insertData);
-      setApiQuota(prev => Math.max(0, prev - 10));
+      consumeQuota(10);
     } catch (err) {
       console.error("Refinement failed:", err);
     } finally {
@@ -1007,17 +629,6 @@ export default function App() {
     }
   }, [user, creatorId, isCreator]);
   
-  // Passive Quota Recharge
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setApiQuota(prev => {
-        if (prev >= 100) return 100;
-        return Math.min(100, prev + 1);
-      });
-    }, 60000); // 1% per minute
-    return () => clearInterval(timer);
-  }, []);
-
   useEffect(() => {
     if (user?.uid) {
        setFilterType('mine');
@@ -1025,51 +636,6 @@ export default function App() {
   }, [user]);
 
   // fetchSuggestions is no longer needed as onSnapshot handles real-time updates.
-
-  const handleEmailAuth = async () => {
-    setAuthError(null);
-    setIsLoading(true);
-    try {
-      if (isSignUp) {
-        await createUserWithEmailAndPassword(auth, authEmail, authPassword);
-      } else {
-        await signInWithEmailAndPassword(auth, authEmail, authPassword);
-      }
-      setAuthEmail("");
-      setAuthPassword("");
-    } catch (err: any) {
-      console.error("Auth Exception:", err);
-      setAuthError(err.message);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleGoogleAuth = async () => {
-    setIsLoading(true);
-    try {
-      const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
-    } catch (err: any) {
-      console.error("Google Auth Error:", err);
-      setAuthError(err.message);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleGithubAuth = async () => {
-    setIsLoading(true);
-    try {
-      const provider = new GithubAuthProvider();
-      await signInWithPopup(auth, provider);
-    } catch (err: any) {
-      console.error("GitHub Auth Error:", err);
-      setAuthError(err.message);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const handleSuggest = async () => {
     if (!input.trim()) return;
@@ -1108,20 +674,12 @@ export default function App() {
       };
 
       await addDoc(collection(db, 'suggestions'), insertData);
-      setApiQuota(prev => Math.max(0, prev - 5));
+      consumeQuota(5);
     } catch (err: any) {
       console.error("Error planting intent:", err);
       alert(`System Link Failure: ${err.message}`);
     } finally {
       setIsBuilding(null);
-    }
-  };
-
-  const handleVote = async (id: string, currentVotes: number) => {
-    try {
-      await updateDoc(doc(db, 'suggestions', id), { votes: (currentVotes || 0) + 1 });
-    } catch (err: any) {
-      handleFirestoreError(err, OperationType.UPDATE, `suggestions/${id}`, auth);
     }
   };
 
@@ -1208,7 +766,7 @@ export default function App() {
       await updateDoc(doc(db, 'suggestions', s.id), updateData);
       
       if (shouldBuild) {
-        setApiQuota(prev => Math.max(0, prev - 10));
+        consumeQuota(10);
         const updatedS = { ...s, status: 'built' as const, built_code: builtCode };
         setCurrentSuggestion(updatedS);
       }
@@ -1229,7 +787,7 @@ export default function App() {
         throw new Error("Ownership validation failed. You are not the creator of this module.");
       }
 
-      await updateDoc(doc(db, 'suggestions', id), { status: 'deleted', is_deleted: true });
+      await deleteSuggestion(id);
       if (currentSuggestion?.id === id) setCurrentSuggestion(null);
     } catch (err: any) {
       console.error("Deletion Error:", err);
@@ -1379,7 +937,7 @@ export default function App() {
           built_code: generatedCode
         });
 
-        setApiQuota(prev => Math.max(0, prev - 15));
+        consumeQuota(15);
         const updatedSuggestion = { ...suggestion, status: 'built' as const, built_code: generatedCode };
         setCurrentSuggestion(updatedSuggestion);
       } finally {
@@ -1991,7 +1549,7 @@ export default function App() {
                                   ) : (
                                     <div className="flex gap-2 w-full md:w-auto">
                                       <button 
-                                        onClick={() => handleVote(s.id, s.votes)}
+                                        onClick={() => voteSuggestion(s.id, s.votes)}
                                         className="p-4 rounded-2xl bg-white/5 border border-white/10 text-white/40 hover:bg-white hover:text-black hover:border-white transition-all shadow-lg"
                                         title="Upvote Node"
                                       >
@@ -2177,14 +1735,14 @@ export default function App() {
                         {authError && <p className="text-[9px] text-pink-500 uppercase font-black tracking-widest">{authError}</p>}
                         
                         <button 
-                          onClick={handleEmailAuth}
+                          onClick={() => signInWithEmail(authEmail, authPassword, isSignUp)}
                           className="w-full py-5 bg-white text-black text-[11px] font-black uppercase tracking-[4px] rounded-full hover:bg-indigo-300 transition-all shadow-xl"
                         >
                           {isSignUp ? "Create Account" : "Log In"}
                         </button>
 
                         <button 
-                          onClick={handleGoogleAuth}
+                          onClick={signInWithGoogle}
                           className="w-full py-5 bg-[#4285F4] text-white text-[11px] font-black uppercase tracking-[4px] rounded-full hover:bg-[#357abd] transition-all shadow-xl flex items-center justify-center gap-3"
                         >
                           <svg className="w-4 h-4" viewBox="0 0 24 24">
@@ -2197,7 +1755,7 @@ export default function App() {
                         </button>
 
                         <button 
-                          onClick={handleGithubAuth}
+                          onClick={signInWithGithub}
                           className="w-full py-5 bg-[#333] text-white text-[11px] font-black uppercase tracking-[4px] rounded-full hover:bg-black transition-all shadow-xl flex items-center justify-center gap-3 border border-white/10"
                         >
                           <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
@@ -2220,7 +1778,7 @@ export default function App() {
                         </div>
 
                         <button 
-                          onClick={handleGithubAuth}
+                          onClick={signInWithGithub}
                           className="w-full px-6 py-5 bg-gradient-to-r from-gray-800 to-black text-white text-[11px] font-black uppercase tracking-[4px] rounded-full hover:scale-[1.02] transition-all flex items-center justify-center gap-3 disabled:opacity-30 border border-white/10"
                         >
                           <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
@@ -2437,7 +1995,7 @@ export default function App() {
                            </div>
 
                            <button 
-                             onClick={() => auth.signOut()}
+                             onClick={logout}
                              className="w-full py-6 bg-red-500/5 border border-red-500/10 rounded-full text-[12px] font-black uppercase tracking-[15px] text-red-500/40 hover:bg-red-500 hover:text-white hover:border-red-500 transition-all hover:tracking-[18px] lg:mt-10"
                            >
                              TERMINATE_Manifestation
