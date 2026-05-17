@@ -1972,7 +1972,7 @@ export default function App() {
                             </div>
                             <div className="flex flex-wrap gap-3 items-center justify-center">
                               <div className="flex gap-3 p-2 bg-black/60 rounded-full border border-white/5 backdrop-blur-3xl shadow-[0_0_50px_rgba(0,0,0,0.5)]">
-                                {(['google', 'openai', 'anthropic', 'custom', 'web-llm', 'mlc-mobile'] as const).map((p) => (
+                                {(['google', 'openai', 'anthropic', 'custom', 'web-llm'] as const).map((p) => (
                                   <button
                                     key={p}
                                     onClick={() => setAiProvider(p)}
@@ -1988,7 +1988,6 @@ export default function App() {
                                     {p === 'anthropic' && <Sparkles className="w-4 h-4 text-white" />}
                                     {p === 'custom' && <Code className="w-4 h-4 text-white" />}
                                     {p === 'web-llm' && <Cpu className="w-4 h-4 text-white" />}
-                                    {p === 'mlc-mobile' && <Monitor className="w-4 h-4 text-white" />}
                                   </button>
                                 ))}
                               </div>
@@ -2195,7 +2194,7 @@ export default function App() {
                                       <option value="claude-3-opus-20240229">Claude 3 Opus</option>
                                     </>
                                   )}
-                                  {aiProvider === 'custom' || aiProvider === 'mlc-mobile' || aiProvider === 'web-llm' || aiProvider === 'gemini-nano' ? (
+                                  {aiProvider === 'custom' || aiProvider === 'web-llm' || aiProvider === 'gemini-nano' ? (
                                      <option value={selectedModel}>{selectedModel.toUpperCase()}</option>
                                   ) : null}
                                 </select>
@@ -2217,17 +2216,17 @@ export default function App() {
                             </div>
                           </div>
 
-                          {(aiProvider === 'custom' || aiProvider === 'mlc-mobile') && (
+                          {aiProvider === 'custom' && (
                             <div className="bg-black/20 p-6 rounded-[2rem] border border-yellow-500/10 space-y-3 text-center md:text-left">
                               <label className="text-[9px] font-black uppercase tracking-[3px] text-white/40 block">Network Anchor (Endpoint URL)</label>
                               <div className="relative group">
                                 <Globe className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/10 group-focus-within:text-yellow-400 transition-colors" />
-                                <input 
+                                <input
                                   type="text"
                                   value={customEndpoint}
                                   onChange={(e) => setCustomEndpoint(e.target.value)}
                                   className="w-full bg-black/40 border border-white/10 rounded-2xl py-4 pl-12 px-4 text-[11px] text-white outline-none focus:border-yellow-500/50 transition-all font-mono"
-                                  placeholder={aiProvider === 'custom' ? "http://localhost:11434/v1" : "http://手机IP:8080/v1"}
+                                  placeholder="http://localhost:11434/v1"
                                 />
                               </div>
                             </div>

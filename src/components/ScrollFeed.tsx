@@ -121,9 +121,9 @@ function FeedCard({
   onVote: (id: string, votes: number) => void;
   onBuild?: (s: Suggestion) => void;
 }) {
-  const [livePreview, setLivePreview] = useState(false);
   const [voted, setVoted] = useState(false);
   const isBuilt = s.status === "built" && !!s.built_code;
+  const [livePreview, setLivePreview] = useState(isBuilt);
   const style = TYPE_STYLES[s.app_type || "desktop"] || TYPE_STYLES.desktop;
 
   const handleVote = () => {

@@ -44,7 +44,7 @@ export async function callGeminiCloud(
             model: "gemini-3-flash-preview",
             contents: prompt
           });
-          return result.text;
+          return result.text ?? "";
         }
         if (data.error === "SYSTEM_KEY_MISSING") {
           throw new Error("System Cloud Key missing. Enable the Neural Hub and provide a Google API Key.");
@@ -127,9 +127,10 @@ export async function callAI(prompt: string, options: AICallOptions): Promise<st
       }
 
       if (provider === 'mlc-mobile') {
+        if (!customEndpoint) throw new Error("MLC Mobile requires a custom endpoint URL. Set it in Settings.");
         const client = new OpenAI({
           apiKey: "no-key",
-          baseURL: customEndpoint || "http://localhost:8080/v1",
+          baseURL: customEndpoint,
           dangerouslyAllowBrowser: true,
         });
         const response = await client.chat.completions.create({

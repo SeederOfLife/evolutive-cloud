@@ -1,5 +1,5 @@
 
-import React, { useMemo } from "react";
+import { useMemo } from "react";
 
 interface AppSandboxProps {
   code: string;
@@ -9,173 +9,160 @@ interface AppSandboxProps {
   onError?: (msg: string, stack?: string) => void;
 }
 
-export function AppSandbox({ code, appType = 'desktop', className = "", onLog, onError }: AppSandboxProps) {
+export function AppSandbox({ code, className = "" }: AppSandboxProps) {
   const cleanCode = useMemo(() => {
     if (!code) return "";
-    let processed = code;
-    processed = processed.replace(/import\s+[\s\S]*?from\s+(["'])(?:react|lucide-react|framer-motion|motion\/react|recharts|d3|three|@react-three\/fiber|@react-three\/drei|react-markdown|tone|openai|canvas-confetti|clsx|tailwind-merge|@google\/generative-ai).*?\1;?/g, '');
-    processed = processed.replace(/import\s+(['"]).*?\1;?/g, '');
-    processed = processed.replace(/import\s+\{([^}]+)\}\s+from\s+(["'])(?:react|lucide-react|framer-motion|motion\/react|recharts|d3|three|@react-three\/fiber|@react-three\/drei|react-markdown|tone|openai|canvas-confetti|clsx|tailwind-merge|@google\/generative-ai).*?\2;?/g, '');
-    processed = processed.replace(/const\s+\{[\s\S]*?\}\s*=\s*(window\.)?(React|Motion|lucide|Lucide|Recharts|d3|LucideReact);?/g, '');
-    processed = processed.replace(/const\s+([a-zA-Z0-9_$]+)\s*=\s*(window\.)?(React|Motion|lucide|Lucide|Recharts|d3|LucideReact)\.([a-zA-Z0-9_$]+);?/g, '');
-    processed = processed.replace(/export\s+default\s+function\s+([a-zA-Z0-9_$]+)/g, 'window.__BUILT_APP__ = function $1');
-    processed = processed.replace(/export\s+default\s+function\s*\(/g, 'window.__BUILT_APP__ = function (');
-    processed = processed.replace(/export\s+default\s+\(([^)]*)\)\s*=>/g, 'window.__BUILT_APP__ = ($1) =>');
-    processed = processed.replace(/export\s+default\s+class\s+([a-zA-Z0-9_$]+)/g, 'window.__BUILT_APP__ = class $1');
-    processed = processed.replace(/export\s+default\s+class\s*\{/g, 'window.__BUILT_APP__ = class {');
-    processed = processed.replace(/export\s+default\s+([a-zA-Z0-9_$]+);?\s*$/gm, 'window.__BUILT_APP__ = $1;');
-    processed = processed.replace(/export\s+default\s+/g, 'window.__BUILT_APP__ = ');
-    processed = processed.replace(/\bexport\s+/g, '');
-    return processed.trim();
+    let p = code;
+    p = p.replace(/import\s+[\s\S]*?from\s+(["'])(?:react|lucide-react|framer-motion|motion\/react|recharts|d3|three|@react-three\/fiber|@react-three\/drei|react-markdown|tone|openai|canvas-confetti|clsx|tailwind-merge|@google\/generative-ai).*?\1;?/g, '');
+    p = p.replace(/import\s+(['"]).*?\1;?/g, '');
+    p = p.replace(/export\s+default\s+function\s+([a-zA-Z0-9_$]+)/g, 'window.__BUILT_APP__ = function $1');
+    p = p.replace(/export\s+default\s+function\s*\(/g, 'window.__BUILT_APP__ = function (');
+    p = p.replace(/export\s+default\s+\(([^)]*)\)\s*=>/g, 'window.__BUILT_APP__ = ($1) =>');
+    p = p.replace(/export\s+default\s+class\s+([a-zA-Z0-9_$]+)/g, 'window.__BUILT_APP__ = class $1');
+    p = p.replace(/export\s+default\s+([a-zA-Z0-9_$]+);?\s*$/gm, 'window.__BUILT_APP__ = $1;');
+    p = p.replace(/export\s+default\s+/g, 'window.__BUILT_APP__ = ');
+    p = p.replace(/\bexport\s+/g, '');
+    return p.trim();
   }, [code]);
 
   const srcDoc = useMemo(() => {
-    return `
-    <!DOCTYPE html>
-    <html>
-      <head>
-        <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <script crossorigin="anonymous" src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
-        <script crossorigin="anonymous" src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
-        <script crossorigin="anonymous" src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.12/babel.min.js"></script>
-        <script src="https://cdn.tailwindcss.com"></script>
-        <script crossorigin="anonymous" src="https://unpkg.com/lucide-react@0.453.0/dist/umd/lucide-react.min.js"></script>
-        <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/framer-motion@10.16.4/dist/framer-motion.js"></script>
-        <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/recharts@2.12.7/umd/Recharts.js"></script>
-        <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
-        <script crossorigin="anonymous" src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r170/three.min.js"></script>
-        <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/react-markdown@8.0.7/react-markdown.min.js"></script>
-        <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
-        <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/clsx@2.1.1/dist/clsx.min.js"></script>
-        <script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/tone@14.7.77/build/Tone.js"></script>
-        <style>
-          body { background: #000; color: white; margin: 0; min-height: 100vh; display: flex; flex-direction: column; overflow: auto; font-family: sans-serif; }
-          #root { flex: 1; display: flex; flex-direction: column; }
-          #loading { 
-            position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; 
-            background: #000; z-index: 9999; color: #4f46e5; font-size: 10px; text-transform: uppercase; letter-spacing: 4px;
-            animation: pulse 2s infinite;
-          }
-          @keyframes pulse { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
-        </style>
-      </head>
-      <body>
-        <div id="loading">Initializing_Neural_Node...</div>
-        <div id="root"></div>
-        <script>
-          (async function() {
-            window.process = { env: { NODE_ENV: 'production' } };
-            const rootElement = document.getElementById('root');
-            const loadingElement = document.getElementById('loading');
-            
-            window.onerror = (msg, url, line, col, error) => {
-              window.parent.postMessage({ type: 'EVO_ERROR', msg, stack: error?.stack }, '*');
-              if (loadingElement) loadingElement.innerText = "Execution_Error";
-              return false;
-            };
+    // Escape backticks and </script> so they're safe inside template literal and HTML script tag
+    const safeCode = JSON.stringify(cleanCode)
+      .replace(/`/g, '\\u0060')
+      .replace(/<\//g, '<\\/');
 
-            try {
-              const start = Date.now();
-              while ((!window.Babel || !window.React || !window.ReactDOM || !window.LucideReact) && Date.now() - start < 15000) {
-                await new Promise(r => setTimeout(r, 200));
-              }
+    return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<script src="https://cdn.tailwindcss.com"><\/script>
+<style>
+body{background:#050508;color:#fff;margin:0;min-height:100vh;display:flex;flex-direction:column;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;overflow:auto}
+#root{flex:1;display:flex;flex-direction:column}
+.err{padding:16px;color:#ef4444;font-family:monospace;font-size:11px;word-break:break-all;white-space:pre-wrap;background:rgba(239,68,68,.04);border:1px solid rgba(239,68,68,.15);border-radius:10px;margin:12px}
+::-webkit-scrollbar{width:5px}::-webkit-scrollbar-thumb{background:rgba(255,255,255,.1);border-radius:10px}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+(function(){
+  var root=document.getElementById('root');
+  function showErr(msg,stack){
+    root.innerHTML='<div class="err"><b>Error:</b> '+msg+(stack?'<br><pre style="font-size:9px;opacity:.5;margin-top:8px;overflow:auto;max-height:120px">'+stack+'</pre>':'')+'<\/div>';
+    window.parent&&window.parent.postMessage({type:'EVO_ERROR',msg:msg},'*');
+  }
+  window.onerror=function(m,u,l,c,e){showErr(String(m),e&&e.stack);return true;};
 
-              var { useState, useEffect, useMemo, useRef, useCallback, createContext, useContext, useReducer, useLayoutEffect } = window.React;
-              var React = window.React;
-              var ReactDOM = window.ReactDOM;
-              var Motion = window.motion || window.Motion || window.framerMotion || {};
-              var Markdown = window.ReactMarkdown;
-              var { clsx } = window;
-              var Tone = window.Tone || {};
-              
-              window.require = (name) => {
-                const map = {
-                  'react': window.React,
-                  'react-dom': window.ReactDOM,
-                  'react-dom/client': window.ReactDOM,
-                  'lucide-react': window.LucideReact,
-                  'framer-motion': Motion,
-                  'motion/react': Motion,
-                  'recharts': window.Recharts,
-                  'd3': window.d3,
-                  'three': window.THREE,
-                  'react-markdown': window.ReactMarkdown,
-                  'canvas-confetti': window.confetti,
-                  'clsx': window.clsx,
-                  'tailwind-merge': window.tailwindMerge,
-                  'tone': window.Tone
-                };
-                return map[name] || window[name] || {};
-              };
+  var SCRIPTS=[
+    'https://unpkg.com/react@18.2.0/umd/react.development.js',
+    'https://unpkg.com/react-dom@18.2.0/umd/react-dom.development.js',
+    'https://unpkg.com/@babel/standalone@7.23.0/babel.min.js',
+    'https://unpkg.com/lucide-react@0.263.0/dist/umd/lucide-react.js',
+    'https://unpkg.com/recharts@2.8.0/umd/Recharts.js'
+  ];
+  var idx=0;
+  function loadNext(){
+    if(idx>=SCRIPTS.length){runApp();return;}
+    var s=document.createElement('script');
+    s.src=SCRIPTS[idx++];s.crossOrigin='anonymous';
+    s.onload=loadNext;
+    s.onerror=function(){showErr('CDN failed to load: '+SCRIPTS[idx-1]);};
+    document.head.appendChild(s);
+  }
 
-              window.motion = Motion.motion || Motion;
-              window.AnimatePresence = Motion.AnimatePresence;
+  function mkEl(tag){
+    return function(p){
+      p=p||{};
+      return window.React.createElement(tag,{className:p.className,style:p.style,id:p.id,onClick:p.onClick,onChange:p.onChange},p.children);
+    };
+  }
 
-              // Expose popular libs to global scope
-              window.React = React;
-              window.ReactDOM = window.ReactDOM; // Keep it same
-              window.THREE = window.THREE;
-              window.Markdown = Markdown;
-              window.clsx = clsx;
-              window.Tone = Tone;
-              
-              var __internal_Lucide = window.LucideReact || {};
-              window.lucide = __internal_Lucide;
-              
-              // Expose icons globally
-              Object.keys(__internal_Lucide).forEach(key => { 
-                if (/^[A-Z]/.test(key)) window[key] = __internal_Lucide[key]; 
-              });
+  function runApp(){
+    try{
+      window.process={env:{NODE_ENV:'development'}};
+      window.exports={};window.module={exports:window.exports};
+      var R=window.React,RD=window.ReactDOM;
+      var IC=window.lucideReact||window.LucideReact||{};
+      var RC=window.Recharts||{};
 
-              if (loadingElement) loadingElement.innerText = "Manifesting_Code...";
+      // React hooks as globals
+      ['useState','useEffect','useMemo','useRef','useCallback','createContext','useContext',
+       'useReducer','useLayoutEffect','forwardRef','Fragment','memo','Children','cloneElement'].forEach(function(h){
+        if(R[h]!==undefined)window[h]=R[h];
+      });
+      // Lucide icons as globals
+      Object.keys(IC).forEach(function(k){if(k!=='default')window[k]=IC[k];});
+      // Recharts components as globals
+      Object.keys(RC).forEach(function(k){if(/^[A-Z]/.test(k))window[k]=RC[k];});
 
-              const scriptBody = ${JSON.stringify(cleanCode)};
-              const keys = Object.keys(window.React).filter(k => /^[a-zA-Z0-9_$]+$/.test(k));
-              const scopePrefix = 'var { ' + keys.join(', ') + ' } = window.React;\n';
-              const transpiled = Babel.transform(scopePrefix + scriptBody, { 
-                presets: ['env', 'react', 'typescript'],
-                filename: 'built-app.tsx'
-              }).code;
-              
-              const scriptNode = document.createElement('script');
-              scriptNode.text = transpiled;
-              document.body.appendChild(scriptNode);
+      // Motion stub: renders without animations so content is still visible
+      var motionObj={};
+      ['div','span','p','h1','h2','h3','h4','h5','h6','ul','ol','li','a','button','img',
+       'input','textarea','section','article','header','footer','nav','main','aside'].forEach(function(t){motionObj[t]=mkEl(t);});
+      try{window.motion=new Proxy(motionObj,{get:function(o,k){return o[k]||mkEl(String(k));}});}
+      catch(e){window.motion=motionObj;}
+      window.AnimatePresence=function(p){return p&&p.children||null;};
+      var FM={motion:window.motion,AnimatePresence:window.AnimatePresence,LayoutGroup:R.Fragment};
+      window.FramerMotion=FM;
 
-              await new Promise(r => setTimeout(r, 100));
+      window.require=function(m){
+        var map={
+          react:R,'react-dom':RD,'react-dom/client':RD,
+          'lucide-react':IC,recharts:RC,
+          'framer-motion':FM,'motion/react':FM
+        };
+        return map[m]||window[m]||{};
+      };
 
-              // Advanced Component Discovery
-              let AppComp = window.__BUILT_APP__ || window.App || window.Main || window.DefaultApp;
-              
-              if (!AppComp) {
-                // Heuristic search for React components in global scope
-                const candidates = Object.keys(window).filter(k => 
-                  /^[A-Z]/.test(k) && 
-                  typeof window[k] === 'function' && 
-                  !['React', 'ReactDOM', 'Recharts', 'Motion', 'LucideReact', 'Babel', 'THREE', 'Tone'].includes(k)
-                );
-                if (candidates.length > 0) AppComp = window[candidates[0]];
-              }
+      var code=${safeCode};
+      if(!code||code.length<5){
+        root.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100vh;opacity:.15;text-transform:uppercase;letter-spacing:8px;font-size:10px;font-weight:900;">Awaiting Build<\/div>';
+        return;
+      }
 
-              if (AppComp) {
-                if (loadingElement) loadingElement.style.display = 'none';
-                ReactDOM.createRoot(rootElement).render(React.createElement(AppComp));
-              } else {
-                if (loadingElement) loadingElement.innerText = "No_Entry_Point_Found";
-              }
-            } catch (err) {
-              console.error(err);
-              if (loadingElement) loadingElement.innerText = "Neural_Failure";
-            }
-          })();
-        </script>
-      </body>
-    </html>
-  `;
+      // Build scope prefix: React hooks + icons/recharts actually used in the code
+      var hooks='useState,useEffect,useMemo,useRef,useCallback,createContext,useContext,useReducer,useLayoutEffect,forwardRef,Fragment,memo';
+      var usedIC=Object.keys(IC).filter(function(k){return k!=='default'&&/^[a-zA-Z0-9_$]+$/.test(k)&&code.indexOf(k)!==-1;});
+      var usedRC=Object.keys(RC).filter(function(k){return /^[A-Z][a-zA-Z0-9_$]*$/.test(k)&&code.indexOf(k)!==-1;});
+      var scope='var React=window.React,ReactDOM=window.ReactDOM,motion=window.motion,AnimatePresence=window.AnimatePresence;\n'+
+                'var {'+hooks+'}=window.React;\n';
+      if(usedIC.length)scope+='var {'+usedIC.join(',')+'}=window.lucideReact||{};\n';
+      if(usedRC.length)scope+='var {'+usedRC.join(',')+'}=window.Recharts||{};\n';
+
+      var out;
+      try{out=Babel.transform(scope+code,{presets:['env','react','typescript'],filename:'app.tsx'}).code;}
+      catch(e){throw new Error('Transpile error: '+e.message);}
+      var el=document.createElement('script');el.text=out;document.body.appendChild(el);
+
+      setTimeout(function(){
+        var App=window.__BUILT_APP__||window.App||window.Main||window.BuiltApp;
+        if(!App){
+          var found=Object.keys(window).find(function(k){
+            return /^[A-Z]/.test(k)&&typeof window[k]==='function'&&
+              !['React','ReactDOM','Babel','Recharts','FramerMotion'].includes(k)&&!IC[k];
+          });
+          if(found)App=window[found];
+        }
+        if(App){
+          try{RD.createRoot(root).render(R.createElement(App));}
+          catch(e){showErr('Render error: '+e.message,e.stack);}
+        }else{
+          showErr("No App component found. Make sure code exports a default function App().");
+        }
+      },50);
+    }catch(e){showErr(e.message,e.stack);}
+  }
+
+  loadNext();
+})();
+<\/script>
+</body>
+</html>`;
   }, [cleanCode]);
 
   return (
-    <iframe 
+    <iframe
       srcDoc={srcDoc}
       className={`w-full h-full border-none bg-black ${className}`}
       title="app-sandbox"
