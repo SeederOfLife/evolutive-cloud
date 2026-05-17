@@ -1122,13 +1122,32 @@ export default function App() {
             </button>
 
             {neuralStatus !== 'IDLE' && (
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="px-4 py-2 bg-indigo-500/10 border border-indigo-500/30 rounded-full flex items-center gap-3 backdrop-blur-md"
+                className={`px-3 py-1.5 border rounded-full flex items-center gap-2 backdrop-blur-md ${
+                  aiError
+                    ? 'bg-red-500/10 border-red-500/30'
+                    : 'bg-indigo-500/10 border-indigo-500/30'
+                }`}
               >
-                 <Loader2 className="w-3 h-3 text-indigo-400 animate-spin" />
-                 <span className="text-[9px] font-black text-indigo-400 uppercase tracking-widest">{neuralStatus}</span>
+                {aiError ? (
+                  <X className="w-3 h-3 text-red-400 shrink-0" />
+                ) : (
+                  <Loader2 className="w-3 h-3 text-indigo-400 animate-spin shrink-0" />
+                )}
+                <span className={`text-[9px] font-black uppercase tracking-widest ${aiError ? 'text-red-400' : 'text-indigo-400'}`}>
+                  {neuralStatus}
+                </span>
+                {aiError && (
+                  <button
+                    onClick={() => setAiError(null)}
+                    className="ml-1 text-red-400/60 hover:text-red-300 transition-colors"
+                    title="Dismiss"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
               </motion.div>
             )}
           </div>
@@ -1484,7 +1503,6 @@ export default function App() {
                     <div className="-mx-6 -mb-6" style={{ height: 'calc(100vh - 280px)', minHeight: 400 }}>
                       <ScrollFeed
                         suggestions={displaySuggestions}
-                        currentUser={user}
                         onPlay={(s) => setCurrentSuggestion(s)}
                         onVote={(id, votes) => voteSuggestion(id, votes)}
                         onBuild={(s) => buildEvolution(s)}
@@ -1815,10 +1833,10 @@ export default function App() {
                               </div>
                               
                               <div className="relative z-10 space-y-2 text-center sm:text-left">
-                                <div className="text-7xl lg:text-8xl text-white font-black tracking-tighter leading-none mb-6">
+                                <div className="text-5xl lg:text-6xl text-white font-black tracking-tighter leading-none mb-4">
                                   {stat.val}
                                 </div>
-                                <div className="text-[14px] text-white/30 uppercase tracking-[8px] font-black group-hover:text-white transition-colors">{stat.label}</div>
+                                <div className="text-[12px] text-white/30 uppercase tracking-[6px] font-black group-hover:text-white transition-colors">{stat.label}</div>
                                 <div className="text-[10px] text-white/15 uppercase tracking-[4px] font-bold mt-2 max-w-[280px] leading-relaxed mx-auto sm:mx-0">{stat.desc}</div>
                               </div>
                             </motion.div>
@@ -1861,7 +1879,7 @@ export default function App() {
                                   </div>
                                   <span className="text-[10px] uppercase font-black tracking-[5px] text-white/20 group-hover/item:text-white transition-colors">{item.label}</span>
                                 </div>
-                                <div className="text-4xl lg:text-5xl font-mono text-white tracking-[2px] group-hover/item:translate-y-[-4px] transition-all">{item.val}</div>
+                                <div className="text-3xl lg:text-4xl font-mono text-white tracking-[2px] group-hover/item:translate-y-[-4px] transition-all">{item.val}</div>
                               </div>
                             ))}
                           </div>
@@ -1986,7 +2004,7 @@ export default function App() {
                           <div className="flex flex-col lg:flex-row items-center lg:items-end justify-between gap-10">
                             <div className="space-y-6 text-center lg:text-left">
                               <div className="flex flex-col sm:flex-row items-center gap-6">
-                                <h2 className="text-4xl md:text-5xl font-black uppercase tracking-[10px] text-white leading-none">{aiProvider.replace('-', ' ')}</h2>
+                                <h2 className="text-2xl md:text-3xl font-black uppercase tracking-[8px] text-white leading-none">{aiProvider.replace('-', ' ')}</h2>
                                 {aiProvider === 'google' && <span className="px-4 py-1 bg-indigo-500/10 text-indigo-400 text-[9px] font-black uppercase tracking-widest border border-indigo-500/20 rounded-full">Core Architecture</span>}
                               </div>
                               <div className="flex items-center justify-center lg:justify-start gap-6">
@@ -2017,14 +2035,31 @@ export default function App() {
                           </div>
 
                           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                            <div className="bg-black/20 p-8 rounded-[2.5rem] border border-white/5 space-y-6 group text-center md:text-left hover:border-indigo-500/20 transition-all">
+                            <div className="bg-black/20 p-8 rounded-[2.5rem] border border-white/5 space-y-5 group text-center md:text-left hover:border-indigo-500/20 transition-all">
                               <div className="flex items-center justify-between">
                                 <label className="text-[10px] font-black uppercase tracking-[4px] text-white/40 group-focus-within:text-indigo-400 transition-colors">
-                                  {aiProvider === 'web-llm' || aiProvider === 'gemini-nano' ? 'Hardware Engine' : 'Energy Secret'}
+                                  {aiProvider === 'web-llm' || aiProvider === 'gemini-nano' ? 'Hardware Engine' : 'API Key'}
                                 </label>
                                 <Lock className="w-4 h-4 text-white/10" />
                               </div>
-                              
+
+                              {aiProvider === 'google' && (
+                                <div className="text-left space-y-1">
+                                  <p className="text-[10px] text-white/50 leading-relaxed">
+                                    Get a free Gemini API key from{' '}
+                                    <a
+                                      href="https://aistudio.google.com/app/apikey"
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="text-indigo-400 hover:text-indigo-300 underline underline-offset-2 transition-colors"
+                                    >
+                                      aistudio.google.com
+                                    </a>
+                                    , then paste it below.
+                                  </p>
+                                </div>
+                              )}
+
                               {aiProvider === 'web-llm' || aiProvider === 'gemini-nano' ? (
                                 <div className="p-4 bg-indigo-500/5 border border-indigo-500/20 rounded-2xl">
                                   <div className="flex items-center gap-3 mb-2">
@@ -2038,28 +2073,22 @@ export default function App() {
                               ) : (
                                 <div className="relative">
                                   <Key className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/10 group-focus-within:text-indigo-400 transition-colors" />
-                                  <input 
-                                    type="password" 
-                                    placeholder={aiProvider === 'google' ? "ENTER GOOGLE API KEY (REQUIRED FOR EXTERNAL HOSTING)" : "Identity Token Required"}
+                                  <input
+                                    type="password"
+                                    placeholder={aiProvider === 'google' ? "Paste Gemini API key here…" : "Paste API key here…"}
                                     value={userApiKey}
                                     onChange={(e) => saveApiKeyToAccount(e.target.value)}
-                                    className="w-full bg-black/40 border border-white/5 rounded-2xl py-4 pl-12 pr-4 text-[11px] text-white outline-none focus:border-indigo-500/30 transition-all font-mono"
+                                    className="w-full bg-black/40 border border-white/10 rounded-2xl py-3.5 pl-12 pr-4 text-[12px] text-white outline-none focus:border-indigo-500/50 transition-all font-mono placeholder:text-white/20"
                                   />
                                 </div>
                               )}
 
-                              {aiProvider === 'google' && !process.env.GEMINI_API_KEY && !userApiKey && (
-                                <p className="mt-2 text-[8px] text-pink-500/60 font-black uppercase tracking-widest text-center">
-                                  System key not detected. Provide your own key to manifest ideas.
-                                </p>
-                              )}
-
                               {!(aiProvider === 'web-llm' || aiProvider === 'gemini-nano') && (
-                                <button 
+                                <button
                                   onClick={() => saveApiKeyToAccount(userApiKey)}
-                                  className="w-full py-3 bg-white/5 hover:bg-white hover:text-black text-[8px] font-black uppercase tracking-widest rounded-xl transition-all border border-white/5"
+                                  className="w-full py-3 bg-indigo-500/10 hover:bg-white hover:text-black text-indigo-400 hover:text-black text-[10px] font-black uppercase tracking-widest rounded-xl transition-all border border-indigo-500/20 hover:border-white"
                                 >
-                                  Synchronize Key
+                                  Save Key
                                 </button>
                               )}
                               <button 

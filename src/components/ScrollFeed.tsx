@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect, useCallback } from "react";
+import { useRef, useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Play, Zap, ChevronUp, Maximize2, X, Loader2 } from "lucide-react";
 import { Suggestion } from "../types";
@@ -13,13 +13,12 @@ const TYPE_STYLES: Record<string, { badge: string; glow: string }> = {
 
 interface Props {
   suggestions: Suggestion[];
-  currentUser: any;
   onPlay: (s: Suggestion) => void;
   onVote: (id: string, votes: number) => void;
   onBuild?: (s: Suggestion) => void;
 }
 
-export function ScrollFeed({ suggestions, currentUser, onPlay, onVote, onBuild }: Props) {
+export function ScrollFeed({ suggestions, onPlay, onVote, onBuild }: Props) {
   const [activeIndex, setActiveIndex] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -70,7 +69,12 @@ export function ScrollFeed({ suggestions, currentUser, onPlay, onVote, onBuild }
       <div
         ref={containerRef}
         className="flex-1 overflow-y-scroll"
-        style={{ scrollSnapType: "y mandatory", scrollBehavior: "smooth" }}
+        style={{
+          scrollSnapType: "y mandatory",
+          scrollBehavior: "smooth",
+          scrollbarWidth: "thin",
+          scrollbarColor: "rgba(99,102,241,0.3) transparent",
+        }}
       >
         {items.map((s, idx) => (
           <FeedCard
@@ -168,24 +172,24 @@ function FeedCard({
       </div>
 
       {/* Bottom info panel */}
-      <div className="relative z-10 mt-auto p-6 md:p-8 space-y-5">
-        {/* Title */}
-        <div className="space-y-2">
-          <h2 className="text-2xl md:text-3xl font-black uppercase tracking-tight text-white leading-tight line-clamp-3">
+      <div className="relative z-10 mt-auto p-5 md:p-6 space-y-3">
+        {/* Title + id */}
+        <div>
+          <h2 className="text-lg md:text-xl font-black uppercase tracking-tight text-white leading-snug line-clamp-2">
             {s.content}
           </h2>
-          <p className="text-[9px] font-mono text-white/20 uppercase tracking-widest">
+          <p className="text-[9px] font-mono text-white/20 uppercase tracking-widest mt-1">
             #{s.id.substring(0, 12)}
           </p>
         </div>
 
         {/* Energy bar */}
-        <div className="space-y-1.5">
+        <div className="space-y-1">
           <div className="flex justify-between items-center">
             <span className="text-[9px] font-black uppercase tracking-widest text-white/30">Energy</span>
-            <span className="text-[10px] font-black text-indigo-400">{s.energy || 0}%</span>
+            <span className="text-[9px] font-black text-indigo-400">{s.energy || 0}%</span>
           </div>
-          <div className="h-1 w-full bg-white/5 rounded-full overflow-hidden">
+          <div className="h-[3px] w-full bg-white/5 rounded-full overflow-hidden">
             <motion.div
               initial={{ width: 0 }}
               animate={{ width: `${s.energy || 0}%` }}
@@ -196,19 +200,19 @@ function FeedCard({
         </div>
 
         {/* Action row */}
-        <div className="flex gap-3 items-center">
+        <div className="flex gap-2 items-center">
           {/* Vote */}
           <motion.button
             whileTap={{ scale: 0.9 }}
             onClick={handleVote}
-            className={`flex flex-col items-center gap-0.5 w-14 h-14 rounded-2xl border transition-all ${
+            className={`flex flex-col items-center justify-center gap-0.5 w-12 h-12 rounded-xl border transition-all shrink-0 ${
               voted
                 ? "bg-indigo-500/20 border-indigo-500/40 text-indigo-400"
                 : "bg-white/5 border-white/10 text-white/40 hover:bg-white/10 hover:text-white"
             }`}
           >
-            <ChevronUp className="w-4 h-4" />
-            <span className="text-[9px] font-black">{(s.votes || 0) + (voted ? 1 : 0)}</span>
+            <ChevronUp className="w-3.5 h-3.5" />
+            <span className="text-[8px] font-black leading-none">{(s.votes || 0) + (voted ? 1 : 0)}</span>
           </motion.button>
 
           {/* Preview toggle for built apps */}
@@ -216,14 +220,14 @@ function FeedCard({
             <motion.button
               whileTap={{ scale: 0.9 }}
               onClick={() => setLivePreview((p) => !p)}
-              className={`w-14 h-14 rounded-2xl border flex items-center justify-center transition-all ${
+              className={`w-12 h-12 rounded-xl border flex items-center justify-center transition-all shrink-0 ${
                 livePreview
                   ? "bg-indigo-500/20 border-indigo-500/40 text-indigo-400"
                   : "bg-white/5 border-white/10 text-white/40 hover:bg-white/10 hover:text-white"
               }`}
               title="Toggle live preview"
             >
-              {livePreview ? <X className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+              {livePreview ? <X className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
             </motion.button>
           )}
 
@@ -232,23 +236,23 @@ function FeedCard({
             <motion.button
               whileTap={{ scale: 0.97 }}
               onClick={() => onPlay(s)}
-              className="flex-1 py-4 bg-white text-black rounded-2xl font-black text-[11px] uppercase tracking-[6px] hover:bg-indigo-500 hover:text-white transition-all flex items-center justify-center gap-3 shadow-2xl"
+              className="flex-1 py-3 bg-white text-black rounded-xl font-black text-[10px] uppercase tracking-[5px] hover:bg-indigo-500 hover:text-white transition-all flex items-center justify-center gap-2 shadow-xl"
             >
-              <Play className="w-4 h-4 fill-current" />
+              <Play className="w-3.5 h-3.5 fill-current" />
               Launch App
             </motion.button>
           ) : onBuild ? (
             <motion.button
               whileTap={{ scale: 0.97 }}
               onClick={() => onBuild(s)}
-              className="flex-1 py-4 bg-indigo-500 text-white rounded-2xl font-black text-[11px] uppercase tracking-[6px] hover:bg-indigo-600 transition-all flex items-center justify-center gap-3 shadow-2xl"
+              className="flex-1 py-3 bg-indigo-500 text-white rounded-xl font-black text-[10px] uppercase tracking-[5px] hover:bg-indigo-600 transition-all flex items-center justify-center gap-2 shadow-xl"
             >
-              <Zap className="w-4 h-4" />
+              <Zap className="w-3.5 h-3.5" />
               Build Now
             </motion.button>
           ) : (
-            <div className="flex-1 py-4 bg-white/5 border border-white/10 rounded-2xl font-black text-[11px] uppercase tracking-widest text-white/20 flex items-center justify-center gap-3">
-              <Loader2 className="w-4 h-4" />
+            <div className="flex-1 py-3 bg-white/5 border border-white/10 rounded-xl font-black text-[10px] uppercase tracking-widest text-white/20 flex items-center justify-center gap-2">
+              <Loader2 className="w-3.5 h-3.5" />
               {s.energy || 0}% fueled
             </div>
           )}
