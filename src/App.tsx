@@ -1383,7 +1383,7 @@ export default function App() {
             initial={{ opacity: 0, y: 40 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 40 }}
-            className="fixed inset-0 m-auto w-full h-full md:w-[90vw] md:h-[85vh] bg-black/95 backdrop-blur-2xl border-none md:border-2 md:border-white/10 flex flex-col z-50 shadow-[0_0_100px_rgba(0,0,0,0.8)] overflow-hidden rounded-none md:rounded-none"
+            className="fixed inset-x-0 top-0 bottom-[80px] z-50 bg-black/95 backdrop-blur-2xl flex flex-col overflow-hidden"
           >
             {/* Dashboard Panel */}
             <div className="flex flex-col md:flex-row border-b border-white/10 p-4 md:p-6 shrink-0 bg-white/5 items-center justify-between gap-4">
@@ -1393,7 +1393,7 @@ export default function App() {
                     <button 
                       key={tab}
                       onClick={() => setActiveTab(tab as any)}
-                      className={`text-[10px] md:text-[12px] font-black uppercase tracking-[3px] md:tracking-[6px] transition-all relative py-2 whitespace-nowrap ${activeTab === tab ? 'text-white' : 'text-white/20'}`}
+                      className={`text-sm md:text-base font-black uppercase tracking-[3px] md:tracking-[4px] transition-all relative py-2 whitespace-nowrap ${activeTab === tab ? 'text-white' : 'text-white/20'}`}
                     >
                       {tab === 'library' ? 'Hub' : tab === 'emulator' ? 'Emulator' : tab === 'evolution' ? 'Evolution' : 'Account'}
                       {activeTab === tab && <motion.div layoutId="tab" className="absolute -bottom-1 left-0 w-full h-[2px] md:h-[3px] bg-gradient-to-r from-indigo-500 via-pink-500 to-yellow-500" />}
@@ -1441,7 +1441,7 @@ export default function App() {
                         placeholder="SEARCH NEURAL NETWORK..." 
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full bg-white/5 border-2 border-white/5 rounded-full py-4 pl-14 pr-8 text-[11px] text-white focus:border-indigo-500/50 focus:bg-indigo-500/5 outline-none transition-all uppercase tracking-[4px] font-black placeholder:text-white/10"
+                        className="w-full bg-white/5 border-2 border-white/5 rounded-full py-3 pl-14 pr-8 text-sm text-white focus:border-indigo-500/50 focus:bg-indigo-500/5 outline-none transition-all uppercase tracking-[3px] font-black placeholder:text-white/10"
                       />
                     </div>
                     
@@ -1475,7 +1475,7 @@ export default function App() {
                           <button 
                             key={type}
                             onClick={() => setFilterType(type as any)}
-                            className={`px-6 py-2.5 rounded-full text-[10px] font-black uppercase tracking-[3px] transition-all ${filterType === type ? 'bg-indigo-500 text-white shadow-[0_0_25px_rgba(99,102,241,0.4)]' : 'text-white/30 hover:text-white hover:bg-white/5'}`}
+                            className={`px-4 py-2 rounded-full text-sm font-black uppercase tracking-[2px] transition-all ${filterType === type ? 'bg-indigo-500 text-white shadow-[0_0_25px_rgba(99,102,241,0.4)]' : 'text-white/30 hover:text-white hover:bg-white/5'}`}
                           >
                             {type}
                           </button>
@@ -1485,7 +1485,7 @@ export default function App() {
                   </div>
 
                   {/* Explorer Header */}
-                  <div className="hidden md:grid grid-cols-[1fr_120px_100px_160px] gap-4 px-6 py-3 border-b border-white/10 text-[10px] uppercase tracking-[0.2em] font-black text-white/30 mb-4">
+                  <div className="grid grid-cols-[1fr_auto_auto_auto] gap-3 px-4 py-2 border-b border-white/10 text-xs uppercase tracking-widest font-black text-white/30 mb-2">
                     <div className="flex items-center gap-2"><Box className="w-3 h-3" /> Idea / Application</div>
                     <div className="text-center">Complexity</div>
                     <div className="text-center">Status</div>
@@ -1529,20 +1529,18 @@ export default function App() {
                               transition={{ delay: idx * 0.03 }}
                               className="group relative"
                             >
-                              <div className="flex flex-col md:grid md:grid-cols-[1fr_120px_100px_180px] gap-6 items-stretch md:items-center p-6 md:p-8 rounded-3xl md:rounded-[2.5rem] bg-white/[0.02] border border-white/5 hover:bg-white/[0.04] hover:border-indigo-500/20 hover:shadow-[0_20px_40px_rgba(0,0,0,0.4)] transition-all cursor-default neural-border">
+                              <div className="grid grid-cols-[1fr_auto_auto_auto] gap-3 items-center py-3 px-4 rounded-2xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.04] hover:border-indigo-500/20 transition-all cursor-default" style={{ minHeight: 72 }}>
                                 {/* Main Info */}
-                                <div className="flex items-center gap-6 overflow-hidden">
-                                  <div className={`w-12 h-12 md:w-16 md:h-16 rounded-2xl flex items-center justify-center shrink-0 ${isApp ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 shadow-[0_0_20px_rgba(99,102,241,0.1)]' : 'bg-white/5 text-white/20 border border-white/5 shadow-inner'}`}>
-                                    {isApp ? <Box className="w-6 h-6" /> : <DraftingCompass className="w-6 h-6" />}
+                                <div className="flex items-center gap-3 overflow-hidden">
+                                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${isApp ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' : 'bg-white/5 text-white/20 border border-white/5'}`}>
+                                    {isApp ? <Box className="w-4 h-4" /> : <DraftingCompass className="w-4 h-4" />}
                                   </div>
                                   <div className="overflow-hidden flex-1 text-left">
-                                    <h3 className="text-white font-black text-[13px] md:text-[15px] truncate group-hover:text-indigo-400 transition-colors uppercase tracking-[1px]">
+                                    <h3 className="text-white font-black text-sm truncate group-hover:text-indigo-400 transition-colors">
                                       {s.content}
                                     </h3>
-                                    <div className="text-[10px] text-white/20 uppercase tracking-[4px] mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 font-mono">
-                                      <span className={isApp ? 'text-indigo-500' : ''}>#{s.id.substring(0, 8)}</span> 
-                                      <span className="w-1 h-1 rounded-full bg-white/10" />
-                                      <span>{isApp ? `REV_V${s.version || 1}` : 'PROPOSAL_DRAFT'}</span>
+                                    <div className="text-xs text-white/30 mt-0.5 flex items-center gap-2 font-mono">
+                                      <span className={isApp ? 'text-indigo-400' : ''}>#{s.id.substring(0, 8)}</span>
                                       <span className="w-1 h-1 rounded-full bg-white/10" />
                                       <span className={`uppercase font-black ${s.app_type === 'phone' ? 'text-pink-500/60' : s.app_type === 'game' ? 'text-emerald-500/60' : 'text-white/20'}`}>
                                         {s.app_type || 'desktop'}
@@ -1551,25 +1549,23 @@ export default function App() {
                                   </div>
                                 </div>
 
-                                {/* Data Column: Stats */}
-                                <div className="flex flex-col items-center gap-2">
-                                  <div className="w-full bg-white/5 h-1.5 rounded-full overflow-hidden border border-white/5">
-                                    <motion.div 
+                                {/* Energy */}
+                                <div className="flex flex-col items-center gap-1 w-20">
+                                  <div className="w-full bg-white/5 h-1 rounded-full overflow-hidden">
+                                    <motion.div
                                       initial={{ width: 0 }}
                                       animate={{ width: `${Math.min(100, (s.energy || 0))}%` }}
-                                      className="h-full bg-gradient-to-r from-indigo-600 to-indigo-400 shadow-[0_0_15px_rgba(99,102,241,0.5)]"
+                                      className="h-full bg-gradient-to-r from-indigo-600 to-indigo-400"
                                     />
                                   </div>
-                                  <span className="text-[9px] font-mono text-white/30 tracking-widest uppercase truncate w-full text-center">
-                                    PWR_{s.energy || 0}%_SYNC
-                                  </span>
+                                  <span className="text-[10px] font-mono text-white/30">{s.energy || 0}%</span>
                                 </div>
 
-                                {/* Data Column: Status */}
-                                <div className="flex justify-start md:justify-center">
-                                  <div className={`px-4 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-[3px] border ${
-                                    isApp 
-                                    ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20 shadow-[0_0_15px_rgba(99,102,241,0.1)]' 
+                                {/* Status */}
+                                <div className="flex justify-center w-16">
+                                  <div className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wide border ${
+                                    isApp
+                                    ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20'
                                     : 'bg-white/5 text-white/20 border-white/5'
                                   }`}>
                                     {s.status}
@@ -1577,50 +1573,50 @@ export default function App() {
                                 </div>
 
                                 {/* Actions */}
-                                <div className="flex justify-end gap-2 mt-4 md:mt-0 pt-6 md:pt-0 border-t md:border-t-0 border-white/5">
+                                <div className="flex justify-end gap-1.5">
                                   {/* Delete button — always visible for owners/creators */}
                                   {(s.user_id === user?.uid || isCreator) && (
                                     <button
                                       onClick={(e) => { e.stopPropagation(); handleDeleteSuggestion(s.id); }}
                                       disabled={isLoading}
-                                      className="p-4 rounded-2xl bg-red-500/5 border border-red-500/10 text-red-500/30 hover:bg-red-500/10 hover:text-red-400 transition-all"
+                                      className="p-2 rounded-xl bg-red-500/5 border border-red-500/10 text-red-500/30 hover:bg-red-500/10 hover:text-red-400 transition-all"
                                       title="Delete"
                                     >
-                                      <Trash2 className="w-4 h-4" />
+                                      <Trash2 className="w-3.5 h-3.5" />
                                     </button>
                                   )}
                                   {isApp ? (
                                     <button
                                       onClick={() => setCurrentSuggestion(s)}
-                                      className="flex-1 md:flex-none px-6 py-4 rounded-2xl bg-white text-black hover:bg-indigo-500 hover:text-white hover:scale-105 active:scale-95 transition-all flex items-center justify-center gap-3 font-black shadow-xl"
+                                      className="px-4 py-2 rounded-xl bg-white text-black hover:bg-indigo-500 hover:text-white transition-all flex items-center gap-2 font-black text-xs shadow-lg"
                                     >
-                                      <Play className="w-4 h-4 fill-current" />
-                                      <span className="text-[10px] uppercase tracking-[4px]">Execute</span>
+                                      <Play className="w-3.5 h-3.5 fill-current" />
+                                      Run
                                     </button>
                                   ) : (
-                                    <div className="flex gap-2">
+                                    <div className="flex gap-1.5">
                                       <button
                                         onClick={() => voteSuggestion(s.id, s.votes)}
-                                        className="p-4 rounded-2xl bg-white/5 border border-white/10 text-white/40 hover:bg-white hover:text-black hover:border-white transition-all shadow-lg"
+                                        className="p-2 rounded-xl bg-white/5 border border-white/10 text-white/40 hover:bg-white hover:text-black hover:border-white transition-all"
                                         title="Upvote"
                                       >
-                                        <ChevronUp className="w-5 h-5" />
+                                        <ChevronUp className="w-3.5 h-3.5" />
                                       </button>
                                       <button
                                         onClick={() => buildEvolution(s)}
                                         disabled={!!isRefining || !!isBuilding}
-                                        className={`px-6 py-4 rounded-2xl border transition-all flex items-center justify-center gap-3 font-black shadow-2xl ${
+                                        className={`px-4 py-2 rounded-xl border transition-all flex items-center gap-2 font-black text-xs ${
                                           isCreator
                                             ? 'bg-indigo-500 border-indigo-600 text-white hover:bg-indigo-600'
                                             : 'bg-white/5 border-white/10 text-white hover:bg-indigo-500 hover:border-indigo-600'
                                         } disabled:opacity-50`}
                                       >
                                         {isBuilding === s.id ? (
-                                          <Loader2 className="w-4 h-4 animate-spin" />
+                                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
                                         ) : (
-                                          <Zap className="w-4 h-4" />
+                                          <Zap className="w-3.5 h-3.5" />
                                         )}
-                                        <span className="text-[10px] uppercase tracking-[4px]">Build</span>
+                                        Build
                                       </button>
                                     </div>
                                   )}
