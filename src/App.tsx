@@ -126,7 +126,8 @@ import {
 import { EvolutionTree } from "./components/EvolutionTree";
 import { ModulePlayer } from "./components/ModulePlayer";
 import { EmulatorHub } from "./components/EmulatorHub";
-import { EvolutiveSeed, ModuleNode, Nebula } from "./components/ThreeWorld";
+import { EvolutiveSeed, ModuleNode, Nebula, OrbitRing } from "./components/ThreeWorld";
+import { ScrollFeed } from "./components/ScrollFeed";
 import { useQuota } from "./hooks/useQuota";
 import { useAuth } from "./hooks/useAuth";
 import { useAI } from "./hooks/useAI";
@@ -639,46 +640,49 @@ export default function App() {
 
   const handleSuggest = async () => {
     if (!input.trim()) return;
-    if (apiQuota < 5) {
-      alert("Build Capacity depleted. Wait for the system to recharge.");
+    if (apiQuota < 20) {
+      alert("Build Capacity too low. Wait for the system to recharge (needs 20%).");
       return;
     }
 
     const rawInput = input.trim();
     setInput("");
-    setIsBuilding("MANIFESTING");
-    setIsManifesting(true);
-    
+
     try {
-      const prompt = `Refine this app idea into a clear, concise one-sentence description. Keep it technical and direct.
-        Original: "${rawInput}"
-        Refined:`;
+      setManifestingStep("Refining neural intent...");
+      setIsManifesting(true);
 
       let content = rawInput;
       try {
-        const text = await callUnifiedAI(prompt);
-        content = text.trim() || rawInput;
-      } catch (aiErr) {
-        console.warn("System Refinement Link failed (Connection error?). Resting on raw intent.", aiErr);
-        // We use the raw input if the AI refinement fails to prevent blocking the user
+        const refined = await callUnifiedAI(
+          `Refine this app idea into a clear, concise one-sentence description. Keep it technical and direct.\nOriginal: "${rawInput}"\nRefined:`
+        );
+        content = refined.trim() || rawInput;
+      } catch {
+        // fall back to raw input
       }
 
-      const insertData: any = { 
+      const insertData: any = {
         content,
         app_type: newAppType,
-        status: 'pending',
+        status: "pending",
         votes: 0,
         energy: 0,
         user_id: user?.uid || null,
-        created_at: new Date().toISOString()
+        created_at: new Date().toISOString(),
       };
 
-      await addDoc(collection(db, 'suggestions'), insertData);
+      const docRef = await addDoc(collection(db, "suggestions"), insertData);
+      const newSuggestion = { id: docRef.id, ...insertData } as Suggestion;
       consumeQuota(5);
+
+      // Immediately build the app
+      await buildEvolution(newSuggestion);
     } catch (err: any) {
-      console.error("Error planting intent:", err);
-      alert(`System Link Failure: ${err.message}`);
+      console.error("Error manifesting:", err);
+      setAiError(err.message);
     } finally {
+      setIsManifesting(false);
       setIsBuilding(null);
     }
   };
@@ -1312,15 +1316,23 @@ export default function App() {
         <pointLight position={[-10, -10, -10]} intensity={1} color="#6366f1" />
         <EvolutiveSeed onClick={() => setIsOpen(true)} isOpen={isOpen} />
         <Nebula />
-        
-        {/* Global App Nodes */}
+
+        {/* Orbit rings — solar system structure */}
+        <OrbitRing radius={3.5} opacity={0.18} color="#818cf8" />
+        <OrbitRing radius={5.0} opacity={0.11} color="#6366f1" />
+        <OrbitRing radius={6.5} opacity={0.07} color="#4f46e5" />
+        <OrbitRing radius={7.5} opacity={0.05} color="#4338ca" />
+
+        {/* Community app nodes */}
         {suggestions
           .filter(s => s.status === 'built' && s.built_code)
           .map(s => (
-            <ModuleNode 
-              key={s.id} 
-              suggestion={s} 
-              onRun={(suggestion) => setCurrentSuggestion(suggestion)} 
+            <ModuleNode
+              key={s.id}
+              suggestion={s}
+              onRun={(suggestion) => {
+                setCurrentSuggestion(suggestion);
+              }}
             />
           ))
         }
@@ -1462,12 +1474,22 @@ export default function App() {
                   </div>
 
                   {viewMode === 'EMULATOR' ? (
-                    <EmulatorHub 
-                      suggestions={suggestions} 
-                      currentUser={user} 
-                      onExecute={(s) => setCurrentSuggestion(s)} 
-                      onClose={() => setViewMode('FEED')} 
+                    <EmulatorHub
+                      suggestions={suggestions}
+                      currentUser={user}
+                      onExecute={(s) => setCurrentSuggestion(s)}
+                      onClose={() => setViewMode('FEED')}
                     />
+                  ) : viewMode === 'FEED' ? (
+                    <div className="-mx-6 -mb-6" style={{ height: 'calc(100vh - 280px)', minHeight: 400 }}>
+                      <ScrollFeed
+                        suggestions={displaySuggestions}
+                        currentUser={user}
+                        onPlay={(s) => setCurrentSuggestion(s)}
+                        onVote={(id, votes) => voteSuggestion(id, votes)}
+                        onBuild={(s) => buildEvolution(s)}
+                      />
+                    </div>
                   ) : viewMode === 'EXPLORER' ? (
                     <div className="flex flex-col gap-4">
                       {/* Explorer List */}
@@ -1537,39 +1559,50 @@ export default function App() {
                                 </div>
 
                                 {/* Actions */}
-                                <div className="flex justify-end gap-3 mt-4 md:mt-0 pt-6 md:pt-0 border-t md:border-t-0 border-white/5">
+                                <div className="flex justify-end gap-2 mt-4 md:mt-0 pt-6 md:pt-0 border-t md:border-t-0 border-white/5">
+                                  {/* Delete button — always visible for owners/creators */}
+                                  {(s.user_id === user?.uid || isCreator) && (
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); handleDeleteSuggestion(s.id); }}
+                                      disabled={isLoading}
+                                      className="p-4 rounded-2xl bg-red-500/5 border border-red-500/10 text-red-500/30 hover:bg-red-500/10 hover:text-red-400 transition-all"
+                                      title="Delete"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  )}
                                   {isApp ? (
-                                    <button 
-                                      onClick={() => setCurrentSuggestion(s)} 
+                                    <button
+                                      onClick={() => setCurrentSuggestion(s)}
                                       className="flex-1 md:flex-none px-6 py-4 rounded-2xl bg-white text-black hover:bg-indigo-500 hover:text-white hover:scale-105 active:scale-95 transition-all flex items-center justify-center gap-3 font-black shadow-xl"
                                     >
                                       <Play className="w-4 h-4 fill-current" />
                                       <span className="text-[10px] uppercase tracking-[4px]">Execute</span>
                                     </button>
                                   ) : (
-                                    <div className="flex gap-2 w-full md:w-auto">
-                                      <button 
+                                    <div className="flex gap-2">
+                                      <button
                                         onClick={() => voteSuggestion(s.id, s.votes)}
                                         className="p-4 rounded-2xl bg-white/5 border border-white/10 text-white/40 hover:bg-white hover:text-black hover:border-white transition-all shadow-lg"
-                                        title="Upvote Node"
+                                        title="Upvote"
                                       >
                                         <ChevronUp className="w-5 h-5" />
                                       </button>
-                                      <button 
-                                        onClick={() => handlePledge(s)}
+                                      <button
+                                        onClick={() => buildEvolution(s)}
                                         disabled={!!isRefining || !!isBuilding}
-                                        className={`flex-1 md:flex-none px-6 py-4 rounded-2xl border transition-all flex items-center justify-center gap-3 font-black shadow-2xl relative overflow-hidden ${
-                                          isCreator 
-                                          ? 'bg-indigo-500 border-indigo-600 text-white hover:bg-indigo-600' 
-                                          : 'bg-white/5 border-white/10 text-white hover:bg-indigo-500 hover:border-indigo-600'
-                                        }`}
+                                        className={`px-6 py-4 rounded-2xl border transition-all flex items-center justify-center gap-3 font-black shadow-2xl ${
+                                          isCreator
+                                            ? 'bg-indigo-500 border-indigo-600 text-white hover:bg-indigo-600'
+                                            : 'bg-white/5 border-white/10 text-white hover:bg-indigo-500 hover:border-indigo-600'
+                                        } disabled:opacity-50`}
                                       >
-                                        {isRefining === s.id || isBuilding === s.id ? (
+                                        {isBuilding === s.id ? (
                                           <Loader2 className="w-4 h-4 animate-spin" />
                                         ) : (
                                           <Zap className="w-4 h-4" />
                                         )}
-                                        <span className="text-[10px] uppercase tracking-[4px]">MANIFEST</span>
+                                        <span className="text-[10px] uppercase tracking-[4px]">Build</span>
                                       </button>
                                     </div>
                                   )}
@@ -1580,108 +1613,7 @@ export default function App() {
                         })}
                       </div>
                     </div>
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
-                       {displaySuggestions.map((s, idx) => (
-                         <motion.div 
-                           key={s.id}
-                           initial={{ opacity: 0, scale: 0.95, y: 20 }}
-                           animate={{ opacity: 1, scale: 1, y: 0 }}
-                           transition={{ delay: idx * 0.08 }}
-                           whileHover={{ y: -10 }}
-                           className="group aspect-[4/5] bg-[#0a0a20] rounded-[3.5rem] border border-white/5 overflow-hidden relative flex flex-col hover:border-indigo-500/30 transition-all cursor-pointer shadow-[0_30px_60px_rgba(0,0,0,0.4)] neural-card-glow"
-                           onClick={() => s.status === 'built' && setCurrentSuggestion(s)}
-                         >
-                            {/* App Preview Mock/Visual */}
-                            <div className="flex-1 bg-black/40 flex items-center justify-center relative overflow-hidden">
-                               <div className="absolute inset-0 opacity-30 pointer-events-none">
-                                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(99,102,241,0.2),transparent_70%)]" />
-                                  <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-black to-transparent" />
-                               </div>
-                               
-                               <motion.div 
-                                 animate={{ rotate: [0, 5, 0, -5, 0] }}
-                                 transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
-                                 className="relative"
-                               >
-                                 {s.app_type === 'phone' ? (
-                                   <div className="w-32 h-64 md:w-36 md:h-72 rounded-[2.5rem] border-[6px] border-white/10 bg-white/5 flex flex-col p-4 shadow-2xl">
-                                      <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto mb-4" />
-                                      <div className="flex-1 w-full bg-white/[0.02] rounded-2xl border border-white/5 relative overflow-hidden">
-                                        <div className="absolute top-4 left-4 w-1/2 h-2 bg-indigo-500/20 rounded-full" />
-                                      </div>
-                                   </div>
-                                 ) : s.app_type === 'game' ? (
-                                   <div className="w-48 h-32 md:w-56 md:h-40 bg-white/5 rounded-[2rem] border-4 border-white/10 flex items-center justify-center shadow-2xl relative">
-                                      <Play className="w-12 h-12 text-indigo-500/40" />
-                                      <div className="absolute inset-4 border border-dashed border-white/5 rounded-xl" />
-                                   </div>
-                                 ) : (
-                                   <div className="w-48 h-40 md:w-56 md:h-48 bg-white/5 rounded-[2rem] border-4 border-white/10 flex flex-col p-6 shadow-2xl">
-                                      <div className="flex gap-2 mb-4">
-                                        <div className="w-2 h-2 rounded-full bg-pink-500/40" />
-                                        <div className="w-2 h-2 rounded-full bg-yellow-500/40" />
-                                        <div className="w-2 h-2 rounded-full bg-green-500/40" />
-                                      </div>
-                                      <div className="flex-1 w-full bg-white/[0.02] rounded-xl border border-white/5 p-4 space-y-3">
-                                        <div className="w-full h-1 bg-white/10 rounded-full" />
-                                        <div className="w-3/4 h-1 bg-white/10 rounded-full" />
-                                      </div>
-                                   </div>
-                                 )}
-                               </motion.div>
-                               
-                               <div className="absolute top-8 left-8 flex items-center gap-4">
-                                  <div className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-[4px] border transition-all ${s.status === 'built' ? 'bg-indigo-500 text-white border-indigo-600 shadow-[0_0_20px_rgba(99,102,241,0.5)]' : 'bg-white/10 text-white/40 border-white/10'}`}>
-                                     {s.status}
-                                  </div>
-                               </div>
-                            </div>
-
-                            {/* Card Content */}
-                            <div className="p-10 bg-gradient-to-t from-[#050510] via-[#050510] to-transparent space-y-6">
-                               <div className="space-y-4 text-left">
-                                 <h3 className="text-xl font-black text-white uppercase tracking-tight leading-tight line-clamp-2 md:group-hover:text-indigo-400 transition-colors uppercase whitespace-pre-wrap">{s.content}</h3>
-                                 <p className="text-[10px] text-white/20 uppercase tracking-[5px] font-mono">Neural_Node_ID: {s.id.substring(0, 12)}</p>
-                               </div>
-                               
-                               <div className="flex items-center justify-between border-t border-white/5 pt-8">
-                                  <div className="flex items-center gap-4">
-                                     <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 overflow-hidden flex items-center justify-center p-1">
-                                        <img src={`https://api.dicebear.com/7.x/bottts/svg?seed=${s.user_id || s.id}`} alt="User" className="w-full h-full object-cover" />
-                                     </div>
-                                     <div className="text-left">
-                                       <span className="text-[11px] font-black text-white/30 uppercase tracking-[4px] block">Manifestor</span>
-                                       <span className="text-[9px] font-black text-indigo-400 uppercase tracking-widest">@{s.user_id?.slice(0, 8) || 'SYSTEM'}</span>
-                                     </div>
-                                  </div>
-                                  <div className="flex flex-col items-end gap-2">
-                                     <div className="flex items-center gap-3 text-indigo-400 bg-indigo-500/10 px-4 py-2 rounded-xl border border-indigo-500/20">
-                                        <Zap className="w-4 h-4 fill-current animate-pulse" />
-                                        <span className="text-[11px] font-black tracking-widest">{s.energy || 0}%</span>
-                                     </div>
-                                  </div>
-                               </div>
-                               
-                               <div className="pt-4">
-                                 {s.status === 'built' ? (
-                                   <button className="w-full py-5 bg-white text-black rounded-3xl text-[11px] font-black uppercase tracking-[8px] hover:bg-indigo-500 hover:text-white transition-all shadow-2xl active:scale-95">
-                                      Execute_App
-                                   </button>
-                                 ) : (
-                                   <button 
-                                     onClick={(e) => { e.stopPropagation(); handlePledge(s); }}
-                                     className="w-full py-5 bg-indigo-500 text-white rounded-3xl text-[11px] font-black uppercase tracking-[8px] hover:bg-indigo-600 transition-all shadow-2xl active:scale-95"
-                                   >
-                                     Fuel_Manifest
-                                   </button>
-                                 )}
-                               </div>
-                            </div>
-                         </motion.div>
-                       ))}
-                    </div>
-                  )}
+                  ) : null}
                 </div>
               ) : activeTab === 'emulator' ? (
                 <EmulatorHub 
@@ -2421,25 +2353,25 @@ export default function App() {
                         placeholder={`Manifest a ${newAppType}...`}
                         className="flex-1 bg-white/5 border-2 border-white/10 px-6 md:px-8 py-4 md:py-6 rounded-full text-xs md:text-sm text-white focus:outline-none focus:border-indigo-500 placeholder:text-white/10 font-black uppercase tracking-[2px] md:tracking-[4px] text-center"
                       />
-                      <button 
+                      <button
                         onClick={handleSuggest}
-                        disabled={!canSuggest || isLoading}
-                        className={`relative w-14 h-14 md:w-20 md:h-20 shrink-0 rounded-full bg-white text-black flex items-center justify-center transition-all hover:scale-105 active:scale-95 shadow-2xl hover:bg-indigo-500 hover:text-white disabled:opacity-50 overflow-hidden group`}
+                        disabled={!canSuggest || isLoading || !!isBuilding || isManifesting}
+                        className="relative w-14 h-14 md:w-20 md:h-20 shrink-0 rounded-full bg-white text-black flex items-center justify-center transition-all hover:scale-105 active:scale-95 shadow-2xl hover:bg-indigo-500 hover:text-white disabled:opacity-50 overflow-hidden group"
+                        title="Manifest app"
                       >
-                      {isLoading ? (
-                        <Loader2 className="w-6 md:w-10 h-6 md:h-10 animate-spin text-indigo-500" />
-                      ) : (
-                        <Plus className="w-6 md:w-10 h-6 md:h-10 font-bold group-hover:rotate-90 transition-transform" />
-                      )}
-                      
-                      {isLoading && (
-                        <motion.div 
-                          className="absolute inset-0 bg-indigo-500/10"
-                          animate={{ opacity: [0, 0.5, 0] }}
-                          transition={{ duration: 1.5, repeat: Infinity }}
-                        />
-                      )}
-                    </button>
+                        {isLoading || isManifesting || !!isBuilding ? (
+                          <Loader2 className="w-6 md:w-10 h-6 md:h-10 animate-spin text-indigo-500" />
+                        ) : (
+                          <Sparkles className="w-6 md:w-8 h-6 md:h-8 group-hover:scale-110 transition-transform" />
+                        )}
+                        {(isLoading || isManifesting) && (
+                          <motion.div
+                            className="absolute inset-0 bg-indigo-500/20"
+                            animate={{ opacity: [0, 0.6, 0] }}
+                            transition={{ duration: 1.2, repeat: Infinity }}
+                          />
+                        )}
+                      </button>
                   </div>
                 </div>
               </div>

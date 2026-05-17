@@ -5,6 +5,18 @@ import { Float, MeshDistortMaterial } from "@react-three/drei";
 import * as THREE from "three";
 import { Suggestion } from "../types";
 
+function seededRand(seed: string, n: number): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < seed.length; i++) {
+    h ^= seed.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  h ^= n * 0x9e3779b9;
+  h = Math.imul(h ^ (h >>> 16), 0x85ebca6b) >>> 0;
+  h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35) >>> 0;
+  return ((h ^ (h >>> 16)) >>> 0) / 0xffffffff;
+}
+
 export function EvolutiveSeed({ onClick, isOpen }: { onClick: () => void, isOpen: boolean }) {
   const meshRef = useRef<THREE.Mesh>(null!);
   const timeRef = useRef(0);
@@ -44,14 +56,15 @@ export function ModuleNode({ suggestion, onRun }: { suggestion: Suggestion, onRu
   
   const { radius, speed, offset, yOffset, color } = useMemo(() => {
     const colors = ["#ff006e", "#3a86ff", "#fb5607", "#ffbe0b", "#8338ec", "#00f5d4"];
+    const id = suggestion.id;
     return {
       radius: 3.5 + (1 - (suggestion.energy || 0) / 100) * 4,
-      speed: 0.1 + Math.random() * 0.2,
-      offset: Math.random() * Math.PI * 2,
-      yOffset: (Math.random() - 0.5) * 2,
-      color: colors[Math.floor(Math.random() * colors.length)]
+      speed: 0.1 + seededRand(id, 0) * 0.2,
+      offset: seededRand(id, 1) * Math.PI * 2,
+      yOffset: (seededRand(id, 2) - 0.5) * 2,
+      color: colors[Math.floor(seededRand(id, 3) * colors.length)]
     };
-  }, [suggestion.energy]);
+  }, [suggestion.id, suggestion.energy]);
 
   useFrame((state, delta) => {
     if (!meshRef.current) return;
@@ -84,6 +97,19 @@ export function ModuleNode({ suggestion, onRun }: { suggestion: Suggestion, onRu
         transparent
         opacity={0.9}
       />
+    </mesh>
+  );
+}
+
+export function OrbitRing({ radius, opacity = 0.12, color = "#6366f1" }: { radius: number; opacity?: number; color?: string }) {
+  const ref = useRef<THREE.Mesh>(null!);
+  useFrame((_, delta) => {
+    if (ref.current) ref.current.rotation.z += delta * 0.02;
+  });
+  return (
+    <mesh ref={ref} rotation={[Math.PI / 2, 0, 0]}>
+      <ringGeometry args={[radius - 0.015, radius + 0.015, 128]} />
+      <meshBasicMaterial color={color} opacity={opacity} transparent side={THREE.DoubleSide} />
     </mesh>
   );
 }
