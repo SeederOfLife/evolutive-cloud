@@ -15,6 +15,7 @@ import {
   Settings,
   ChevronDown,
   Monitor,
+  Zap,
 } from "lucide-react";
 import { Suggestion } from "../types";
 
@@ -47,16 +48,22 @@ export function ModulePlayer({
     suggestion.built_code ? [] : [{ role: "user", content: `Initiating application sequence for: ${suggestion.content}` }]
   );
   const [runtimeStatus, setRuntimeStatus] = useState("Initializing...");
+  const [lastError, setLastError] = useState<string | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   useEffect(() => {
     const handleMessage = (e: MessageEvent) => {
       if (e.data?.type === "EVO_LOG") setRuntimeStatus(e.data.content);
-      if (e.data?.type === "EVO_ERROR") setRuntimeStatus("ERROR: " + e.data.msg);
+      if (e.data?.type === "EVO_ERROR") {
+        setRuntimeStatus("ERROR: " + e.data.msg);
+        setLastError(e.data.msg);
+      }
     };
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
   }, []);
+
+  useEffect(() => { setLastError(null); }, [code]);
 
   const cleanCode = useMemo(() => {
     if (!code) return "";
@@ -83,14 +90,14 @@ export function ModulePlayer({
     try { await onSave(code); } catch (err) { console.error("Save failed:", err); } finally { setIsSaving(false); }
   };
 
-  const handleRefine = async () => {
-    if (!onRefine || !refineInput.trim()) return;
+  const handleRefine = async (overrideInput?: string) => {
+    const prompt = overrideInput ?? refineInput;
+    if (!onRefine || !prompt.trim()) return;
     setIsRefining(true);
-    setChatMessages((prev) => [...prev, { role: "user", content: refineInput }]);
-    const input = refineInput;
-    setRefineInput("");
+    setChatMessages((prev) => [...prev, { role: "user", content: prompt }]);
+    if (!overrideInput) setRefineInput("");
     try {
-      const newCode = await onRefine(input);
+      const newCode = await onRefine(prompt);
       if (newCode) {
         setCode(newCode);
         setChatMessages((prev) => [...prev, { role: "assistant", content: "Application logic adjusted. System updated." }]);
@@ -356,7 +363,7 @@ body{background:#050508;color:#fff;margin:0;min-height:100vh;display:flex;flex-d
                         placeholder="App feedback..."
                         className="w-full bg-white/5 border border-white/10 p-4 rounded-2xl text-[11px] outline-none group-focus-within:border-indigo-500/50 transition-all font-medium"
                       />
-                      <button onClick={handleRefine}
+                      <button onClick={() => handleRefine()}
                         className="absolute right-2 top-2 w-10 h-10 bg-indigo-500 text-white rounded-xl flex items-center justify-center hover:bg-indigo-400 transition-all">
                         <ArrowRight className="w-4 h-4" />
                       </button>
@@ -464,6 +471,24 @@ body{background:#050508;color:#fff;margin:0;min-height:100vh;display:flex;flex-d
                 <RefreshCw className="w-5 h-5" />
               </button>
             </div>
+            <AnimatePresence>
+              {lastError && onRefine && !isRefining && (
+                <motion.div
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 8 }}
+                  className="absolute bottom-16 left-0 right-0 flex justify-center z-20"
+                >
+                  <button
+                    onClick={() => handleRefine(`[AUTO-FIX] Build error: ${lastError} — fix the code so it renders correctly without errors`)}
+                    className="flex items-center gap-2 px-4 py-2.5 bg-red-500 hover:bg-red-600 rounded-xl text-sm font-bold text-white shadow-xl transition-all active:scale-95"
+                  >
+                    <Zap className="w-4 h-4" />
+                    Fix with AI
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
             <div className="absolute bottom-4 left-4 text-[8px] font-mono text-white/10 max-w-[200px] truncate">{runtimeStatus}</div>
           </div>
         </div>

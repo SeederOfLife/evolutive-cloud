@@ -3,14 +3,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
 import { motion, AnimatePresence } from "motion/react";
 import {
   ChevronUp, X, Search, Zap, Play, Sparkles, Loader2,
-  Settings, Activity, Trash2, LogOut
+  Settings, Activity, Trash2, LogOut, Globe, Cpu, ChevronDown
 } from "lucide-react";
 import OpenAI from "openai";
 import {
@@ -26,6 +26,13 @@ import { useQuota } from "./hooks/useQuota";
 import { useAuth } from "./hooks/useAuth";
 import { useAI } from "./hooks/useAI";
 import { useSuggestions } from "./hooks/useSuggestions";
+
+const MANIFEST_PROVIDERS = [
+  { id: "google",    label: "Google Gemini", Icon: Globe,    model: "gemini-3-flash-preview" },
+  { id: "openai",    label: "OpenAI GPT-4",  Icon: Zap,      model: "gpt-4o" },
+  { id: "anthropic", label: "Claude",         Icon: Sparkles, model: "claude-sonnet-4-20250514" },
+  { id: "web-llm",   label: "WebLLM (Local)", Icon: Cpu,      model: "Llama-3-8B-Instruct-q4f32_1-MLC" },
+] as const;
 
 export default function App() {
   const { quota: apiQuota, consume: consumeQuota } = useQuota();
@@ -72,11 +79,25 @@ export default function App() {
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
   const [isSignUp, setIsSignUp] = useState(false);
+  const [showProviderDrop, setShowProviderDrop] = useState(false);
+  const [settingsMessage, setSettingsMessage] = useState<string | null>(null);
+  const providerDropRef = useRef<HTMLDivElement>(null);
   const [providerHealth, setProviderHealth] = useState<
     Record<string, { status: 'online' | 'offline' | 'checking' | null; ping: number | null; tokens: string | null }>
   >({});
 
   const userApiKey = useMemo(() => providerKeys[aiProvider] || "", [providerKeys, aiProvider]);
+
+  useEffect(() => {
+    if (!showProviderDrop) return;
+    const handleClick = (e: MouseEvent) => {
+      if (providerDropRef.current && !providerDropRef.current.contains(e.target as Node)) {
+        setShowProviderDrop(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [showProviderDrop]);
 
   // Expose globals for sandbox
   useEffect(() => {
@@ -363,6 +384,12 @@ Rules:
       alert("Build capacity too low (needs 20%). Wait for recharge.");
       return;
     }
+    if (["openai", "anthropic"].includes(aiProvider) && !providerKeys[aiProvider]) {
+      const providerLabel = aiProvider === "anthropic" ? "Claude (Anthropic)" : "OpenAI";
+      setSettingsMessage(`Add your ${providerLabel} API key to start generating`);
+      setShowSettings(true);
+      return;
+    }
     const rawInput = input.trim();
     setInput("");
     try {
@@ -633,6 +660,54 @@ Rules:
           className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-indigo-500 transition-colors"
         />
 
+        {/* AI Provider Selector */}
+        <div ref={providerDropRef} className="relative shrink-0">
+          {(() => {
+            const active = MANIFEST_PROVIDERS.find((p) => p.id === aiProvider) || MANIFEST_PROVIDERS[0];
+            return (
+              <button
+                onClick={() => setShowProviderDrop((prev) => !prev)}
+                className="flex items-center gap-1.5 px-3 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-lg text-xs text-gray-300 hover:text-white transition-all"
+              >
+                <active.Icon className="w-3.5 h-3.5" />
+                <span className="hidden sm:block max-w-[80px] truncate">{active.label}</span>
+                <ChevronDown className="w-3 h-3 text-gray-500" />
+              </button>
+            );
+          })()}
+          <AnimatePresence>
+            {showProviderDrop && (
+              <motion.div
+                initial={{ opacity: 0, y: 4, scale: 0.97 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 4, scale: 0.97 }}
+                transition={{ duration: 0.1 }}
+                className="absolute bottom-full right-0 mb-2 w-48 bg-gray-900 border border-gray-700 rounded-xl shadow-xl overflow-hidden z-50"
+              >
+                {MANIFEST_PROVIDERS.map((p) => (
+                  <button
+                    key={p.id}
+                    onClick={() => {
+                      setAiProvider(p.id);
+                      setSelectedModel(p.model);
+                      localStorage.setItem("manifest_provider", p.id);
+                      setShowProviderDrop(false);
+                    }}
+                    className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-all ${
+                      aiProvider === p.id
+                        ? "bg-indigo-500/20 text-indigo-400"
+                        : "text-gray-400 hover:text-white hover:bg-gray-800"
+                    }`}
+                  >
+                    <p.Icon className="w-4 h-4 shrink-0" />
+                    {p.label}
+                  </button>
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
         {/* Submit */}
         <button
           onClick={handleSuggest}
@@ -652,7 +727,7 @@ Rules:
       <AnimatePresence>
         {showSettings && (
           <SettingsModal
-            onClose={() => setShowSettings(false)}
+            onClose={() => { setShowSettings(false); setSettingsMessage(null); }}
             aiProvider={aiProvider}
             setAiProvider={setAiProvider}
             selectedModel={selectedModel}
@@ -671,6 +746,8 @@ Rules:
             testResponse={testResponse}
             handleTestNeuralLink={handleTestNeuralLink}
             setTestResponse={setTestResponse}
+            settingsMessage={settingsMessage}
+            setSettingsMessage={setSettingsMessage}
           />
         )}
       </AnimatePresence>
@@ -931,6 +1008,8 @@ interface SettingsModalProps {
   testResponse: string | null;
   handleTestNeuralLink: () => void;
   setTestResponse: (r: string | null) => void;
+  settingsMessage?: string | null;
+  setSettingsMessage?: (m: string | null) => void;
 }
 
 const MODELS: Record<string, { value: string; label: string }[]> = {
@@ -957,6 +1036,7 @@ function SettingsModal({
   userApiKey, saveApiKeyToAccount, customEndpoint, setCustomEndpoint,
   forceCloud, setForceCloud, aiConfig, setAiConfig, providerHealth,
   checkHealth, isTestingAI, testResponse, handleTestNeuralLink, setTestResponse,
+  settingsMessage, setSettingsMessage,
 }: SettingsModalProps) {
   const providers = ["google", "openai", "anthropic", "custom", "web-llm"] as const;
   const providerModels = MODELS[aiProvider] || [];
@@ -978,6 +1058,15 @@ function SettingsModal({
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {settingsMessage && (
+          <div className="mx-4 mt-4 flex items-start justify-between gap-3 p-3 bg-amber-900/30 border border-amber-700/50 rounded-lg text-sm text-amber-300">
+            <span>{settingsMessage}</span>
+            <button onClick={() => setSettingsMessage?.(null)} className="shrink-0 opacity-60 hover:opacity-100">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
 
         <div className="p-4 space-y-5">
           {/* Provider */}
