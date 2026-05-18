@@ -22,6 +22,7 @@ export function AppSandbox({ code, className = "" }: AppSandboxProps) {
     p = p.replace(/export\s+default\s+([a-zA-Z0-9_$]+);?\s*$/gm, 'window.__BUILT_APP__ = $1;');
     p = p.replace(/export\s+default\s+/g, 'window.__BUILT_APP__ = ');
     p = p.replace(/\bexport\s+/g, '');
+    p = p.replace(/^import\b.+$/gm, '');
     return p.trim();
   }, [code]);
 

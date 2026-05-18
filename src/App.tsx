@@ -19,7 +19,7 @@ import {
 } from "firebase/firestore";
 import { db } from "./lib/firebase";
 import { Suggestion, Advice, ProjectConfig, EvolutionVersion } from "./types";
-import { ModulePlayer } from "./components/ModulePlayer";
+import { AppSandbox } from "./components/AppSandbox";
 import { EvolutiveSeed, ModuleNode, Nebula, OrbitRing } from "./components/ThreeWorld";
 import { ScrollFeed } from "./components/ScrollFeed";
 import { useQuota } from "./hooks/useQuota";
@@ -64,7 +64,7 @@ export default function App() {
   const [newAppType, setNewAppType] = useState<'phone' | 'desktop' | 'game' | 'terminal'>('desktop');
   const [isLoading, setIsLoading] = useState(false);
   const [isBuilding, setIsBuilding] = useState<string | null>(null);
-  const [currentSuggestion, setCurrentSuggestion] = useState<Suggestion | null>(null);
+  const [launchTarget, setLaunchTarget] = useState<Suggestion | null>(null);
   const [isManifesting, setIsManifesting] = useState(false);
   const [manifestingStep, setManifestingStep] = useState("");
   const [isTestingAI, setIsTestingAI] = useState(false);
@@ -311,7 +311,7 @@ export default function App() {
         throw new Error("Permission denied.");
       }
       await deleteSuggestion(id);
-      if (currentSuggestion?.id === id) setCurrentSuggestion(null);
+      if (launchTarget?.id === id) setLaunchTarget(null);
     } catch (err: any) {
       alert(err.message || "Access Denied.");
     } finally {
@@ -368,7 +368,7 @@ Rules:
 
       await updateDoc(doc(db, "suggestions", suggestion.id), { status: "built", built_code: generatedCode });
       consumeQuota(15);
-      setCurrentSuggestion({ ...suggestion, status: "built", built_code: generatedCode });
+      setLaunchTarget({ ...suggestion, status: "built", built_code: generatedCode });
     } catch (err: any) {
       console.error("Build failed:", err);
       setAiError(err.message);
@@ -590,7 +590,7 @@ Rules:
             {suggestions
               .filter((s) => s.status === "built" && s.built_code)
               .map((s) => (
-                <ModuleNode key={s.id} suggestion={s} onRun={(sg) => setCurrentSuggestion(sg)} />
+                <ModuleNode key={s.id} suggestion={s} onRun={(sg) => setLaunchTarget(sg)} />
               ))}
             <OrbitControls
               enableZoom={false}
@@ -605,7 +605,7 @@ Rules:
         {view === "feed" && (
           <ScrollFeed
             suggestions={displaySuggestions}
-            onPlay={(s) => setCurrentSuggestion(s)}
+            onPlay={(s) => setLaunchTarget(s)}
             onVote={(id, votes) => voteSuggestion(id, votes)}
             onBuild={(s) => buildEvolution(s)}
           />
@@ -625,7 +625,7 @@ Rules:
             isRefining={isRefining}
             isLoading={isLoading}
             onBuild={buildEvolution}
-            onLaunch={(s: Suggestion) => setCurrentSuggestion(s)}
+            onLaunch={(s: Suggestion) => setLaunchTarget(s)}
             onDelete={handleDeleteSuggestion}
             onVote={(id: string, votes: number) => voteSuggestion(id, votes)}
           />
@@ -775,59 +775,37 @@ Rules:
         )}
       </AnimatePresence>
 
-      {/* ── MODULE PLAYER ───────────────────────────────────────────────────── */}
+      {/* ── LAUNCH MODAL ────────────────────────────────────────────────────── */}
       <AnimatePresence>
-        {currentSuggestion && (
-          <ModulePlayer
-            suggestion={currentSuggestion}
-            onClose={() => setCurrentSuggestion(null)}
-            onRefine={async (feedback: string) => {
-              const refinePrompt = `
-System: ${aiConfig.systemPrompt}
-Objective: Update the existing App component based on user feedback.
+        {launchTarget && (
+          <LaunchModal
+            suggestion={launchTarget}
+            onClose={() => setLaunchTarget(null)}
+            onVote={(id, votes) => voteSuggestion(id, votes)}
+            onRefine={async (code: string, error: string) => {
+              const prompt = `System: ${aiConfig.systemPrompt}
+Task: Fix this React app that has a runtime error. Return ONLY the fixed code with no imports and no markdown.
 
-Current Code:
-${currentSuggestion.built_code}
+Code:
+${code}
 
-User Feedback: "${feedback}"
-
-Instructions:
-- Return the ENTIRE updated component named "App".
-- Do NOT include import statements.
-- Return ONLY the code.
-              `.trim();
-              const newCode = await callUnifiedAI(refinePrompt);
-              if (newCode) {
+Runtime Error: "${error}"`.trim();
+              const raw = await callUnifiedAI(prompt);
+              const match = raw.match(/```(?:javascript|typescript|tsx|jsx)?\s?([\s\S]*?)```/);
+              const fixed = (match ? match[1] : raw).replace(/```[a-z]*\n?/gi, "").replace(/```/g, "").trim();
+              if (fixed && launchTarget) {
                 const newVersion: EvolutionVersion = {
-                  code: currentSuggestion.built_code || "",
+                  code: launchTarget.built_code || code,
                   timestamp: new Date().toISOString(),
-                  prompt: feedback,
+                  prompt: `[AUTO-FIX] ${error}`,
                 };
-                const updatedHistory = [newVersion, ...(currentSuggestion.history || [])];
-                await updateDoc(doc(db, "suggestions", currentSuggestion.id), {
-                  history: updatedHistory,
-                  built_code: newCode,
+                await updateDoc(doc(db, "suggestions", launchTarget.id), {
+                  built_code: fixed,
+                  history: [newVersion, ...(launchTarget.history || [])],
                 });
-                setCurrentSuggestion((prev) =>
-                  prev ? { ...prev, built_code: newCode, history: updatedHistory } : null
-                );
+                setLaunchTarget(prev => prev ? { ...prev, built_code: fixed } : null);
               }
-              return newCode;
-            }}
-            onSave={async (newCode: string) => {
-              const newVersion: EvolutionVersion = {
-                code: currentSuggestion.built_code || "",
-                timestamp: new Date().toISOString(),
-                prompt: "Manual Revision",
-              };
-              const updatedHistory = [newVersion, ...(currentSuggestion.history || [])];
-              await updateDoc(doc(db, "suggestions", currentSuggestion.id), {
-                built_code: newCode,
-                history: updatedHistory,
-              });
-              setCurrentSuggestion((prev) =>
-                prev ? { ...prev, built_code: newCode, history: updatedHistory } : null
-              );
+              return fixed;
             }}
           />
         )}
@@ -1399,6 +1377,123 @@ function AuthModal({
           )}
         </div>
       </motion.div>
+    </motion.div>
+  );
+}
+
+// ── LAUNCH MODAL ──────────────────────────────────────────────────────────────
+
+function LaunchModal({
+  suggestion,
+  onClose,
+  onVote,
+  onRefine,
+}: {
+  suggestion: Suggestion;
+  onClose: () => void;
+  onVote: (id: string, votes: number) => void;
+  onRefine?: (code: string, error: string) => Promise<string>;
+}) {
+  const [code, setCode] = useState(suggestion.built_code || "");
+  const [lastError, setLastError] = useState<string | null>(null);
+  const [isFixing, setIsFixing] = useState(false);
+  const [voted, setVoted] = useState(false);
+  const [showVotePop, setShowVotePop] = useState(false);
+
+  useEffect(() => {
+    const handler = (e: MessageEvent) => {
+      if (e.data?.type === "EVO_ERROR") setLastError(e.data.msg);
+    };
+    window.addEventListener("message", handler);
+    return () => window.removeEventListener("message", handler);
+  }, []);
+
+  useEffect(() => { setLastError(null); }, [code]);
+
+  const handleFix = async () => {
+    if (!onRefine || !lastError || isFixing) return;
+    setIsFixing(true);
+    try {
+      const newCode = await onRefine(code, lastError);
+      if (newCode) setCode(newCode);
+    } finally {
+      setIsFixing(false);
+    }
+  };
+
+  const handleVote = () => {
+    if (voted) return;
+    setVoted(true);
+    setShowVotePop(true);
+    onVote(suggestion.id, suggestion.votes || 0);
+    setTimeout(() => setShowVotePop(false), 1200);
+  };
+
+  const title = suggestion.content.length > 60
+    ? suggestion.content.substring(0, 60) + "…"
+    : suggestion.content;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[150] bg-black flex flex-col"
+    >
+      {/* Top bar */}
+      <div className="flex-none h-12 bg-gray-900 border-b border-gray-800 flex items-center px-4 gap-3">
+        <button
+          onClick={onClose}
+          className="w-8 h-8 rounded-lg bg-gray-800 hover:bg-gray-700 flex items-center justify-center text-gray-400 hover:text-white transition-all shrink-0"
+        >
+          <X className="w-4 h-4" />
+        </button>
+        <span className="flex-1 text-sm font-semibold text-white truncate">{title}</span>
+
+        {onRefine && lastError && (
+          <button
+            onClick={handleFix}
+            disabled={isFixing}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500 hover:bg-red-600 disabled:opacity-50 rounded-lg text-xs font-bold text-white transition-all shrink-0"
+          >
+            {isFixing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
+            Fix with AI
+          </button>
+        )}
+
+        <div className="relative shrink-0">
+          <motion.button
+            whileTap={{ scale: 0.85 }}
+            onClick={handleVote}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              voted
+                ? "bg-indigo-500/20 text-indigo-400 border border-indigo-500/30"
+                : "bg-gray-800 text-gray-400 hover:text-white"
+            }`}
+          >
+            <ChevronUp className="w-3.5 h-3.5" />
+            {(suggestion.votes || 0) + (voted ? 1 : 0)}
+          </motion.button>
+          <AnimatePresence>
+            {showVotePop && (
+              <motion.div
+                initial={{ opacity: 1, y: 0 }}
+                animate={{ opacity: 0, y: -20 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.9 }}
+                className="absolute -top-5 left-1/2 -translate-x-1/2 text-xs font-black text-indigo-400 pointer-events-none"
+              >
+                +1
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      </div>
+
+      {/* Live app */}
+      <div className="flex-1 overflow-hidden">
+        <AppSandbox code={code} appType={suggestion.app_type} className="w-full h-full" />
+      </div>
     </motion.div>
   );
 }

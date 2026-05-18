@@ -1,14 +1,14 @@
 import { useRef, useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Play, Zap, ChevronUp, Maximize2, X, Loader2 } from "lucide-react";
+import { Play, Zap, ChevronUp } from "lucide-react";
 import { Suggestion } from "../types";
 import { AppSandbox } from "./AppSandbox";
 
 const TYPE_STYLES: Record<string, { badge: string; glow: string }> = {
-  phone:    { badge: "text-pink-400 bg-pink-500/10 border-pink-500/30",    glow: "rgba(236,72,153,0.15)" },
-  desktop:  { badge: "text-blue-400 bg-blue-500/10 border-blue-500/30",    glow: "rgba(99,102,241,0.15)" },
+  phone:    { badge: "text-pink-400 bg-pink-500/10 border-pink-500/30",         glow: "rgba(236,72,153,0.15)" },
+  desktop:  { badge: "text-blue-400 bg-blue-500/10 border-blue-500/30",         glow: "rgba(99,102,241,0.15)" },
   game:     { badge: "text-emerald-400 bg-emerald-500/10 border-emerald-500/30", glow: "rgba(16,185,129,0.15)" },
-  terminal: { badge: "text-orange-400 bg-orange-500/10 border-orange-500/30", glow: "rgba(249,115,22,0.15)" },
+  terminal: { badge: "text-orange-400 bg-orange-500/10 border-orange-500/30",   glow: "rgba(249,115,22,0.15)" },
 };
 
 interface Props {
@@ -65,16 +65,10 @@ export function ScrollFeed({ suggestions, onPlay, onVote, onBuild }: Props) {
 
   return (
     <div className="relative h-full flex">
-      {/* Scrollable feed */}
       <div
         ref={containerRef}
         className="flex-1 overflow-y-scroll"
-        style={{
-          scrollSnapType: "y mandatory",
-          scrollBehavior: "smooth",
-          scrollbarWidth: "thin",
-          scrollbarColor: "rgba(99,102,241,0.3) transparent",
-        }}
+        style={{ scrollSnapType: "y mandatory", scrollBehavior: "smooth", scrollbarWidth: "none" }}
       >
         {items.map((s, idx) => (
           <FeedCard
@@ -88,7 +82,6 @@ export function ScrollFeed({ suggestions, onPlay, onVote, onBuild }: Props) {
         ))}
       </div>
 
-      {/* Side nav dots */}
       {items.length > 1 && (
         <div className="absolute right-4 top-1/2 -translate-y-1/2 flex flex-col gap-2 z-20">
           {items.map((_, i) => (
@@ -122,14 +115,17 @@ function FeedCard({
   onBuild?: (s: Suggestion) => void;
 }) {
   const [voted, setVoted] = useState(false);
+  const [showVotePop, setShowVotePop] = useState(false);
   const isBuilt = s.status === "built" && !!s.built_code;
-  const [livePreview, setLivePreview] = useState(isBuilt);
   const style = TYPE_STYLES[s.app_type || "desktop"] || TYPE_STYLES.desktop;
+  const title = s.content.length > 55 ? s.content.substring(0, 55) + "…" : s.content;
 
   const handleVote = () => {
     if (voted) return;
     setVoted(true);
+    setShowVotePop(true);
     onVote(s.id, s.votes || 0);
+    setTimeout(() => setShowVotePop(false), 1200);
   };
 
   return (
@@ -139,44 +135,39 @@ function FeedCard({
     >
       {/* Background */}
       <div className="absolute inset-0">
-        {isBuilt && livePreview ? (
+        {isBuilt ? (
           <AppSandbox code={s.built_code!} appType={s.app_type} className="w-full h-full" />
         ) : (
           <div className="absolute inset-0 bg-gradient-to-br from-[#07071a] via-black to-[#03030a]">
             <div
               className="absolute inset-0"
-              style={{
-                background: `radial-gradient(circle at 50% 40%, ${style.glow} 0%, transparent 65%)`,
-              }}
+              style={{ background: `radial-gradient(circle at 50% 40%, ${style.glow} 0%, transparent 65%)` }}
             />
             <AppMockup appType={s.app_type} />
           </div>
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/50 to-transparent pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-transparent pointer-events-none" />
       </div>
 
       {/* Top badges */}
-      <div className="relative z-10 flex items-center justify-between p-5 md:p-6">
+      <div className="relative z-10 flex items-center justify-between p-4">
         <div className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-[3px] border ${style.badge}`}>
           {s.app_type || "desktop"}
         </div>
-        <div
-          className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-[2px] border ${
-            isBuilt
-              ? "bg-indigo-500/10 text-indigo-400 border-indigo-500/20"
-              : "bg-white/5 text-white/30 border-white/10"
-          }`}
-        >
+        <div className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-[2px] border ${
+          isBuilt
+            ? "bg-indigo-500/10 text-indigo-400 border-indigo-500/20"
+            : "bg-white/5 text-white/30 border-white/10"
+        }`}>
           {isBuilt ? "● built" : "◌ pending"}
         </div>
       </div>
 
-      {/* Bottom info panel */}
-      <div className="relative z-10 mt-auto p-5 md:p-6 space-y-3">
-        {/* Title + id */}
+      {/* Bottom info */}
+      <div className="relative z-10 mt-auto p-4 space-y-3">
         <div>
-          <h2 className="text-lg md:text-xl font-black uppercase tracking-tight text-white leading-snug line-clamp-2">
-            {s.content}
+          <h2 className="text-base md:text-lg font-black uppercase tracking-tight text-white leading-snug">
+            {title}
           </h2>
           <p className="text-[9px] font-mono text-white/20 uppercase tracking-widest mt-1">
             #{s.id.substring(0, 12)}
@@ -199,39 +190,38 @@ function FeedCard({
           </div>
         </div>
 
-        {/* Action row */}
+        {/* Actions */}
         <div className="flex gap-2 items-center">
           {/* Vote */}
-          <motion.button
-            whileTap={{ scale: 0.9 }}
-            onClick={handleVote}
-            className={`flex flex-col items-center justify-center gap-0.5 w-12 h-12 rounded-xl border transition-all shrink-0 ${
-              voted
-                ? "bg-indigo-500/20 border-indigo-500/40 text-indigo-400"
-                : "bg-white/5 border-white/10 text-white/40 hover:bg-white/10 hover:text-white"
-            }`}
-          >
-            <ChevronUp className="w-3.5 h-3.5" />
-            <span className="text-[8px] font-black leading-none">{(s.votes || 0) + (voted ? 1 : 0)}</span>
-          </motion.button>
-
-          {/* Preview toggle for built apps */}
-          {isBuilt && (
+          <div className="relative shrink-0">
             <motion.button
-              whileTap={{ scale: 0.9 }}
-              onClick={() => setLivePreview((p) => !p)}
-              className={`w-12 h-12 rounded-xl border flex items-center justify-center transition-all shrink-0 ${
-                livePreview
+              whileTap={{ scale: 0.85 }}
+              onClick={handleVote}
+              className={`flex flex-col items-center justify-center gap-0.5 w-12 h-12 rounded-xl border transition-all ${
+                voted
                   ? "bg-indigo-500/20 border-indigo-500/40 text-indigo-400"
                   : "bg-white/5 border-white/10 text-white/40 hover:bg-white/10 hover:text-white"
               }`}
-              title="Toggle live preview"
             >
-              {livePreview ? <X className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+              <ChevronUp className="w-3.5 h-3.5" />
+              <span className="text-[8px] font-black leading-none">{(s.votes || 0) + (voted ? 1 : 0)}</span>
             </motion.button>
-          )}
+            <AnimatePresence>
+              {showVotePop && (
+                <motion.div
+                  initial={{ opacity: 1, y: 0 }}
+                  animate={{ opacity: 0, y: -22 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.9 }}
+                  className="absolute -top-5 left-1/2 -translate-x-1/2 text-[11px] font-black text-indigo-400 pointer-events-none"
+                >
+                  +1
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
 
-          {/* Main CTA */}
+          {/* CTA */}
           {isBuilt ? (
             <motion.button
               whileTap={{ scale: 0.97 }}
@@ -239,7 +229,7 @@ function FeedCard({
               className="flex-1 py-3 bg-white text-black rounded-xl font-black text-[10px] uppercase tracking-[5px] hover:bg-indigo-500 hover:text-white transition-all flex items-center justify-center gap-2 shadow-xl"
             >
               <Play className="w-3.5 h-3.5 fill-current" />
-              Launch App
+              Launch
             </motion.button>
           ) : onBuild ? (
             <motion.button
@@ -251,15 +241,13 @@ function FeedCard({
               Build Now
             </motion.button>
           ) : (
-            <div className="flex-1 py-3 bg-white/5 border border-white/10 rounded-xl font-black text-[10px] uppercase tracking-widest text-white/20 flex items-center justify-center gap-2">
-              <Loader2 className="w-3.5 h-3.5" />
+            <div className="flex-1 py-3 bg-white/5 border border-white/10 rounded-xl font-black text-[10px] uppercase tracking-widest text-white/20 flex items-center justify-center">
               {s.energy || 0}% fueled
             </div>
           )}
         </div>
       </div>
 
-      {/* Active indicator */}
       <AnimatePresence>
         {isActive && (
           <motion.div
@@ -295,9 +283,9 @@ function AppMockup({ appType }: { appType?: string }) {
       ) : (
         <div className="w-80 h-52 rounded-2xl border-4 border-white/40 flex flex-col p-4 gap-3">
           <div className="flex gap-1.5">
-            <div className="w-3 h-3 rounded-full bg-white/40" />
-            <div className="w-3 h-3 rounded-full bg-white/20" />
-            <div className="w-3 h-3 rounded-full bg-white/20" />
+            {[0, 1, 2].map(i => (
+              <div key={i} className={`w-3 h-3 rounded-full ${i === 0 ? "bg-white/40" : "bg-white/20"}`} />
+            ))}
           </div>
           <div className="flex-1 bg-white/10 rounded-xl" />
         </div>

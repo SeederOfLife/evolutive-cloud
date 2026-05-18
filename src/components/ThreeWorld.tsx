@@ -1,7 +1,7 @@
 
 import React, { useRef, useState, useMemo } from "react";
 import { useFrame } from "@react-three/fiber";
-import { Float, MeshDistortMaterial } from "@react-three/drei";
+import { Float, MeshDistortMaterial, Html } from "@react-three/drei";
 import * as THREE from "three";
 import { Suggestion } from "../types";
 
@@ -77,19 +77,20 @@ export function ModuleNode({ suggestion, onRun }: { suggestion: Suggestion, onRu
     meshRef.current.rotation.y += 0.01;
   });
 
+  const label = suggestion.content.length > 28
+    ? suggestion.content.substring(0, 28) + "…"
+    : suggestion.content;
+
   return (
-    <mesh 
-      ref={meshRef} 
-      onClick={(e) => {
-        e.stopPropagation();
-        onRun(suggestion);
-      }}
-      onPointerOver={() => setHovered(true)}
-      onPointerOut={() => setHovered(false)}
+    <mesh
+      ref={meshRef}
+      onClick={(e) => { e.stopPropagation(); onRun(suggestion); }}
+      onPointerOver={() => { setHovered(true); document.body.style.cursor = "pointer"; }}
+      onPointerOut={() => { setHovered(false); document.body.style.cursor = "default"; }}
     >
       <sphereGeometry args={[0.15, 32, 32]} />
-      <meshStandardMaterial 
-        color={hovered ? "#fff" : color} 
+      <meshStandardMaterial
+        color={hovered ? "#fff" : color}
         emissive={hovered ? "#fff" : color}
         emissiveIntensity={hovered ? 2 : 1.5}
         metalness={0.9}
@@ -97,6 +98,25 @@ export function ModuleNode({ suggestion, onRun }: { suggestion: Suggestion, onRu
         transparent
         opacity={0.9}
       />
+      {hovered && (
+        <Html center position={[0, 0.38, 0]} zIndexRange={[100, 0]}>
+          <div style={{
+            background: "rgba(9,9,11,0.92)",
+            border: "1px solid rgba(99,102,241,0.4)",
+            borderRadius: "8px",
+            padding: "5px 10px",
+            fontSize: "10px",
+            fontWeight: "700",
+            color: "white",
+            whiteSpace: "nowrap",
+            pointerEvents: "none",
+            letterSpacing: "0.3px",
+            boxShadow: "0 4px 16px rgba(0,0,0,0.6)",
+          }}>
+            {label}
+          </div>
+        </Html>
+      )}
     </mesh>
   );
 }
