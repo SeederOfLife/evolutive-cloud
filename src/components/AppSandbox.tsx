@@ -9,28 +9,28 @@ interface AppSandboxProps {
   onError?: (msg: string, stack?: string) => void;
 }
 
+function sanitizeCode(code: string): string {
+  return code
+    .replace(/^import\s+.*?from\s+['"][^'"]+['"];?\s*$/gm, '')
+    .replace(/^import\s*\{[^}]*\}\s*from\s*['"][^'"]+['"];?\s*$/gm, '')
+    .replace(/^import\s+['"][^'"]+['"];?\s*$/gm, '')
+    .replace(/^export\s+default\s+function\s+\w*/gm, 'function App')
+    .replace(/^export\s+default\s+class\s+\w*/gm, 'class App')
+    .replace(/^export\s+default\s+/gm, 'const App = ')
+    .replace(/^export\s+/gm, '')
+    .trim();
+}
+
 export function AppSandbox({ code, className = "" }: AppSandboxProps) {
-  const cleanCode = useMemo(() => {
-    if (!code) return "";
-    let p = code;
-    p = p.replace(/import\s+[\s\S]*?from\s+(["'])(?:react|lucide-react|framer-motion|motion\/react|recharts|d3|three|@react-three\/fiber|@react-three\/drei|react-markdown|tone|openai|canvas-confetti|clsx|tailwind-merge|@google\/generative-ai).*?\1;?/g, '');
-    p = p.replace(/import\s+(['"]).*?\1;?/g, '');
-    p = p.replace(/export\s+default\s+function\s+([a-zA-Z0-9_$]+)/g, 'window.__BUILT_APP__ = function $1');
-    p = p.replace(/export\s+default\s+function\s*\(/g, 'window.__BUILT_APP__ = function (');
-    p = p.replace(/export\s+default\s+\(([^)]*)\)\s*=>/g, 'window.__BUILT_APP__ = ($1) =>');
-    p = p.replace(/export\s+default\s+class\s+([a-zA-Z0-9_$]+)/g, 'window.__BUILT_APP__ = class $1');
-    p = p.replace(/export\s+default\s+([a-zA-Z0-9_$]+);?\s*$/gm, 'window.__BUILT_APP__ = $1;');
-    p = p.replace(/export\s+default\s+/g, 'window.__BUILT_APP__ = ');
-    p = p.replace(/\bexport\s+/g, '');
-    p = p.replace(/^import\b.+$/gm, '');
-    return p.trim();
-  }, [code]);
+  const cleanCode = useMemo(() => sanitizeCode(code || ""), [code]);
 
   const srcDoc = useMemo(() => {
-    // Escape backticks and </script> so they're safe inside template literal and HTML script tag
-    const safeCode = JSON.stringify(cleanCode)
-      .replace(/`/g, '\\u0060')
-      .replace(/<\//g, '<\\/');
+    if (!cleanCode) {
+      return `<!DOCTYPE html><html><body style="background:#050508;display:flex;align-items:center;justify-content:center;height:100vh;color:rgba(255,255,255,.15);font:900 10px/1 sans-serif;text-transform:uppercase;letter-spacing:8px">Awaiting Build</body></html>`;
+    }
+
+    // encodeURIComponent produces only safe chars (%XX) — no < > " \ ` that break script tags
+    const encoded = encodeURIComponent(cleanCode);
 
     return `<!DOCTYPE html>
 <html>
@@ -50,10 +50,11 @@ body{background:#050508;color:#fff;margin:0;min-height:100vh;display:flex;flex-d
 (function(){
   var root=document.getElementById('root');
   function showErr(msg,stack){
-    root.innerHTML='<div class="err"><b>Error:</b> '+msg+(stack?'<br><pre style="font-size:9px;opacity:.5;margin-top:8px;overflow:auto;max-height:120px">'+stack+'</pre>':'')+'<\/div>';
-    window.parent&&window.parent.postMessage({type:'EVO_ERROR',msg:msg},'*');
+    root.innerHTML='<div class="err"><b>Error:</b> '+String(msg)+(stack?'<br><pre style="font-size:9px;opacity:.5;margin-top:8px;overflow:auto;max-height:120px">'+String(stack)+'<\/pre>':'')+'<\/div>';
+    try{window.parent&&window.parent.postMessage({type:'EVO_ERROR',msg:String(msg)},'*');}catch(x){}
   }
-  window.onerror=function(m,u,l,c,e){showErr(String(m),e&&e.stack);return true;};
+  window.onerror=function(m,u,l,c,e){showErr(m,e&&e.stack);return true;};
+  window.onunhandledrejection=function(e){showErr(e.reason&&e.reason.message||String(e.reason));};
 
   var SCRIPTS=[
     'https://unpkg.com/react@18.2.0/umd/react.development.js',
@@ -68,36 +69,24 @@ body{background:#050508;color:#fff;margin:0;min-height:100vh;display:flex;flex-d
     var s=document.createElement('script');
     s.src=SCRIPTS[idx++];s.crossOrigin='anonymous';
     s.onload=loadNext;
-    s.onerror=function(){showErr('CDN failed to load: '+SCRIPTS[idx-1]);};
+    s.onerror=function(){showErr('CDN failed: '+SCRIPTS[idx-1]);};
     document.head.appendChild(s);
-  }
-
-  function mkEl(tag){
-    return function(p){
-      p=p||{};
-      return window.React.createElement(tag,{className:p.className,style:p.style,id:p.id,onClick:p.onClick,onChange:p.onChange},p.children);
-    };
   }
 
   function runApp(){
     try{
-      window.process={env:{NODE_ENV:'development'}};
-      window.exports={};window.module={exports:window.exports};
       var R=window.React,RD=window.ReactDOM;
       var IC=window.lucideReact||window.LucideReact||{};
       var RC=window.Recharts||{};
 
-      // React hooks as globals
       ['useState','useEffect','useMemo','useRef','useCallback','createContext','useContext',
        'useReducer','useLayoutEffect','forwardRef','Fragment','memo','Children','cloneElement'].forEach(function(h){
         if(R[h]!==undefined)window[h]=R[h];
       });
-      // Lucide icons as globals
       Object.keys(IC).forEach(function(k){if(k!=='default')window[k]=IC[k];});
-      // Recharts components as globals
       Object.keys(RC).forEach(function(k){if(/^[A-Z]/.test(k))window[k]=RC[k];});
 
-      // Motion stub: renders without animations so content is still visible
+      var mkEl=function(tag){return function(p){p=p||{};return R.createElement(tag,{className:p.className,style:p.style,id:p.id,onClick:p.onClick,onChange:p.onChange},p.children);};};
       var motionObj={};
       ['div','span','p','h1','h2','h3','h4','h5','h6','ul','ol','li','a','button','img',
        'input','textarea','section','article','header','footer','nav','main','aside'].forEach(function(t){motionObj[t]=mkEl(t);});
@@ -106,52 +95,32 @@ body{background:#050508;color:#fff;margin:0;min-height:100vh;display:flex;flex-d
       window.AnimatePresence=function(p){return p&&p.children||null;};
       var FM={motion:window.motion,AnimatePresence:window.AnimatePresence,LayoutGroup:R.Fragment};
       window.FramerMotion=FM;
-
       window.require=function(m){
-        var map={
-          react:R,'react-dom':RD,'react-dom/client':RD,
-          'lucide-react':IC,recharts:RC,
-          'framer-motion':FM,'motion/react':FM
-        };
+        var map={react:R,'react-dom':RD,'react-dom/client':RD,'lucide-react':IC,recharts:RC,'framer-motion':FM,'motion/react':FM};
         return map[m]||window[m]||{};
       };
 
-      var code=${safeCode};
-      if(!code||code.length<5){
-        root.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100vh;opacity:.15;text-transform:uppercase;letter-spacing:8px;font-size:10px;font-weight:900;">Awaiting Build<\/div>';
-        return;
+      // Decode safely — encodeURIComponent has no chars that break HTML or JS
+      var appCode=decodeURIComponent("${encoded}");
+
+      // Inject as type="text/babel" and let Babel transform it
+      var babelScript=document.createElement('script');
+      babelScript.type='text/babel';
+      babelScript.setAttribute('data-presets','env,react,typescript');
+      babelScript.textContent=appCode+'\\nReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));';
+      document.body.appendChild(babelScript);
+
+      // Babel.transform the script tag and execute (public API in standalone)
+      try{
+        var src=babelScript.textContent;
+        var out=Babel.transform(src,{presets:['env','react','typescript'],filename:'app.tsx'}).code;
+        var execScript=document.createElement('script');
+        execScript.textContent=out;
+        document.body.appendChild(execScript);
+      }catch(transpileErr){
+        showErr('Transpile error: '+transpileErr.message,transpileErr.stack);
       }
 
-      // Build scope prefix: React hooks + icons/recharts actually used in the code
-      var hooks='useState,useEffect,useMemo,useRef,useCallback,createContext,useContext,useReducer,useLayoutEffect,forwardRef,Fragment,memo';
-      var usedIC=Object.keys(IC).filter(function(k){return k!=='default'&&/^[a-zA-Z0-9_$]+$/.test(k)&&code.indexOf(k)!==-1;});
-      var usedRC=Object.keys(RC).filter(function(k){return /^[A-Z][a-zA-Z0-9_$]*$/.test(k)&&code.indexOf(k)!==-1;});
-      var scope='var React=window.React,ReactDOM=window.ReactDOM,motion=window.motion,AnimatePresence=window.AnimatePresence;\n'+
-                'var {'+hooks+'}=window.React;\n';
-      if(usedIC.length)scope+='var {'+usedIC.join(',')+'}=window.lucideReact||{};\n';
-      if(usedRC.length)scope+='var {'+usedRC.join(',')+'}=window.Recharts||{};\n';
-
-      var out;
-      try{out=Babel.transform(scope+code,{presets:['env','react','typescript'],filename:'app.tsx'}).code;}
-      catch(e){throw new Error('Transpile error: '+e.message);}
-      var el=document.createElement('script');el.text=out;document.body.appendChild(el);
-
-      setTimeout(function(){
-        var App=window.__BUILT_APP__||window.App||window.Main||window.BuiltApp;
-        if(!App){
-          var found=Object.keys(window).find(function(k){
-            return /^[A-Z]/.test(k)&&typeof window[k]==='function'&&
-              !['React','ReactDOM','Babel','Recharts','FramerMotion'].includes(k)&&!IC[k];
-          });
-          if(found)App=window[found];
-        }
-        if(App){
-          try{RD.createRoot(root).render(R.createElement(App));}
-          catch(e){showErr('Render error: '+e.message,e.stack);}
-        }else{
-          showErr("No App component found. Make sure code exports a default function App().");
-        }
-      },50);
     }catch(e){showErr(e.message,e.stack);}
   }
 
@@ -167,7 +136,7 @@ body{background:#050508;color:#fff;margin:0;min-height:100vh;display:flex;flex-d
       srcDoc={srcDoc}
       className={`w-full h-full border-none bg-black ${className}`}
       title="app-sandbox"
-      sandbox="allow-scripts allow-modals allow-forms allow-popups allow-same-origin"
+      sandbox="allow-scripts allow-modals allow-forms allow-popups"
     />
   );
 }

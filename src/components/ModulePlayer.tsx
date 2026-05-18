@@ -67,22 +67,15 @@ export function ModulePlayer({
 
   const cleanCode = useMemo(() => {
     if (!code) return "";
-    let p = code;
-    p = p.replace(/import\s+[\s\S]*?from\s+(["'])(?:react|lucide-react|framer-motion|motion\/react|recharts|d3|three|@react-three\/fiber|@react-three\/drei|react-markdown|tone|openai|canvas-confetti|clsx|tailwind-merge|@google\/generative-ai).*?\1;?/g, "");
-    p = p.replace(/import\s+(['"]).*?\1;?/g, "");
-    p = p.replace(/import\s+\{([^}]+)\}\s+from\s+(["'])(?:react|lucide-react|framer-motion|motion\/react|recharts|d3|three|@react-three\/fiber|@react-three\/drei|react-markdown|tone|openai|canvas-confetti|clsx|tailwind-merge|@google\/generative-ai).*?\2;?/g, "");
-    p = p.replace(/const\s+\{[\s\S]*?\}\s*=\s*(window\.)?(React|Motion|lucide|Lucide|Recharts|d3|LucideReact);?/g, "");
-    p = p.replace(/const\s+([a-zA-Z0-9_$]+)\s*=\s*(window\.)?(React|Motion|lucide|Lucide|Recharts|d3|LucideReact)\.([a-zA-Z0-9_$]+);?/g, "");
-    p = p.replace(/export\s+default\s+function\s+([a-zA-Z0-9_$]+)/g, "window.__BUILT_APP__ = function $1");
-    p = p.replace(/export\s+default\s+function\s*\(/g, "window.__BUILT_APP__ = function (");
-    p = p.replace(/export\s+default\s+\(([^)]*)\)\s*=>/g, "window.__BUILT_APP__ = ($1) =>");
-    p = p.replace(/export\s+default\s+class\s+([a-zA-Z0-9_$]+)/g, "window.__BUILT_APP__ = class $1");
-    p = p.replace(/export\s+default\s+class\s*\{/g, "window.__BUILT_APP__ = class {");
-    p = p.replace(/export\s+default\s+([a-zA-Z0-9_$]+);?\s*$/gm, "window.__BUILT_APP__ = $1;");
-    p = p.replace(/export\s+default\s+/g, "window.__BUILT_APP__ = ");
-    p = p.replace(/\bexport\s+/g, "");
-    p = p.replace(/^import\b.+$/gm, "");
-    return p.trim();
+    return code
+      .replace(/^import\s+.*?from\s+['"][^'"]+['"];?\s*$/gm, '')
+      .replace(/^import\s*\{[^}]*\}\s*from\s*['"][^'"]+['"];?\s*$/gm, '')
+      .replace(/^import\s+['"][^'"]+['"];?\s*$/gm, '')
+      .replace(/^export\s+default\s+function\s+\w*/gm, 'function App')
+      .replace(/^export\s+default\s+class\s+\w*/gm, 'class App')
+      .replace(/^export\s+default\s+/gm, 'const App = ')
+      .replace(/^export\s+/gm, '')
+      .trim();
   }, [code]);
 
   const handleSave = async () => {
@@ -111,13 +104,11 @@ export function ModulePlayer({
   };
 
   const srcDoc = useMemo(() => {
-    // Escape backticks (would break template literal) and </script> (would close HTML script tag early)
-    const safeCode = JSON.stringify(cleanCode)
-      .replace(/`/g, "\\u0060")
-      .replace(/<\//g, "<\\/");
+    if (!cleanCode) return `<!DOCTYPE html><html><body style="background:#050508;display:flex;align-items:center;justify-content:center;height:100vh;color:rgba(255,255,255,.2);font:900 11px/1 sans-serif;text-transform:uppercase;letter-spacing:10px">Awaiting Manifestation</body></html>`;
 
-    return (
-      `<!DOCTYPE html>
+    const encoded = encodeURIComponent(cleanCode);
+
+    return `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/>
@@ -135,14 +126,15 @@ body{background:#050508;color:#fff;margin:0;min-height:100vh;display:flex;flex-d
 (function(){
   var root=document.getElementById('root');
   function showErr(msg,stack){
-    window.parent&&window.parent.postMessage({type:'EVO_ERROR',msg:msg,stack:stack},'*');
-    root.innerHTML='<div class="err"><div style="font-weight:800;letter-spacing:2px;margin-bottom:8px;color:#f87171;">BUILD FAILURE<\/div>'+msg+(stack?'<br><pre style="font-size:10px;opacity:.5;margin-top:8px;overflow:auto;max-height:180px">'+stack+'<\/pre>':'')+'<\/div>';
+    try{window.parent&&window.parent.postMessage({type:'EVO_ERROR',msg:String(msg),stack:stack},'*');}catch(x){}
+    root.innerHTML='<div class="err"><div style="font-weight:800;letter-spacing:2px;margin-bottom:8px;color:#f87171;">BUILD FAILURE<\/div>'+String(msg)+(stack?'<br><pre style="font-size:10px;opacity:.5;margin-top:8px;overflow:auto;max-height:180px">'+String(stack)+'<\/pre>':'')+'<\/div>';
   }
-  window.onerror=function(m,u,l,c,e){showErr(String(m),e&&e.stack);return true;};
+  window.onerror=function(m,u,l,c,e){showErr(m,e&&e.stack);return true;};
+  window.onunhandledrejection=function(e){showErr(e.reason&&e.reason.message||String(e.reason));};
   var _log=console.log;
   console.log=function(){
     _log.apply(console,arguments);
-    window.parent&&window.parent.postMessage({type:'EVO_LOG',content:Array.from(arguments).map(function(a){return typeof a==='object'?JSON.stringify(a):String(a);}).join(' ')},'*');
+    try{window.parent&&window.parent.postMessage({type:'EVO_LOG',content:Array.from(arguments).map(function(a){return typeof a==='object'?JSON.stringify(a):String(a);}).join(' ')},'*');}catch(x){}
   };
 
   var SCRIPTS=[
@@ -162,17 +154,8 @@ body{background:#050508;color:#fff;margin:0;min-height:100vh;display:flex;flex-d
     document.head.appendChild(s);
   }
 
-  function mkEl(tag){
-    return function(p){
-      p=p||{};
-      return window.React.createElement(tag,{className:p.className,style:p.style,id:p.id,onClick:p.onClick,onChange:p.onChange},p.children);
-    };
-  }
-
   function runApp(){
     try{
-      window.process={env:{NODE_ENV:'development'}};
-      window.exports={};window.module={exports:window.exports};
       var R=window.React,RD=window.ReactDOM;
       var IC=window.lucideReact||window.LucideReact||{};
       var RC=window.Recharts||{};
@@ -184,6 +167,7 @@ body{background:#050508;color:#fff;margin:0;min-height:100vh;display:flex;flex-d
       Object.keys(IC).forEach(function(k){if(k!=='default')window[k]=IC[k];});
       Object.keys(RC).forEach(function(k){if(/^[A-Z]/.test(k))window[k]=RC[k];});
 
+      var mkEl=function(tag){return function(p){p=p||{};return R.createElement(tag,{className:p.className,style:p.style,id:p.id,onClick:p.onClick,onChange:p.onChange},p.children);};};
       var motionObj={};
       ['div','span','p','h1','h2','h3','h4','h5','h6','ul','ol','li','a','button','img',
        'input','textarea','section','article','header','footer','nav','main','aside'].forEach(function(t){motionObj[t]=mkEl(t);});
@@ -192,52 +176,29 @@ body{background:#050508;color:#fff;margin:0;min-height:100vh;display:flex;flex-d
       window.AnimatePresence=function(p){return p&&p.children||null;};
       var FM={motion:window.motion,AnimatePresence:window.AnimatePresence,LayoutGroup:R.Fragment};
       window.FramerMotion=FM;
-
       window.require=function(m){
         var map={react:R,'react-dom':RD,'react-dom/client':RD,'lucide-react':IC,recharts:RC,'framer-motion':FM,'motion/react':FM};
         return map[m]||window[m]||{};
       };
 
-      var code=` +
-      safeCode +
-      `;
-      if(!code||code.length<10){
-        root.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100vh;opacity:.2;text-transform:uppercase;letter-spacing:10px;font-size:11px;font-weight:900;">Awaiting Manifestation<\/div>';
-        return;
+      var appCode=decodeURIComponent("${encoded}");
+
+      var babelScript=document.createElement('script');
+      babelScript.type='text/babel';
+      babelScript.setAttribute('data-presets','env,react,typescript');
+      babelScript.textContent=appCode+'\\nReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));';
+      document.body.appendChild(babelScript);
+
+      try{
+        var out=Babel.transform(babelScript.textContent,{presets:['env','react','typescript'],filename:'app.tsx'}).code;
+        var execScript=document.createElement('script');
+        execScript.textContent=out;
+        document.body.appendChild(execScript);
+        console.log('Manifestation complete.');
+      }catch(transpileErr){
+        showErr('Transpile error: '+transpileErr.message,transpileErr.stack);
       }
 
-      var hooks='useState,useEffect,useMemo,useRef,useCallback,createContext,useContext,useReducer,useLayoutEffect,forwardRef,Fragment,memo';
-      var usedIC=Object.keys(IC).filter(function(k){return k!=='default'&&/^[a-zA-Z0-9_$]+$/.test(k)&&code.indexOf(k)!==-1;});
-      var usedRC=Object.keys(RC).filter(function(k){return /^[A-Z][a-zA-Z0-9_$]*$/.test(k)&&code.indexOf(k)!==-1;});
-      var scope='var React=window.React,ReactDOM=window.ReactDOM,motion=window.motion,AnimatePresence=window.AnimatePresence;\\n'+
-                'var {'+hooks+'}=window.React;\\n';
-      if(usedIC.length)scope+='var {'+usedIC.join(',')+'} = window.lucideReact||{};\\n';
-      if(usedRC.length)scope+='var {'+usedRC.join(',')+'} = window.Recharts||{};\\n';
-
-      var out;
-      try{
-        console.log('Transpiling...');
-        out=Babel.transform(scope+code,{presets:['env','react','typescript'],filename:'app.tsx'}).code;
-        console.log('Transpilation successful');
-      }catch(e){throw new Error('Transpile error: '+e.message);}
-      var el=document.createElement('script');el.text=out;document.body.appendChild(el);
-
-      setTimeout(function(){
-        var App=window.__BUILT_APP__||window.App||window.Main||window.BuiltApp;
-        if(!App){
-          var found=Object.keys(window).find(function(k){
-            return /^[A-Z]/.test(k)&&typeof window[k]==='function'&&
-              !['React','ReactDOM','Babel','Recharts','FramerMotion'].includes(k)&&!IC[k];
-          });
-          if(found){console.log('Detected: '+found);App=window[found];}
-        }
-        if(App){
-          try{RD.createRoot(root).render(R.createElement(App));console.log('Manifestation complete.');}
-          catch(e){showErr('Render error: '+e.message,e.stack);}
-        }else{
-          showErr("No App component found. Code must have: export default function App() {}");
-        }
-      },50);
     }catch(e){showErr(e.message,e.stack);}
   }
 
@@ -245,8 +206,7 @@ body{background:#050508;color:#fff;margin:0;min-height:100vh;display:flex;flex-d
 })();
 <\/script>
 </body>
-</html>`
-    );
+</html>`;
   }, [cleanCode]);
 
   return (
@@ -450,7 +410,7 @@ body{background:#050508;color:#fff;margin:0;min-height:100vh;display:flex;flex-d
                 )}
                 <iframe ref={iframeRef} srcDoc={srcDoc}
                   className="w-full h-full border-none bg-black" title="app-player"
-                  sandbox="allow-scripts allow-modals allow-forms allow-popups allow-same-origin"
+                  sandbox="allow-scripts allow-modals allow-forms allow-popups"
                 />
                 {deviceFrame === "phone" && (
                   <div className="absolute bottom-2 left-1/2 -translate-x-1/2 w-28 sm:w-36 h-1.5 bg-white/10 rounded-full z-10 pointer-events-none" />
