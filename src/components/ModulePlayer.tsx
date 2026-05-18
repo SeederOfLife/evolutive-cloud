@@ -182,21 +182,22 @@ body{background:#050508;color:#fff;margin:0;min-height:100vh;display:flex;flex-d
       };
 
       var appCode=decodeURIComponent("${encoded}");
+      var mountCode=appCode+'\\nReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));';
 
-      var babelScript=document.createElement('script');
-      babelScript.type='text/babel';
-      babelScript.setAttribute('data-presets','env,react,typescript');
-      babelScript.textContent=appCode+'\\nReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));';
-      document.body.appendChild(babelScript);
+      var out;
+      try{
+        out=Babel.transform(mountCode,{presets:['env','react','typescript'],filename:'app.tsx'}).code;
+        console.log('Transpile OK');
+      }catch(transpileErr){
+        showErr('Transpile: '+transpileErr.message,transpileErr.stack);
+        return;
+      }
 
       try{
-        var out=Babel.transform(babelScript.textContent,{presets:['env','react','typescript'],filename:'app.tsx'}).code;
-        var execScript=document.createElement('script');
-        execScript.textContent=out;
-        document.body.appendChild(execScript);
+        (new Function(out))();
         console.log('Manifestation complete.');
-      }catch(transpileErr){
-        showErr('Transpile error: '+transpileErr.message,transpileErr.stack);
+      }catch(runErr){
+        showErr('Runtime: '+runErr.message,runErr.stack);
       }
 
     }catch(e){showErr(e.message,e.stack);}

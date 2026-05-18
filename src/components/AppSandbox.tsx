@@ -14,8 +14,8 @@ function sanitizeCode(code: string): string {
     .replace(/^import\s+.*?from\s+['"][^'"]+['"];?\s*$/gm, '')
     .replace(/^import\s*\{[^}]*\}\s*from\s*['"][^'"]+['"];?\s*$/gm, '')
     .replace(/^import\s+['"][^'"]+['"];?\s*$/gm, '')
-    .replace(/^export\s+default\s+function\s+\w*/gm, 'function App')
-    .replace(/^export\s+default\s+class\s+\w*/gm, 'class App')
+    .replace(/^export\s+default\s+function\s*\w*/gm, 'function App')
+    .replace(/^export\s+default\s+class\s*\w*/gm, 'class App')
     .replace(/^export\s+default\s+/gm, 'const App = ')
     .replace(/^export\s+/gm, '')
     .trim();
@@ -29,7 +29,7 @@ export function AppSandbox({ code, className = "" }: AppSandboxProps) {
       return `<!DOCTYPE html><html><body style="background:#050508;display:flex;align-items:center;justify-content:center;height:100vh;color:rgba(255,255,255,.15);font:900 10px/1 sans-serif;text-transform:uppercase;letter-spacing:8px">Awaiting Build</body></html>`;
     }
 
-    // encodeURIComponent produces only safe chars (%XX) — no < > " \ ` that break script tags
+    // encodeURIComponent produces only %XX sequences — safe in any JS string literal
     const encoded = encodeURIComponent(cleanCode);
 
     return `<!DOCTYPE html>
@@ -100,25 +100,22 @@ body{background:#050508;color:#fff;margin:0;min-height:100vh;display:flex;flex-d
         return map[m]||window[m]||{};
       };
 
-      // Decode safely — encodeURIComponent has no chars that break HTML or JS
       var appCode=decodeURIComponent("${encoded}");
+      var mountCode=appCode+'\\nReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));';
 
-      // Inject as type="text/babel" and let Babel transform it
-      var babelScript=document.createElement('script');
-      babelScript.type='text/babel';
-      babelScript.setAttribute('data-presets','env,react,typescript');
-      babelScript.textContent=appCode+'\\nReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));';
-      document.body.appendChild(babelScript);
-
-      // Babel.transform the script tag and execute (public API in standalone)
+      var out;
       try{
-        var src=babelScript.textContent;
-        var out=Babel.transform(src,{presets:['env','react','typescript'],filename:'app.tsx'}).code;
-        var execScript=document.createElement('script');
-        execScript.textContent=out;
-        document.body.appendChild(execScript);
+        out=Babel.transform(mountCode,{presets:['env','react','typescript'],filename:'app.tsx'}).code;
       }catch(transpileErr){
-        showErr('Transpile error: '+transpileErr.message,transpileErr.stack);
+        showErr('Transpile: '+transpileErr.message,transpileErr.stack);
+        return;
+      }
+
+      // Run via Function() so errors are synchronous and caught below
+      try{
+        (new Function(out))();
+      }catch(runErr){
+        showErr('Runtime: '+runErr.message,runErr.stack);
       }
 
     }catch(e){showErr(e.message,e.stack);}
