@@ -11,12 +11,19 @@ interface AppSandboxProps {
 
 function sanitizeCode(code: string): string {
   return code
+    // Remove all import statements
     .replace(/^import\s+.*?from\s+['"][^'"]+['"];?\s*$/gm, '')
     .replace(/^import\s*\{[^}]*\}\s*from\s*['"][^'"]+['"];?\s*$/gm, '')
     .replace(/^import\s+['"][^'"]+['"];?\s*$/gm, '')
+    // export default function/class → rename to App
     .replace(/^export\s+default\s+function\s*\w*/gm, 'function App')
     .replace(/^export\s+default\s+class\s*\w*/gm, 'class App')
+    // export default SomeName; → alias unless already App (avoids "const App = App")
+    .replace(/^export\s+default\s+([A-Za-z_$][\w$]*)\s*;?\s*$/gm,
+      (_, name) => name === 'App' ? '' : `const App = ${name};`)
+    // export default <expression> → const App = <expression>
     .replace(/^export\s+default\s+/gm, 'const App = ')
+    // strip remaining export keywords
     .replace(/^export\s+/gm, '')
     .trim();
 }

@@ -71,8 +71,10 @@ export function ModulePlayer({
       .replace(/^import\s+.*?from\s+['"][^'"]+['"];?\s*$/gm, '')
       .replace(/^import\s*\{[^}]*\}\s*from\s*['"][^'"]+['"];?\s*$/gm, '')
       .replace(/^import\s+['"][^'"]+['"];?\s*$/gm, '')
-      .replace(/^export\s+default\s+function\s+\w*/gm, 'function App')
-      .replace(/^export\s+default\s+class\s+\w*/gm, 'class App')
+      .replace(/^export\s+default\s+function\s*\w*/gm, 'function App')
+      .replace(/^export\s+default\s+class\s*\w*/gm, 'class App')
+      .replace(/^export\s+default\s+([A-Za-z_$][\w$]*)\s*;?\s*$/gm,
+        (_, name) => name === 'App' ? '' : `const App = ${name};`)
       .replace(/^export\s+default\s+/gm, 'const App = ')
       .replace(/^export\s+/gm, '')
       .trim();

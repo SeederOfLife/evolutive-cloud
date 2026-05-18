@@ -10,7 +10,8 @@ import * as THREE from "three";
 import { motion, AnimatePresence } from "motion/react";
 import {
   ChevronUp, X, Search, Zap, Play, Sparkles, Loader2,
-  Settings, Activity, Trash2, LogOut, Globe, Cpu, ChevronDown, User
+  Settings, Activity, Trash2, LogOut, Globe, Cpu, ChevronDown, User,
+  MessageSquare, ArrowRight
 } from "lucide-react";
 import OpenAI from "openai";
 import {
@@ -326,30 +327,36 @@ export default function App() {
       setManifestingStep("Generating app...");
       setIsManifesting(true);
 
+      const existingApps = suggestions
+        .filter(s => s.status !== "system_config" && s.status !== "deleted" && !s.is_deleted && s.id !== suggestion.id && s.status === "built")
+        .slice(0, 8)
+        .map(s => `- "${s.content}" (${s.app_type || "desktop"})`)
+        .join("\n");
+
       const prompt = `
 System: ${aiConfig.systemPrompt}
 Target: ${suggestion.app_type?.toUpperCase() || "DESKTOP"}
 
 Task: Create a complete React application for: "${suggestion.content}"
-
+${existingApps ? `\nOther apps already built (for context/inspiration, don't duplicate):\n${existingApps}\n` : ""}
 Guidelines:
 - DESKTOP: wide viewport, dashboard layout
 - PHONE: touch-first, vertical stacking
 - GAME: high-interactivity, game state loops
 - TERMINAL: monospace, command-line style
 
-Libraries available (do NOT import, already in scope):
-- React 18 hooks (useState, useEffect, useMemo, etc.)
-- Tailwind CSS
-- Framer Motion (motion, AnimatePresence)
-- Lucide React icons
-- Recharts (LineChart, BarChart, etc.)
+Libraries available (already in scope, NO imports needed):
+- React 18 hooks (useState, useEffect, useMemo, useRef, useCallback, useContext, useReducer)
+- Tailwind CSS classes
+- Lucide React icons (e.g. Search, Star, Heart, Play, Settings...)
+- Recharts (LineChart, BarChart, PieChart, AreaChart...)
+- motion.div, AnimatePresence from Framer Motion
 
-Rules:
-- Export: export default function App() { ... }
-- NO import statements
-- Tailwind for all styling
-- Return ONLY the code, no markdown
+Critical rules:
+- Start with: export default function App() {
+- NO import statements at all
+- ALL styling via Tailwind classes
+- Return ONLY raw code, no markdown fences
       `.trim();
 
       if (apiQuota < 20) {
@@ -843,22 +850,22 @@ Rules:
             suggestion={launchTarget}
             onClose={() => setLaunchTarget(null)}
             onVote={(id, votes) => voteSuggestion(id, votes)}
-            onRefine={async (code: string, error: string) => {
+            onRefine={async (message: string, currentCode: string) => {
               const prompt = `System: ${aiConfig.systemPrompt}
-Task: Fix this React app that has a runtime error. Return ONLY the fixed code with no imports and no markdown.
+Task: Improve or fix this React app based on the user's request. Return ONLY the complete updated code — no markdown, no imports.
 
-Code:
-${code}
+Current code:
+${currentCode}
 
-Runtime Error: "${error}"`.trim();
+User request: "${message}"`.trim();
               const raw = await callUnifiedAI(prompt);
               const match = raw.match(/```(?:javascript|typescript|tsx|jsx)?\s?([\s\S]*?)```/);
               const fixed = (match ? match[1] : raw).replace(/```[a-z]*\n?/gi, "").replace(/```/g, "").trim();
               if (fixed && launchTarget) {
                 const newVersion: EvolutionVersion = {
-                  code: launchTarget.built_code || code,
+                  code: launchTarget.built_code || currentCode,
                   timestamp: new Date().toISOString(),
-                  prompt: `[AUTO-FIX] ${error}`,
+                  prompt: message,
                 };
                 await updateDoc(doc(db, "suggestions", launchTarget.id), {
                   built_code: fixed,
@@ -1459,17 +1466,28 @@ function LaunchModal({
   suggestion: Suggestion;
   onClose: () => void;
   onVote: (id: string, votes: number) => void;
-  onRefine?: (code: string, error: string) => Promise<string>;
+  onRefine?: (message: string, code: string) => Promise<string>;
 }) {
   const [code, setCode] = useState(suggestion.built_code || "");
   const [lastError, setLastError] = useState<string | null>(null);
   const [isFixing, setIsFixing] = useState(false);
   const [voted, setVoted] = useState(false);
   const [showVotePop, setShowVotePop] = useState(false);
+  const [showChat, setShowChat] = useState(true);
+  const [chatInput, setChatInput] = useState("");
+  const [messages, setMessages] = useState<{ role: "user" | "ai"; text: string }[]>([]);
+  const chatEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handler = (e: MessageEvent) => {
-      if (e.data?.type === "EVO_ERROR") setLastError(e.data.msg);
+      if (e.data?.type === "EVO_ERROR") {
+        setLastError(e.data.msg);
+        setMessages(prev => {
+          // avoid duplicate error banners
+          if (prev.at(-1)?.text.startsWith("⚠️")) return prev;
+          return [...prev, { role: "ai", text: `⚠️ ${e.data.msg}` }];
+        });
+      }
     };
     window.addEventListener("message", handler);
     return () => window.removeEventListener("message", handler);
@@ -1477,12 +1495,24 @@ function LaunchModal({
 
   useEffect(() => { setLastError(null); }, [code]);
 
-  const handleFix = async () => {
-    if (!onRefine || !lastError || isFixing) return;
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  const sendMessage = async (override?: string) => {
+    const text = override ?? chatInput.trim();
+    if (!text || !onRefine || isFixing) return;
+    setChatInput("");
+    setMessages(prev => [...prev, { role: "user", text }]);
     setIsFixing(true);
     try {
-      const newCode = await onRefine(code, lastError);
-      if (newCode) setCode(newCode);
+      const newCode = await onRefine(text, code);
+      if (newCode) {
+        setCode(newCode);
+        setMessages(prev => [...prev, { role: "ai", text: "Done — app updated." }]);
+      }
+    } catch (e: any) {
+      setMessages(prev => [...prev, { role: "ai", text: "Error: " + e.message }]);
     } finally {
       setIsFixing(false);
     }
@@ -1496,8 +1526,8 @@ function LaunchModal({
     setTimeout(() => setShowVotePop(false), 1200);
   };
 
-  const title = suggestion.content.length > 60
-    ? suggestion.content.substring(0, 60) + "…"
+  const title = suggestion.content.length > 55
+    ? suggestion.content.substring(0, 55) + "…"
     : suggestion.content;
 
   return (
@@ -1508,34 +1538,20 @@ function LaunchModal({
       className="fixed inset-0 z-[150] bg-black flex flex-col"
     >
       {/* Top bar */}
-      <div className="flex-none h-12 bg-gray-900 border-b border-gray-800 flex items-center px-4 gap-3">
+      <div className="flex-none h-12 bg-gray-900 border-b border-gray-800 flex items-center px-3 gap-2 shrink-0">
         <button
           onClick={onClose}
           className="w-8 h-8 rounded-lg bg-gray-800 hover:bg-gray-700 flex items-center justify-center text-gray-400 hover:text-white transition-all shrink-0"
         >
           <X className="w-4 h-4" />
         </button>
-        <span className="flex-1 text-sm font-semibold text-white truncate">{title}</span>
 
-        {onRefine && lastError && (
-          <button
-            onClick={handleFix}
-            disabled={isFixing}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500 hover:bg-red-600 disabled:opacity-50 rounded-lg text-xs font-bold text-white transition-all shrink-0"
-          >
-            {isFixing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
-            Fix with AI
-          </button>
-        )}
+        <span className="flex-1 text-sm font-semibold text-white truncate min-w-0">{title}</span>
 
         <div className="relative shrink-0">
-          <motion.button
-            whileTap={{ scale: 0.85 }}
-            onClick={handleVote}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-              voted
-                ? "bg-indigo-500/20 text-indigo-400 border border-indigo-500/30"
-                : "bg-gray-800 text-gray-400 hover:text-white"
+          <motion.button whileTap={{ scale: 0.85 }} onClick={handleVote}
+            className={`flex items-center gap-1.5 px-3 h-8 rounded-lg text-xs font-bold transition-all ${
+              voted ? "bg-indigo-500/20 text-indigo-400 border border-indigo-500/30" : "bg-gray-800 text-gray-400 hover:text-white"
             }`}
           >
             <ChevronUp className="w-3.5 h-3.5" />
@@ -1543,23 +1559,121 @@ function LaunchModal({
           </motion.button>
           <AnimatePresence>
             {showVotePop && (
-              <motion.div
-                initial={{ opacity: 1, y: 0 }}
-                animate={{ opacity: 0, y: -20 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.9 }}
-                className="absolute -top-5 left-1/2 -translate-x-1/2 text-xs font-black text-indigo-400 pointer-events-none"
-              >
+              <motion.div initial={{ opacity: 1, y: 0 }} animate={{ opacity: 0, y: -20 }} exit={{ opacity: 0 }} transition={{ duration: 0.9 }}
+                className="absolute -top-5 left-1/2 -translate-x-1/2 text-xs font-black text-indigo-400 pointer-events-none">
                 +1
               </motion.div>
             )}
           </AnimatePresence>
         </div>
+
+        {onRefine && (
+          <button
+            onClick={() => setShowChat(p => !p)}
+            className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all shrink-0 ${
+              showChat ? "bg-indigo-500/20 text-indigo-400 border border-indigo-500/30" : "bg-gray-800 text-gray-400 hover:text-white"
+            }`}
+            title="Toggle AI Chat"
+          >
+            <MessageSquare className="w-4 h-4" />
+          </button>
+        )}
       </div>
 
-      {/* Live app */}
-      <div className="flex-1 overflow-hidden">
-        <AppSandbox code={code} appType={suggestion.app_type} className="w-full h-full" />
+      {/* Body */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Preview */}
+        <div className="flex-1 relative min-w-0">
+          <AppSandbox code={code} appType={suggestion.app_type} className="absolute inset-0 w-full h-full" />
+
+          {/* Fix banner on error */}
+          <AnimatePresence>
+            {lastError && onRefine && !isFixing && (
+              <motion.div
+                initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }}
+                className="absolute bottom-4 left-0 right-0 flex justify-center z-10 pointer-events-none"
+              >
+                <button
+                  onClick={() => sendMessage(`Fix this error: ${lastError}`)}
+                  className="pointer-events-auto flex items-center gap-2 px-4 py-2.5 bg-red-500 hover:bg-red-600 rounded-xl text-sm font-bold text-white shadow-xl transition-all active:scale-95"
+                >
+                  <Zap className="w-4 h-4" />
+                  Fix with AI
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        {/* AI Chat panel */}
+        <AnimatePresence>
+          {showChat && onRefine && (
+            <motion.div
+              initial={{ width: 0, opacity: 0 }} animate={{ width: 300, opacity: 1 }} exit={{ width: 0, opacity: 0 }}
+              transition={{ duration: 0.18 }}
+              className="flex flex-col bg-gray-900 border-l border-gray-800 overflow-hidden shrink-0"
+            >
+              {/* Panel header */}
+              <div className="flex-none px-4 py-2.5 border-b border-gray-800 flex items-center justify-between">
+                <span className="text-[10px] font-black uppercase tracking-[3px] text-white/50">AI Chat</span>
+                {isFixing && <Loader2 className="w-3 h-3 text-indigo-400 animate-spin" />}
+              </div>
+
+              {/* Messages */}
+              <div className="flex-1 overflow-y-auto p-3 space-y-2">
+                {messages.length === 0 && (
+                  <p className="text-[11px] text-gray-600 text-center mt-8 leading-relaxed px-2">
+                    Describe changes or ask the AI to fix errors.
+                  </p>
+                )}
+                {messages.map((msg, i) => (
+                  <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                    <div className={`max-w-[88%] px-3 py-2 rounded-xl text-[11px] leading-relaxed ${
+                      msg.role === "user"
+                        ? "bg-indigo-600 text-white"
+                        : msg.text.startsWith("⚠️")
+                          ? "bg-red-900/30 text-red-300 border border-red-800/40"
+                          : "bg-gray-800 text-gray-300 border border-gray-700/60"
+                    }`}>
+                      {msg.text}
+                    </div>
+                  </div>
+                ))}
+                <div ref={chatEndRef} />
+              </div>
+
+              {/* Input */}
+              <div className="flex-none p-3 border-t border-gray-800 space-y-2">
+                {lastError && !isFixing && (
+                  <button
+                    onClick={() => sendMessage(`Fix this error: ${lastError}`)}
+                    className="w-full flex items-center justify-center gap-1.5 py-2 bg-red-500/15 hover:bg-red-500/25 border border-red-500/25 rounded-lg text-[11px] font-bold text-red-400 transition-all"
+                  >
+                    <Zap className="w-3 h-3" /> Fix Error
+                  </button>
+                )}
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={chatInput}
+                    onChange={e => setChatInput(e.target.value)}
+                    onKeyDown={e => e.key === "Enter" && !e.shiftKey && sendMessage()}
+                    placeholder="Improve or change this app..."
+                    disabled={isFixing}
+                    className="flex-1 min-w-0 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-[11px] text-white placeholder:text-gray-500 focus:outline-none focus:border-indigo-500 transition-colors disabled:opacity-40"
+                  />
+                  <button
+                    onClick={() => sendMessage()}
+                    disabled={!chatInput.trim() || isFixing}
+                    className="w-9 h-9 bg-indigo-500 hover:bg-indigo-600 disabled:opacity-40 rounded-lg flex items-center justify-center text-white transition-all shrink-0"
+                  >
+                    {isFixing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ArrowRight className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </motion.div>
   );
