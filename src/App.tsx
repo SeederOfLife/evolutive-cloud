@@ -10,7 +10,7 @@ import * as THREE from "three";
 import { motion, AnimatePresence } from "motion/react";
 import {
   ChevronUp, X, Search, Zap, Play, Sparkles, Loader2,
-  Settings, Activity, Trash2, LogOut, Globe, Cpu, ChevronDown
+  Settings, Activity, Trash2, LogOut, Globe, Cpu, ChevronDown, User
 } from "lucide-react";
 import OpenAI from "openai";
 import {
@@ -473,57 +473,61 @@ Rules:
       </AnimatePresence>
 
       {/* ── TOP BAR ─────────────────────────────────────────────────────────── */}
-      <header className="flex-none h-14 bg-gray-900 border-b border-gray-800 flex items-center px-4 gap-3">
+      <header className="flex-none h-14 bg-gray-900 border-b border-gray-800 flex items-center px-3 sm:px-4 gap-2 sm:gap-3">
         {/* Logo + status */}
         <div className="flex items-center gap-2 shrink-0">
-          <div className="w-7 h-7 bg-indigo-500 rounded-lg flex items-center justify-center">
+          <div className="w-7 h-7 bg-indigo-500 rounded-lg flex items-center justify-center shrink-0">
             <Zap className="w-4 h-4 text-white" />
           </div>
           <span className="text-sm font-bold text-white hidden sm:block tracking-wide">EVOLUTIVE</span>
+          {/* Status: dot-only on mobile, full pill on sm+ */}
           <span
-            className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${
+            className={`flex items-center gap-1.5 px-1.5 sm:px-2 py-0.5 rounded-full text-xs font-medium ${
               neuralStatus === "IDLE"
                 ? "bg-gray-800 text-gray-500"
                 : "bg-indigo-500/20 text-indigo-400"
             }`}
           >
-            <span className={`w-1.5 h-1.5 rounded-full ${neuralStatus === "IDLE" ? "bg-gray-600" : "bg-indigo-400 animate-pulse"}`} />
-            {neuralStatus}
+            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${neuralStatus === "IDLE" ? "bg-gray-600" : "bg-indigo-400 animate-pulse"}`} />
+            <span className="hidden sm:inline">{neuralStatus}</span>
           </span>
         </div>
 
-        {/* View switcher */}
+        {/* View switcher — single-letter on mobile, full word on sm+ */}
         <div className="flex-1 flex justify-center">
-          <div className="flex bg-gray-800 rounded-lg p-1 gap-1">
+          <div className="flex bg-gray-800 rounded-lg p-1 gap-0.5 sm:gap-1">
             {(["galaxy", "feed", "hub"] as const).map((v) => (
               <button
                 key={v}
                 onClick={() => setView(v)}
-                className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${
+                className={`px-2.5 sm:px-4 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-all ${
                   view === v ? "bg-indigo-500 text-white" : "text-gray-400 hover:text-white"
                 }`}
               >
-                {v.toUpperCase()}
+                <span className="sm:hidden font-black">{v.charAt(0).toUpperCase()}</span>
+                <span className="hidden sm:inline uppercase">{v}</span>
               </button>
             ))}
           </div>
         </div>
 
         {/* Right actions */}
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           <span className="text-xs text-gray-500 hidden sm:block">
             BUILDS: <span className="text-white font-medium">{builtCount}</span>
           </span>
           <button
             onClick={() => setShowSettings(true)}
-            className="w-8 h-8 rounded-lg bg-gray-800 hover:bg-gray-700 flex items-center justify-center text-gray-400 hover:text-white transition-all"
+            className="w-9 h-9 rounded-lg bg-gray-800 hover:bg-gray-700 flex items-center justify-center text-gray-400 hover:text-white transition-all"
+            title="Settings"
           >
             <Settings className="w-4 h-4" />
           </button>
           {user ? (
             <button
               onClick={() => setShowAuth(true)}
-              className="flex items-center gap-2 px-3 py-1.5 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm text-gray-300 hover:text-white transition-all"
+              className="w-9 h-9 sm:w-auto sm:h-auto sm:px-3 sm:py-1.5 bg-gray-800 hover:bg-gray-700 rounded-lg flex items-center justify-center sm:gap-2 transition-all"
+              title="Account"
             >
               <img
                 src={user.photoURL || `https://api.dicebear.com/7.x/bottts/svg?seed=${user.email}`}
@@ -531,16 +535,18 @@ Rules:
                 className="w-5 h-5 rounded-full"
                 referrerPolicy="no-referrer"
               />
-              <span className="hidden sm:block max-w-[80px] truncate text-sm">
+              <span className="hidden sm:block max-w-[80px] truncate text-sm text-gray-300">
                 {user.email?.split("@")[0]}
               </span>
             </button>
           ) : (
             <button
               onClick={() => setShowAuth(true)}
-              className="px-3 py-1.5 bg-indigo-500 hover:bg-indigo-600 rounded-lg text-sm font-medium text-white transition-all"
+              className="w-9 h-9 sm:w-auto sm:h-auto sm:px-3 sm:py-1.5 bg-indigo-500 hover:bg-indigo-600 rounded-lg flex items-center justify-center transition-all"
+              title="Sign In"
             >
-              Sign In
+              <User className="w-4 h-4 text-white sm:hidden" />
+              <span className="hidden sm:block text-sm font-medium text-white">Sign In</span>
             </button>
           )}
         </div>
@@ -633,94 +639,149 @@ Rules:
       </main>
 
       {/* ── BOTTOM BAR ──────────────────────────────────────────────────────── */}
-      <footer className="flex-none h-[72px] bg-gray-900 border-t border-gray-800 flex items-center px-4 gap-3">
-        {/* App type pills */}
-        <div className="flex gap-1 shrink-0">
-          {(["phone", "desktop", "game", "terminal"] as const).map((type) => (
-            <button
-              key={type}
-              onClick={() => setNewAppType(type)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                newAppType === type
-                  ? "bg-indigo-500 text-white"
-                  : "bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700"
-              }`}
-            >
-              {type.charAt(0).toUpperCase() + type.slice(1)}
-            </button>
-          ))}
-        </div>
+      {/* Mobile: 2 rows (pills row + input row). Desktop: single row via flex-wrap trick. */}
+      <footer className="flex-none bg-gray-900 border-t border-gray-800 flex flex-wrap items-center px-3 sm:px-4 py-2 sm:h-[72px] gap-2">
 
-        {/* Text input */}
-        <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && handleSuggest()}
-          placeholder={`Describe your ${newAppType} app idea...`}
-          className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-indigo-500 transition-colors"
-        />
-
-        {/* AI Provider Selector */}
-        <div ref={providerDropRef} className="relative shrink-0">
-          {(() => {
-            const active = MANIFEST_PROVIDERS.find((p) => p.id === aiProvider) || MANIFEST_PROVIDERS[0];
-            return (
+        {/* Row 1 on mobile: scrollable type pills + provider icon */}
+        <div className="flex items-center gap-2 basis-full sm:basis-auto sm:flex-none order-1">
+          <div
+            className="flex gap-1 overflow-x-auto min-w-0 flex-1 sm:flex-none"
+            style={{ scrollbarWidth: "none" }}
+          >
+            {(["phone", "desktop", "game", "terminal"] as const).map((type) => (
               <button
-                onClick={() => setShowProviderDrop((prev) => !prev)}
-                className="flex items-center gap-1.5 px-3 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-lg text-xs text-gray-300 hover:text-white transition-all"
+                key={type}
+                onClick={() => setNewAppType(type)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all shrink-0 ${
+                  newAppType === type
+                    ? "bg-indigo-500 text-white"
+                    : "bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700"
+                }`}
               >
-                <active.Icon className="w-3.5 h-3.5" />
-                <span className="hidden sm:block max-w-[80px] truncate">{active.label}</span>
-                <ChevronDown className="w-3 h-3 text-gray-500" />
+                {type.charAt(0).toUpperCase() + type.slice(1)}
               </button>
-            );
-          })()}
-          <AnimatePresence>
-            {showProviderDrop && (
-              <motion.div
-                initial={{ opacity: 0, y: 4, scale: 0.97 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 4, scale: 0.97 }}
-                transition={{ duration: 0.1 }}
-                className="absolute bottom-full right-0 mb-2 w-48 bg-gray-900 border border-gray-700 rounded-xl shadow-xl overflow-hidden z-50"
-              >
-                {MANIFEST_PROVIDERS.map((p) => (
-                  <button
-                    key={p.id}
-                    onClick={() => {
-                      setAiProvider(p.id);
-                      setSelectedModel(p.model);
-                      localStorage.setItem("manifest_provider", p.id);
-                      setShowProviderDrop(false);
-                    }}
-                    className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-all ${
-                      aiProvider === p.id
-                        ? "bg-indigo-500/20 text-indigo-400"
-                        : "text-gray-400 hover:text-white hover:bg-gray-800"
-                    }`}
-                  >
-                    <p.Icon className="w-4 h-4 shrink-0" />
-                    {p.label}
-                  </button>
-                ))}
-              </motion.div>
-            )}
-          </AnimatePresence>
+            ))}
+          </div>
+
+          {/* Provider selector — shown in row 1 on mobile, hidden (re-shown below) on sm+ */}
+          <div ref={providerDropRef} className="relative shrink-0 sm:hidden">
+            {(() => {
+              const active = MANIFEST_PROVIDERS.find((p) => p.id === aiProvider) || MANIFEST_PROVIDERS[0];
+              return (
+                <button
+                  onClick={() => setShowProviderDrop((prev) => !prev)}
+                  className="flex items-center gap-1 w-9 h-9 justify-center bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-lg text-gray-300 hover:text-white transition-all"
+                  title={active.label}
+                >
+                  <active.Icon className="w-4 h-4" />
+                </button>
+              );
+            })()}
+            <AnimatePresence>
+              {showProviderDrop && (
+                <motion.div
+                  initial={{ opacity: 0, y: 4, scale: 0.97 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 4, scale: 0.97 }}
+                  transition={{ duration: 0.1 }}
+                  className="absolute bottom-full right-0 mb-2 w-52 bg-gray-900 border border-gray-700 rounded-xl shadow-xl overflow-hidden z-50"
+                >
+                  {MANIFEST_PROVIDERS.map((p) => (
+                    <button
+                      key={p.id}
+                      onClick={() => {
+                        setAiProvider(p.id);
+                        setSelectedModel(p.model);
+                        localStorage.setItem("manifest_provider", p.id);
+                        setShowProviderDrop(false);
+                      }}
+                      className={`w-full flex items-center gap-3 px-4 py-3 text-sm transition-all ${
+                        aiProvider === p.id
+                          ? "bg-indigo-500/20 text-indigo-400"
+                          : "text-gray-400 hover:text-white hover:bg-gray-800"
+                      }`}
+                    >
+                      <p.Icon className="w-4 h-4 shrink-0" />
+                      {p.label}
+                    </button>
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
 
-        {/* Submit */}
-        <button
-          onClick={handleSuggest}
-          disabled={!canSuggest || isLoading || !!isBuilding || isManifesting || !input.trim()}
-          className="flex items-center gap-2 px-4 py-2 bg-indigo-500 hover:bg-indigo-600 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg text-sm font-medium text-white transition-all shrink-0"
-        >
-          {isManifesting || isBuilding ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : (
-            <Sparkles className="w-4 h-4" />
-          )}
-          MANIFEST
-        </button>
+        {/* Row 2 on mobile / continues single row on sm+: input + provider(desktop) + manifest */}
+        <div className="flex items-center gap-2 flex-1 min-w-0 order-2">
+          <input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleSuggest()}
+            placeholder={`Describe your ${newAppType} app...`}
+            className="flex-1 min-w-0 bg-gray-800 border border-gray-700 rounded-lg px-3 sm:px-4 py-2 sm:py-2 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-indigo-500 transition-colors"
+          />
+
+          {/* Provider selector — desktop only (mobile version is in row 1 above) */}
+          <div className="relative shrink-0 hidden sm:block">
+            {(() => {
+              const active = MANIFEST_PROVIDERS.find((p) => p.id === aiProvider) || MANIFEST_PROVIDERS[0];
+              return (
+                <button
+                  onClick={() => setShowProviderDrop((prev) => !prev)}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-lg text-xs text-gray-300 hover:text-white transition-all"
+                >
+                  <active.Icon className="w-3.5 h-3.5" />
+                  <span className="max-w-[80px] truncate">{active.label}</span>
+                  <ChevronDown className="w-3 h-3 text-gray-500" />
+                </button>
+              );
+            })()}
+            <AnimatePresence>
+              {showProviderDrop && (
+                <motion.div
+                  initial={{ opacity: 0, y: 4, scale: 0.97 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 4, scale: 0.97 }}
+                  transition={{ duration: 0.1 }}
+                  className="absolute bottom-full right-0 mb-2 w-48 bg-gray-900 border border-gray-700 rounded-xl shadow-xl overflow-hidden z-50"
+                >
+                  {MANIFEST_PROVIDERS.map((p) => (
+                    <button
+                      key={p.id}
+                      onClick={() => {
+                        setAiProvider(p.id);
+                        setSelectedModel(p.model);
+                        localStorage.setItem("manifest_provider", p.id);
+                        setShowProviderDrop(false);
+                      }}
+                      className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-all ${
+                        aiProvider === p.id
+                          ? "bg-indigo-500/20 text-indigo-400"
+                          : "text-gray-400 hover:text-white hover:bg-gray-800"
+                      }`}
+                    >
+                      <p.Icon className="w-4 h-4 shrink-0" />
+                      {p.label}
+                    </button>
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          <button
+            onClick={handleSuggest}
+            disabled={!canSuggest || isLoading || !!isBuilding || isManifesting || !input.trim()}
+            className="flex items-center gap-2 px-4 min-h-[44px] bg-indigo-500 hover:bg-indigo-600 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg text-sm font-medium text-white transition-all shrink-0"
+          >
+            {isManifesting || isBuilding ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Sparkles className="w-4 h-4" />
+            )}
+            <span className="hidden xs:inline sm:inline">MANIFEST</span>
+          </button>
+        </div>
       </footer>
 
       {/* ── SETTINGS MODAL ──────────────────────────────────────────────────── */}
@@ -888,73 +949,77 @@ function HubView({
           return (
             <div
               key={s.id}
-              className="grid grid-cols-[1fr_auto] sm:grid-cols-[1fr_72px_80px_180px] gap-3 items-center px-4 py-3 border-b border-gray-800/50 hover:bg-gray-900 transition-colors"
+              className="border-b border-gray-800/50 hover:bg-gray-900 transition-colors"
             >
-              {/* Title */}
-              <div className="min-w-0">
-                <p className="text-sm text-white font-medium truncate">{s.content}</p>
-                <p className="text-xs text-gray-600 font-mono">#{s.id.substring(0, 8)}</p>
+              {/* Mobile card layout */}
+              <div className="sm:hidden flex flex-col gap-3 px-4 py-4">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm text-white font-medium leading-snug">{s.content}</p>
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <span className="px-2 py-0.5 bg-gray-800 rounded text-[10px] text-gray-400">{s.app_type || "desktop"}</span>
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${isBuilt ? "bg-indigo-500/20 text-indigo-400" : "bg-gray-800 text-gray-400"}`}>{s.status}</span>
+                    </div>
+                  </div>
+                  {isOwner && (
+                    <button onClick={() => onDelete(s.id)} disabled={isLoading} className="p-2 bg-gray-800 hover:bg-red-900/40 rounded-lg text-gray-600 hover:text-red-400 transition-all disabled:opacity-40 shrink-0">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  {isBuilt ? (
+                    <button onClick={() => onLaunch(s)} className="flex-1 flex items-center justify-center gap-2 py-3 bg-indigo-500 hover:bg-indigo-600 rounded-xl text-sm font-semibold text-white transition-all min-h-[44px]">
+                      <Play className="w-4 h-4 fill-current" />
+                      Launch
+                    </button>
+                  ) : (
+                    <button onClick={() => onBuild(s)} disabled={!!isBuilding || !!isRefining} className="flex-1 flex items-center justify-center gap-2 py-3 bg-gray-700 hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl text-sm font-semibold text-white transition-all min-h-[44px]">
+                      {isBuilding === s.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+                      Build
+                    </button>
+                  )}
+                  <button onClick={() => onVote(s.id, s.votes || 0)} className="flex items-center justify-center gap-1.5 px-4 py-3 bg-gray-800 hover:bg-gray-700 rounded-xl text-sm text-gray-400 hover:text-white transition-all min-h-[44px]">
+                    <ChevronUp className="w-4 h-4" />
+                    <span className="font-medium">{s.votes || 0}</span>
+                  </button>
+                </div>
               </div>
 
-              {/* Type */}
-              <div className="hidden sm:flex justify-center">
-                <span className="px-2 py-1 bg-gray-800 rounded text-xs text-gray-400">
-                  {s.app_type || "desktop"}
-                </span>
-              </div>
-
-              {/* Status */}
-              <div className="hidden sm:flex justify-center">
-                <span
-                  className={`px-2 py-1 rounded text-xs font-medium ${
-                    isBuilt ? "bg-indigo-500/20 text-indigo-400" : "bg-gray-800 text-gray-400"
-                  }`}
-                >
-                  {s.status}
-                </span>
-              </div>
-
-              {/* Actions */}
-              <div className="flex items-center justify-end gap-1.5">
-                {isBuilt ? (
-                  <button
-                    onClick={() => onLaunch(s)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-500 hover:bg-indigo-600 rounded text-xs font-medium text-white transition-all"
-                  >
-                    <Play className="w-3 h-3 fill-current" />
-                    Launch
+              {/* Desktop row layout */}
+              <div className="hidden sm:grid grid-cols-[1fr_72px_80px_180px] gap-3 items-center px-4 py-3">
+                <div className="min-w-0">
+                  <p className="text-sm text-white font-medium truncate">{s.content}</p>
+                  <p className="text-xs text-gray-600 font-mono">#{s.id.substring(0, 8)}</p>
+                </div>
+                <div className="flex justify-center">
+                  <span className="px-2 py-1 bg-gray-800 rounded text-xs text-gray-400">{s.app_type || "desktop"}</span>
+                </div>
+                <div className="flex justify-center">
+                  <span className={`px-2 py-1 rounded text-xs font-medium ${isBuilt ? "bg-indigo-500/20 text-indigo-400" : "bg-gray-800 text-gray-400"}`}>{s.status}</span>
+                </div>
+                <div className="flex items-center justify-end gap-1.5">
+                  {isBuilt ? (
+                    <button onClick={() => onLaunch(s)} className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-500 hover:bg-indigo-600 rounded text-xs font-medium text-white transition-all">
+                      <Play className="w-3 h-3 fill-current" />
+                      Launch
+                    </button>
+                  ) : (
+                    <button onClick={() => onBuild(s)} disabled={!!isBuilding || !!isRefining} className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed rounded text-xs font-medium text-white transition-all">
+                      {isBuilding === s.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
+                      Build
+                    </button>
+                  )}
+                  <button onClick={() => onVote(s.id, s.votes || 0)} className="flex items-center gap-1 px-2 py-1.5 bg-gray-800 hover:bg-gray-700 rounded text-xs text-gray-400 hover:text-white transition-all">
+                    <ChevronUp className="w-3 h-3" />
+                    {s.votes || 0}
                   </button>
-                ) : (
-                  <button
-                    onClick={() => onBuild(s)}
-                    disabled={!!isBuilding || !!isRefining}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed rounded text-xs font-medium text-white transition-all"
-                  >
-                    {isBuilding === s.id ? (
-                      <Loader2 className="w-3 h-3 animate-spin" />
-                    ) : (
-                      <Zap className="w-3 h-3" />
-                    )}
-                    Build
-                  </button>
-                )}
-                <button
-                  onClick={() => onVote(s.id, s.votes || 0)}
-                  className="flex items-center gap-1 px-2 py-1.5 bg-gray-800 hover:bg-gray-700 rounded text-xs text-gray-400 hover:text-white transition-all"
-                >
-                  <ChevronUp className="w-3 h-3" />
-                  {s.votes || 0}
-                </button>
-                {isOwner && (
-                  <button
-                    onClick={() => onDelete(s.id)}
-                    disabled={isLoading}
-                    className="p-1.5 bg-gray-800 hover:bg-red-900/40 rounded text-gray-600 hover:text-red-400 transition-all disabled:opacity-40"
-                    title="Delete"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </button>
-                )}
+                  {isOwner && (
+                    <button onClick={() => onDelete(s.id)} disabled={isLoading} className="p-1.5 bg-gray-800 hover:bg-red-900/40 rounded text-gray-600 hover:text-red-400 transition-all disabled:opacity-40" title="Delete">
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           );
@@ -1022,15 +1087,16 @@ function SettingsModal({
   return (
     <motion.div
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[100] bg-black/60 flex items-center justify-center p-4"
+      className="fixed inset-0 z-[100] bg-black/60 flex items-end sm:items-center sm:p-4"
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <motion.div
-        initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
-        className="bg-gray-900 border border-gray-800 rounded-xl w-full max-w-lg max-h-[85vh] overflow-y-auto"
+        initial={{ y: "100%", opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: "100%", opacity: 0 }}
+        className="bg-gray-900 border border-gray-800 rounded-t-2xl sm:rounded-xl w-full sm:max-w-lg h-[90vh] sm:h-auto sm:max-h-[85vh] overflow-y-auto"
       >
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-gray-800 sticky top-0 bg-gray-900 z-10">
+          <div className="w-10 h-1 bg-gray-700 rounded-full mx-auto absolute left-1/2 -translate-x-1/2 top-2 sm:hidden" />
           <h2 className="text-base font-semibold text-white">Settings</h2>
           <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors">
             <X className="w-5 h-5" />
@@ -1236,15 +1302,16 @@ function AuthModal({
   return (
     <motion.div
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[100] bg-black/60 flex items-center justify-center p-4"
+      className="fixed inset-0 z-[100] bg-black/60 flex items-end sm:items-center sm:p-4"
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <motion.div
-        initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
-        className="bg-gray-900 border border-gray-800 rounded-xl w-full max-w-sm"
+        initial={{ y: "100%", opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: "100%", opacity: 0 }}
+        className="bg-gray-900 border border-gray-800 rounded-t-2xl sm:rounded-xl w-full sm:max-w-sm overflow-y-auto max-h-[90vh] sm:max-h-[85vh]"
       >
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-gray-800">
+          <div className="w-10 h-1 bg-gray-700 rounded-full mx-auto absolute left-1/2 -translate-x-1/2 top-2 sm:hidden" />
           <h2 className="text-base font-semibold text-white">
             {user ? "Account" : isSignUp ? "Create Account" : "Sign In"}
           </h2>
