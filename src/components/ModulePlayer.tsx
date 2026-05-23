@@ -159,7 +159,18 @@ body{background:#050508;color:#fff;margin:0;min-height:100vh;display:flex;flex-d
         window.LucideReact[name]=c;window[name]=c;
       });
       ld('https://unpkg.com/react-dom@18.2.0/umd/react-dom.development.js',function(){
-        ld('https://unpkg.com/recharts@2.8.0/umd/Recharts.js',runFM,runFM);
+        window.Recharts={
+          LineChart:function(p){return React.createElement('div',{style:{width:'100%',height:'100%'}},p&&p.children);},
+          BarChart:function(p){return React.createElement('div',{style:{width:'100%',height:'100%'}},p&&p.children);},
+          AreaChart:function(p){return React.createElement('div',{style:{width:'100%',height:'100%'}},p&&p.children);},
+          PieChart:function(p){return React.createElement('div',{style:{width:'100%',height:'100%'}},p&&p.children);},
+          ResponsiveContainer:function(p){return React.createElement('div',{style:{width:'100%',height:'100%'}},p&&p.children);},
+          XAxis:function(){return null;},YAxis:function(){return null;},CartesianGrid:function(){return null;},
+          Tooltip:function(){return null;},Legend:function(){return null;},Line:function(){return null;},
+          Bar:function(){return null;},Area:function(){return null;},Pie:function(){return null;},Cell:function(){return null;}
+        };
+        Object.assign(window,window.Recharts);
+        runFM();
       });
     });
   }
@@ -427,7 +438,7 @@ body{background:#050508;color:#fff;margin:0;min-height:100vh;display:flex;flex-d
                 )}
                 <iframe ref={iframeRef} srcDoc={srcDoc}
                   className="w-full h-full border-none bg-black" title="app-player"
-                  sandbox="allow-scripts allow-same-origin"
+                  sandbox="allow-scripts"
                 />
                 {deviceFrame === "phone" && (
                   <div className="absolute bottom-2 left-1/2 -translate-x-1/2 w-28 sm:w-36 h-1.5 bg-white/10 rounded-full z-10 pointer-events-none" />
