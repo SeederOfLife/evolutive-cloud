@@ -26,7 +26,7 @@ function SeedParticles({ count = 80 }: { count?: number }) {
     for (let i = 0; i < count; i++) {
       const theta = Math.random() * Math.PI * 2;
       const phi = Math.acos(2 * Math.random() - 1);
-      const r = 1.5 + Math.random() * 1.5;
+      const r = 0.9 + Math.random() * 1.0;
       const speed = 0.4 + Math.random() * 0.9;
       const sx = Math.sin(phi) * Math.cos(theta);
       const sy = Math.sin(phi) * Math.sin(theta);
@@ -52,7 +52,7 @@ function SeedParticles({ count = 80 }: { count?: number }) {
         const sx2 = Math.sin(p2) * Math.cos(t2);
         const sy2 = Math.sin(p2) * Math.sin(t2);
         const sz2 = Math.cos(p2);
-        pos[i * 3] = sx2 * 1.5; pos[i * 3 + 1] = sy2 * 1.5; pos[i * 3 + 2] = sz2 * 1.5;
+        pos[i * 3] = sx2 * 0.9; pos[i * 3 + 1] = sy2 * 0.9; pos[i * 3 + 2] = sz2 * 0.9;
         vel[i * 3] = sx2 * spd; vel[i * 3 + 1] = sy2 * spd; vel[i * 3 + 2] = sz2 * spd;
       }
     }
@@ -69,6 +69,9 @@ function SeedParticles({ count = 80 }: { count?: number }) {
   );
 }
 
+const CORE_R = 0.9;
+const PULSE_FREQ = (2 * Math.PI) / 3; // 3-second breathing cycle
+
 export function EvolutiveSeed({ onClick, isOpen }: { onClick: () => void, isOpen: boolean }) {
   const coreRef = useRef<THREE.Mesh>(null!);
   const coreMat = useRef<THREE.MeshStandardMaterial>(null!);
@@ -83,12 +86,12 @@ export function EvolutiveSeed({ onClick, isOpen }: { onClick: () => void, isOpen
     const dir = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle));
     const quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
     const euler = new THREE.Euler().setFromQuaternion(quat);
-    const len = 2.5 + (i % 3) * 0.7;
+    const len = 1.8 + (i % 3) * 0.5;
     return {
-      pos: dir.clone().multiplyScalar(1.6 + len / 2).toArray() as [number, number, number],
+      pos: dir.clone().multiplyScalar(CORE_R + 0.15 + len / 2).toArray() as [number, number, number],
       euler,
       len,
-      opacity: 0.12 + (i % 2) * 0.06,
+      opacity: 0.07 + (i % 2) * 0.04,
     };
   }), []);
 
@@ -96,18 +99,21 @@ export function EvolutiveSeed({ onClick, isOpen }: { onClick: () => void, isOpen
     timeRef.current += delta;
     const t = timeRef.current;
 
-    if (coreRef.current) coreRef.current.scale.setScalar(1 + Math.sin(t * 0.6) * 0.08);
-    if (corona1Ref.current) corona1Ref.current.scale.setScalar(1 + Math.sin(t * 0.5 + 0.3) * 0.10);
-    if (corona2Ref.current) corona2Ref.current.scale.setScalar(1 + Math.sin(t * 0.4 + 0.7) * 0.13);
-    if (corona3Ref.current) corona3Ref.current.scale.setScalar(1 + Math.sin(t * 0.3 + 1.1) * 0.17);
+    // Slow breathing pulse: 0.95 → 1.05 over 3 seconds
+    const pulse = 1 + Math.sin(t * PULSE_FREQ) * 0.05;
+    if (coreRef.current) coreRef.current.scale.setScalar(pulse);
+    if (corona1Ref.current) corona1Ref.current.scale.setScalar(pulse * (1 + Math.sin(t * 0.4 + 0.4) * 0.03));
+    if (corona2Ref.current) corona2Ref.current.scale.setScalar(pulse * (1 + Math.sin(t * 0.35 + 0.8) * 0.04));
+    if (corona3Ref.current) corona3Ref.current.scale.setScalar(pulse * (1 + Math.sin(t * 0.28 + 1.2) * 0.05));
 
+    // Emissive color: warm white-yellow cycling with subtle drift
     if (coreMat.current) {
-      const b = 0.55 + Math.sin(t * 0.22) * 0.45;
-      coreMat.current.emissive.setRGB(1, 0.95 + Math.sin(t * 0.15) * 0.05, Math.max(0.1, b));
-      coreMat.current.emissiveIntensity = (isOpen ? 5 : 3.5) + Math.sin(t * 0.6) * 0.5;
+      const warm = 0.82 + Math.sin(t * 0.2) * 0.18;
+      coreMat.current.emissive.setRGB(1, warm, Math.max(0.55, warm * 0.65));
+      coreMat.current.emissiveIntensity = (isOpen ? 5 : 3.5) + Math.sin(t * PULSE_FREQ) * 0.5;
     }
 
-    if (raysRef.current) raysRef.current.rotation.y = t * 0.08;
+    if (raysRef.current) raysRef.current.rotation.y = t * 0.07;
   });
 
   return (
@@ -115,29 +121,36 @@ export function EvolutiveSeed({ onClick, isOpen }: { onClick: () => void, isOpen
       <pointLight color="#fff8d0" intensity={isOpen ? 8 : 5} distance={25} decay={1.5} />
       <pointLight color="#a0c8ff" intensity={isOpen ? 2.5 : 1.5} distance={10} decay={2} />
 
+      {/* Innermost core: bright white-yellow */}
       <mesh ref={coreRef}>
-        <sphereGeometry args={[1.5, 64, 64]} />
-        <meshStandardMaterial ref={coreMat} color="#ffffff" emissive="#ffffa0" emissiveIntensity={4} metalness={0} roughness={0.05} />
+        <sphereGeometry args={[CORE_R, 64, 64]} />
+        <meshStandardMaterial ref={coreMat} color="#ffffd0" emissive="#ffffd0" emissiveIntensity={4} metalness={0} roughness={0.02} />
       </mesh>
 
+      {/* Middle corona: warm gold */}
       <mesh ref={corona1Ref}>
-        <sphereGeometry args={[2.2, 32, 32]} />
-        <meshBasicMaterial color="#ffffff" transparent opacity={0.07} depthWrite={false} blending={THREE.AdditiveBlending} />
-      </mesh>
-      <mesh ref={corona2Ref}>
-        <sphereGeometry args={[3.0, 32, 32]} />
-        <meshBasicMaterial color="#ffffc0" transparent opacity={0.04} depthWrite={false} blending={THREE.AdditiveBlending} />
-      </mesh>
-      <mesh ref={corona3Ref}>
-        <sphereGeometry args={[4.2, 32, 32]} />
-        <meshBasicMaterial color="#ffe080" transparent opacity={0.02} depthWrite={false} blending={THREE.AdditiveBlending} />
+        <sphereGeometry args={[1.4, 32, 32]} />
+        <meshBasicMaterial color="#ffcc44" transparent opacity={0.35} depthWrite={false} blending={THREE.AdditiveBlending} />
       </mesh>
 
+      {/* Outer halo: pale blue-white */}
+      <mesh ref={corona2Ref}>
+        <sphereGeometry args={[2.2, 32, 32]} />
+        <meshBasicMaterial color="#aaddff" transparent opacity={0.12} depthWrite={false} blending={THREE.AdditiveBlending} />
+      </mesh>
+
+      {/* Far diffuse warmth — stays well inside 3.5 min orbit */}
+      <mesh ref={corona3Ref}>
+        <sphereGeometry args={[3.0, 32, 32]} />
+        <meshBasicMaterial color="#ffe8aa" transparent opacity={0.04} depthWrite={false} blending={THREE.AdditiveBlending} />
+      </mesh>
+
+      {/* Light rays: thin, golden, transparent */}
       <group ref={raysRef}>
         {rayData.map((ray, i) => (
           <mesh key={i} position={ray.pos} rotation={ray.euler}>
-            <cylinderGeometry args={[0.01, 0.07, ray.len, 6, 1]} />
-            <meshBasicMaterial color="#ffffff" transparent opacity={ray.opacity} depthWrite={false} blending={THREE.AdditiveBlending} />
+            <cylinderGeometry args={[0.005, 0.03, ray.len, 6, 1]} />
+            <meshBasicMaterial color="#ffcc44" transparent opacity={ray.opacity} depthWrite={false} blending={THREE.AdditiveBlending} />
           </mesh>
         ))}
       </group>
