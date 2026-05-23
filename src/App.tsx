@@ -861,13 +861,14 @@ Critical rules:
             onClose={() => setLaunchTarget(null)}
             onVote={(id, votes) => voteSuggestion(id, votes)}
             onRefine={async (message: string, currentCode: string) => {
-              const prompt = `System: ${aiConfig.systemPrompt}
-Task: Improve or fix this React app based on the user's request. Return ONLY the complete updated code — no markdown, no imports.
-
-Current code:
-${currentCode}
-
-User request: "${message}"`.trim();
+              const isFix = message.startsWith("Fix this error:");
+              const systemPrompt = isFix
+                ? "You are fixing broken React code. Return ONLY the corrected function body. No imports. No TypeScript. No markdown. Just working JSX."
+                : aiConfig.systemPrompt;
+              const taskInstr = isFix
+                ? `${message}\n\nReturn ONLY valid JSX with no unterminated strings, no TypeScript syntax, no import statements. The function must be named App.`
+                : `Apply this change: "${message}"\n\nReturn ONLY the complete updated React component — no markdown, no imports, no TypeScript type annotations. The function must be named App and must render valid JSX.`;
+              const prompt = `${systemPrompt}\n\nCurrent code:\n${currentCode}\n\n${taskInstr}`.trim();
               const raw = await callUnifiedAI(prompt);
               const match = raw.match(/```(?:javascript|typescript|tsx|jsx)?\s?([\s\S]*?)```/);
               const fixed = (match ? match[1] : raw).replace(/```[a-z]*\n?/gi, "").replace(/```/g, "").trim();
