@@ -34,8 +34,13 @@ export function AppSandbox({ code, className = "" }: AppSandboxProps) {
       return `<!DOCTYPE html><html><body style="background:#050508;display:flex;align-items:center;justify-content:center;height:100vh;color:rgba(255,255,255,.15);font:900 10px/1 sans-serif;text-transform:uppercase;letter-spacing:8px">Awaiting Build</body></html>`;
     }
 
-    // encodeURIComponent produces only %XX sequences — safe in any JS string literal
-    const encoded = encodeURIComponent(cleanCode);
+    // Inject render call after the App function's last closing brace.
+    // Appending to raw end risks landing inside the function body if AI adds trailing content.
+    const lastBrace = cleanCode.lastIndexOf('}');
+    const codeWithRender = lastBrace >= 0
+      ? cleanCode.slice(0, lastBrace + 1) + '\nReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));'
+      : cleanCode + '\nReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));';
+    const encoded = encodeURIComponent(codeWithRender);
 
     return `<!DOCTYPE html>
 <html>
@@ -139,8 +144,7 @@ body{background:#050508;color:#fff;margin:0;min-height:100vh;display:flex;flex-d
         return map[m]||window[m]||{};
       };
 
-      var appCode=decodeURIComponent("${encoded}");
-      var mountCode=appCode+'\\nReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));';
+      var mountCode=decodeURIComponent("${encoded}");
 
       var out;
       try{

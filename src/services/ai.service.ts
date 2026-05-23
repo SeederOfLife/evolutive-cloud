@@ -273,15 +273,16 @@ export async function callAI(prompt: string, options: AICallOptions): Promise<st
 
             if (retryCount < maxRetries) {
               retryCount++;
-              const waitTime = Math.pow(2, retryCount) * 1000 + Math.random() * 1000;
-              let countdown = Math.ceil(waitTime / 1000);
+              // Fixed 30s wait matches Gemini's 20-req/min window
+              let countdown = 30;
               onRateLimited?.(countdown);
 
               const interval = setInterval(() => {
                 onRateLimited?.(Math.max(0, --countdown));
               }, 1000);
-              await sleep(waitTime);
+              await sleep(30000);
               clearInterval(interval);
+              onRateLimitCleared?.();
               continue;
             }
           }
