@@ -1207,6 +1207,20 @@ const MODELS: Record<string, { value: string; label: string }[]> = {
   "gemini-nano": [{ value: "gemini-nano", label: "Gemini Nano" }],
 };
 
+interface ProviderGuidance {
+  badge: 'FREE' | 'PAID' | 'NO KEY NEEDED';
+  hint: string;
+  link?: string;
+}
+const PROVIDER_GUIDANCE: Record<string, ProviderGuidance> = {
+  google:        { badge: 'FREE',          hint: 'Free tier available — get your key at Google AI Studio',                                     link: 'https://aistudio.google.com/apikey' },
+  openai:        { badge: 'PAID',          hint: 'Paid — get your key at OpenAI Platform',                                                     link: 'https://platform.openai.com/api-keys' },
+  anthropic:     { badge: 'PAID',          hint: 'Paid — get your key at Anthropic Console',                                                    link: 'https://console.anthropic.com/' },
+  'web-llm':     { badge: 'NO KEY NEEDED', hint: 'Free & private — runs locally in your browser. Requires a good GPU. No API key needed.' },
+  'gemini-nano': { badge: 'NO KEY NEEDED', hint: 'Free — built into Chrome. Enable at chrome://flags/#prompt-api-for-gemini-nano' },
+  custom:        { badge: 'FREE',          hint: 'Custom OpenAI-compatible endpoint. Provide a base URL below and an optional API key.' },
+};
+
 function SettingsModal({
   onClose, aiProvider, setAiProvider, selectedModel, setSelectedModel,
   userApiKey, saveApiKeyToAccount, customEndpoint, setCustomEndpoint,
@@ -1268,29 +1282,62 @@ function SettingsModal({
             </div>
           </section>
 
-          {/* API Key */}
-          {!["web-llm", "gemini-nano"].includes(aiProvider) && (
-            <section>
-              <label className="block text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">
-                API Key
-              </label>
-              <div className="flex gap-2">
-                <input
-                  type="password"
-                  placeholder={`${aiProvider} API key...`}
-                  value={userApiKey}
-                  onChange={(e) => saveApiKeyToAccount(e.target.value)}
-                  className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-indigo-500 transition-colors"
-                />
-                <button
-                  onClick={() => saveApiKeyToAccount(userApiKey)}
-                  className="px-3 py-2 bg-indigo-500 hover:bg-indigo-600 rounded-lg text-sm font-medium text-white transition-all"
-                >
-                  Save
-                </button>
-              </div>
-            </section>
-          )}
+          {/* API Key & Provider Guidance */}
+          {(() => {
+            const g = PROVIDER_GUIDANCE[aiProvider];
+            const needsKey = !["web-llm", "gemini-nano"].includes(aiProvider);
+            const badgeCls = g?.badge === 'NO KEY NEEDED'
+              ? 'bg-violet-900/40 text-violet-400 border-violet-800/50'
+              : g?.badge === 'PAID'
+              ? 'bg-amber-900/40 text-amber-400 border-amber-800/50'
+              : 'bg-green-900/40 text-green-400 border-green-800/50';
+            return (
+              <section>
+                <div className="flex items-center gap-2 mb-2">
+                  <label className="text-xs font-medium text-gray-400 uppercase tracking-wider">
+                    {needsKey ? 'API Key' : 'Provider'}
+                  </label>
+                  {g && (
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${badgeCls}`}>
+                      {g.badge}
+                    </span>
+                  )}
+                </div>
+                {needsKey && (
+                  <div className="flex gap-2">
+                    <input
+                      type="password"
+                      placeholder={`${aiProvider} API key...`}
+                      value={userApiKey}
+                      onChange={(e) => saveApiKeyToAccount(e.target.value)}
+                      className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-indigo-500 transition-colors"
+                    />
+                    <button
+                      onClick={() => saveApiKeyToAccount(userApiKey)}
+                      className="px-3 py-2 bg-indigo-500 hover:bg-indigo-600 rounded-lg text-sm font-medium text-white transition-all"
+                    >
+                      Save
+                    </button>
+                  </div>
+                )}
+                {g && (
+                  <div className={`flex items-start justify-between gap-3 ${needsKey ? 'mt-2' : ''}`}>
+                    <p className="text-xs text-gray-500 leading-relaxed">{g.hint}</p>
+                    {g.link && (
+                      <a
+                        href={g.link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="shrink-0 text-xs font-semibold text-indigo-400 hover:text-indigo-300 transition-colors whitespace-nowrap"
+                      >
+                        Get API Key →
+                      </a>
+                    )}
+                  </div>
+                )}
+              </section>
+            );
+          })()}
 
           {/* Custom endpoint */}
           {aiProvider === "custom" && (
