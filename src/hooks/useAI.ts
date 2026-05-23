@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from "react";
 import * as webllm from "@mlc-ai/web-llm";
-import { callAI, callGeminiCloud, AIProvider } from "../services/ai.service";
+import { callAIWithFallback, callGeminiCloud, AIProvider } from "../services/ai.service";
 import { AIConfig } from "../types";
 
 const DEFAULT_CONFIG: AIConfig & { systemPrompt: string } = {
@@ -46,6 +46,7 @@ export function useAI() {
     catch { return false; }
   });
   const [aiError, setAiError] = useState<string | null>(null);
+  const [activeProvider, setActiveProvider] = useState<string>(aiProvider);
   const [isRateLimited, setIsRateLimited] = useState(false);
   const [rateLimitCountdown, setRateLimitCountdown] = useState(0);
   const [webLlmProgress, setWebLlmProgress] = useState("");
@@ -53,8 +54,9 @@ export function useAI() {
 
   const call = useCallback(async (prompt: string): Promise<string> => {
     setAiError(null);
+    setActiveProvider(aiProvider);
     try {
-      const text = await callAI(prompt, {
+      const text = await callAIWithFallback(prompt, {
         provider: aiProvider,
         model: selectedModel,
         keys: providerKeys,
@@ -62,7 +64,7 @@ export function useAI() {
         customEndpoint,
         forceCloud,
         onProgress: setWebLlmProgress,
-        onRateLimited: (countdown) => {
+        onRateLimited: (countdown: number) => {
           setIsRateLimited(true);
           setRateLimitCountdown(countdown);
         },
@@ -71,6 +73,7 @@ export function useAI() {
           setRateLimitCountdown(0);
         },
         webLlmEngineRef,
+        onProviderSwitch: (provider) => setActiveProvider(provider),
       });
       return text;
     } catch (err: any) {
@@ -92,6 +95,7 @@ export function useAI() {
     customEndpoint, setCustomEndpoint,
     forceCloud, setForceCloud,
     aiError, setAiError,
+    activeProvider,
     isRateLimited, setIsRateLimited,
     rateLimitCountdown, setRateLimitCountdown,
     webLlmProgress, setWebLlmProgress,

@@ -67,17 +67,13 @@ export function ModulePlayer({
 
   const cleanCode = useMemo(() => {
     if (!code) return "";
-    return code
-      .replace(/^import\s+.*?from\s+['"][^'"]+['"];?\s*$/gm, '')
-      .replace(/^import\s*\{[^}]*\}\s*from\s*['"][^'"]+['"];?\s*$/gm, '')
-      .replace(/^import\s+['"][^'"]+['"];?\s*$/gm, '')
-      .replace(/^export\s+default\s+function\s*\w*/gm, 'function App')
-      .replace(/^export\s+default\s+class\s*\w*/gm, 'class App')
-      .replace(/^export\s+default\s+([A-Za-z_$][\w$]*)\s*;?\s*$/gm,
-        (_, name) => name === 'App' ? '' : `const App = ${name};`)
-      .replace(/^export\s+default\s+/gm, 'const App = ')
+    const sanitizeCode = (c: string) => c
+      .replace(/^import\s+.*$/gm, '')
+      .replace(/^export\s+default\s+function/gm, 'function')
+      .replace(/^export\s+default\s+/gm, '')
       .replace(/^export\s+/gm, '')
       .trim();
+    return sanitizeCode(code);
   }, [code]);
 
   const handleSave = async () => {
@@ -413,7 +409,7 @@ body{background:#050508;color:#fff;margin:0;min-height:100vh;display:flex;flex-d
                 )}
                 <iframe ref={iframeRef} srcDoc={srcDoc}
                   className="w-full h-full border-none bg-black" title="app-player"
-                  sandbox="allow-scripts allow-modals allow-forms allow-popups"
+                  sandbox="allow-scripts"
                 />
                 {deviceFrame === "phone" && (
                   <div className="absolute bottom-2 left-1/2 -translate-x-1/2 w-28 sm:w-36 h-1.5 bg-white/10 rounded-full z-10 pointer-events-none" />

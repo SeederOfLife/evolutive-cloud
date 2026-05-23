@@ -1,6 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 import OpenAI from "openai";
 import * as webllm from "@mlc-ai/web-llm";
+import type { RefObject } from "react";
 import { AIConfig } from "../types";
 
 export type AIProvider = 'google' | 'openai' | 'anthropic' | 'custom' | 'web-llm' | 'gemini-nano' | 'mlc-mobile';
@@ -15,13 +16,26 @@ export interface AICallOptions {
   onProgress?: (msg: string) => void;
   onRateLimited?: (countdown: number) => void;
   onRateLimitCleared?: () => void;
-  webLlmEngineRef?: React.MutableRefObject<webllm.MLCEngine | null>;
+  webLlmEngineRef?: RefObject<webllm.MLCEngine | null>;
 }
 
 export async function callGeminiCloud(
   prompt: string,
   userGoogleKey?: string
 ): Promise<string> {
+  // If we have a user key, skip the relay entirely and call Google directly
+  if (userGoogleKey) {
+    const ai = new GoogleGenAI({ apiKey: userGoogleKey });
+    const result = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: prompt
+    });
+    const text = result.text;
+    if (!text) throw new Error("Google AI returned an empty response.");
+    return text;
+  }
+
+  // No user key — try the platform relay
   try {
     const response = await fetch("/api/neural-link", {
       method: "POST",
@@ -29,37 +43,110 @@ export async function callGeminiCloud(
       body: JSON.stringify({ prompt, model: "gemini-3-flash-preview" })
     });
 
-    const data = await response.json();
+    // The relay may return non-JSON (404/405 in local dev without a backend)
+    let data: any = {};
+    try { data = await response.json(); } catch { /* non-JSON body */ }
 
     if (!response.ok) {
+      if (response.status === 404 || response.status === 405) {
+        throw new Error("Cloud relay not deployed. Add a Google API key in Settings to use Gemini directly.");
+      }
       if (response.status === 429) {
-        throw new Error("NEURAL_QUOTA_EXHAUSTED: The cloud intelligence link has reached its limit. This is a platform-wide limit. Please wait a few minutes or use your own API Key in Settings.");
+        throw new Error("NEURAL_QUOTA_EXHAUSTED: Platform cloud limit reached. Add your own Google API key in Settings.");
       }
-
-      if (data.error === "SYSTEM_KEY_MISSING" || data.error === "NEURAL_NODE_ERROR" || [400, 401, 403].includes(response.status)) {
-        if (userGoogleKey) {
-          console.log("Cloud link restricted, switching to user neural key...");
-          const ai = new GoogleGenAI({ apiKey: userGoogleKey });
-          const result = await ai.models.generateContent({
-            model: "gemini-3-flash-preview",
-            contents: prompt
-          });
-          return result.text ?? "";
-        }
-        if (data.error === "SYSTEM_KEY_MISSING") {
-          throw new Error("System Cloud Key missing. Enable the Neural Hub and provide a Google API Key.");
-        }
-        throw new Error(data.message || "Neural link denied. Check your API Hub credentials.");
-      }
-      throw new Error(data.message || "Unknown neural link protocol error.");
+      throw new Error(data.message || `Cloud relay error (HTTP ${response.status}).`);
     }
 
+    if (!data.text) throw new Error("Cloud relay returned an empty response.");
     return data.text;
   } catch (err: any) {
     console.error("Cloud Fallback Failure:", err);
-    const cleanMsg = err.message.length > 500 ? err.message.substring(0, 500) + "..." : err.message;
-    throw new Error(cleanMsg);
+    const msg = err.message || String(err);
+    throw new Error(msg.length > 500 ? msg.substring(0, 500) + "..." : msg);
   }
+}
+
+async function callGeminiNano(prompt: string): Promise<string> {
+  const w = window as any;
+  // Chrome 127+ Prompt API
+  if (w.ai?.languageModel) {
+    const session = await w.ai.languageModel.create();
+    return await session.prompt(prompt);
+  }
+  // Older Chrome Origin Trial API
+  if (w.ai?.assistant) {
+    const session = await w.ai.assistant.create();
+    return await session.prompt(prompt);
+  }
+  throw new Error("Gemini Nano not available in this browser.");
+}
+
+export interface FallbackOptions extends AICallOptions {
+  onProviderSwitch?: (provider: string, label: string) => void;
+}
+
+export async function callAIWithFallback(prompt: string, options: FallbackOptions): Promise<string> {
+  const { onProviderSwitch, webLlmEngineRef, keys } = options;
+  const errors: string[] = [];
+
+  const attempt = async (label: string, fn: () => Promise<string>): Promise<string | null> => {
+    try {
+      onProviderSwitch?.(label, label);
+      const result = await fn();
+      return result;
+    } catch (err: any) {
+      errors.push(`[${label}] ${err.message || err}`);
+      console.warn(`Fallback: ${label} failed —`, err.message);
+      return null;
+    }
+  };
+
+  // 1. Selected provider
+  const primary = await attempt(options.provider, () => callAI(prompt, options));
+  if (primary !== null) return primary;
+
+  // 2. Other cloud providers with stored keys (skip the already-tried one)
+  const cloudProviders: Array<{ provider: AIProvider; model: string; label: string }> = [
+    { provider: 'google', model: 'gemini-3-flash-preview', label: 'Google Gemini' },
+    { provider: 'openai', model: 'gpt-4o-mini', label: 'OpenAI' },
+    { provider: 'anthropic', model: 'claude-haiku-4-5-20251001', label: 'Anthropic' },
+  ];
+
+  for (const cp of cloudProviders) {
+    if (cp.provider === options.provider) continue;
+    if (!keys[cp.provider]) continue;
+    const result = await attempt(cp.label, () =>
+      callAI(prompt, { ...options, provider: cp.provider, model: cp.model })
+    );
+    if (result !== null) return result;
+  }
+
+  // 3. Platform cloud relay (no user key needed)
+  const cloud = await attempt('Cloud Relay', () =>
+    callGeminiCloud(prompt, keys['google'])
+  );
+  if (cloud !== null) return cloud;
+
+  // 4. Gemini Nano (Chrome built-in)
+  const nano = await attempt('Gemini Nano', () => callGeminiNano(prompt));
+  if (nano !== null) return nano;
+
+  // 5. WebLLM (local, requires WebGPU)
+  if ((navigator as any).gpu) {
+    const local = await attempt('WebLLM (local)', () =>
+      callAI(prompt, {
+        ...options,
+        provider: 'web-llm',
+        model: 'Llama-3.2-1B-Instruct-q4f32_1-MLC',
+        webLlmEngineRef,
+      })
+    );
+    if (local !== null) return local;
+  }
+
+  throw new Error(
+    `All AI providers exhausted.\n${errors.map((e, i) => `${i + 1}. ${e}`).join('\n')}`
+  );
 }
 
 export async function callAI(prompt: string, options: AICallOptions): Promise<string> {
