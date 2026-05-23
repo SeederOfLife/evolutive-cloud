@@ -612,12 +612,43 @@ Critical rules:
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            className="flex-none bg-red-900/40 border-b border-red-800 px-4 py-2 flex items-center justify-between overflow-hidden"
+            className={`flex-none border-b px-4 py-2.5 flex items-center justify-between overflow-hidden gap-3 ${
+              aiError.startsWith('All AI providers exhausted')
+                ? 'bg-indigo-950/60 border-indigo-700/30'
+                : 'bg-red-900/40 border-red-800'
+            }`}
           >
-            <p className="text-sm text-red-300 truncate">{aiError}</p>
-            <button onClick={() => setAiError(null)} className="ml-2 text-red-400 hover:text-red-200 shrink-0">
-              <X className="w-4 h-4" />
-            </button>
+            {aiError.startsWith('All AI providers exhausted') ? (
+              <>
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <Zap className="w-4 h-4 text-indigo-400 shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-sm text-indigo-200 font-medium leading-snug">No AI provider available</p>
+                    <p className="text-[11px] text-indigo-400 mt-0.5 leading-snug">
+                      Add a free Google Gemini key to get started — or use OpenAI / Anthropic
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => { setShowSettings(true); setAiError(null); }}
+                    className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-black uppercase tracking-widest rounded-lg transition-all whitespace-nowrap"
+                  >
+                    Open Settings
+                  </button>
+                  <button onClick={() => setAiError(null)} className="text-indigo-500 hover:text-indigo-300">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-red-300 truncate">{aiError}</p>
+                <button onClick={() => setAiError(null)} className="ml-2 text-red-400 hover:text-red-200 shrink-0">
+                  <X className="w-4 h-4" />
+                </button>
+              </>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
