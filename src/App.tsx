@@ -33,8 +33,33 @@ const MANIFEST_PROVIDERS = [
   { id: "google",    label: "Google Gemini", Icon: Globe,    model: "gemini-3-flash-preview" },
   { id: "openai",    label: "OpenAI GPT-4",  Icon: Zap,      model: "gpt-4o" },
   { id: "anthropic", label: "Claude",         Icon: Sparkles, model: "claude-sonnet-4-20250514" },
-  { id: "web-llm",   label: "WebLLM (Local)", Icon: Cpu,      model: "Llama-3-8B-Instruct-q4f32_1-MLC" },
+  { id: "web-llm",   label: "Free Local AI",  Icon: Cpu,      model: "Qwen2.5-0.5B-Instruct-q4f16_1-MLC" },
 ] as const;
+
+const HERO_PHRASES = [
+  "What will you build today?",
+  "Games, tools, art, music — anything.",
+  "Describe it. We build it.",
+  "Turn imagination into code.",
+];
+
+const ONBOARDING_STEPS = [
+  {
+    title: "Welcome to Evolutive",
+    body: "Turn any idea into a working app — games, tools, art, music — in seconds.",
+    note: "Free local AI is active by default. No API key needed to start.",
+  },
+  {
+    title: "Describe your idea",
+    body: "Type anything in the bar below — specific or vague. We'll build it into an interactive, animated app.",
+    note: null,
+  },
+  {
+    title: "Explore the galaxy",
+    body: "Each app you build becomes an orbiting node in space. Click any glowing orb to launch it.",
+    note: null,
+  },
+];
 
 export default function App() {
   const { quota: apiQuota, consume: consumeQuota } = useQuota();
@@ -53,6 +78,7 @@ export default function App() {
     activeProvider,
     isRateLimited,
     rateLimitCountdown,
+    webLlmProgress,
     call: callUnifiedAI,
   } = useAI();
   const { suggestions, deleteSuggestion, voteSuggestion } = useSuggestions();
@@ -90,6 +116,9 @@ export default function App() {
     Record<string, { status: 'online' | 'offline' | 'checking' | null; ping: number | null; tokens: string | null }>
   >({});
   const maxRateLimitCountdown = useRef(0);
+  const [showOnboarding, setShowOnboarding] = useState(() => !localStorage.getItem('evolutive_onboarded'));
+  const [onboardingStep, setOnboardingStep] = useState(0);
+  const [heroIndex, setHeroIndex] = useState(0);
 
   const userApiKey = useMemo(() => providerKeys[aiProvider] || "", [providerKeys, aiProvider]);
 
@@ -102,6 +131,12 @@ export default function App() {
       maxRateLimitCountdown.current = 0;
     }
   }, [isRateLimited, rateLimitCountdown]);
+
+  // Rotate hero phrases every 4 seconds
+  useEffect(() => {
+    const id = setInterval(() => setHeroIndex(i => (i + 1) % HERO_PHRASES.length), 4000);
+    return () => clearInterval(id);
+  }, []);
 
   useEffect(() => {
     if (!showProviderDrop) return;
@@ -684,6 +719,34 @@ Critical rules:
         )}
       </AnimatePresence>
 
+      {/* WebLLM loading banner */}
+      <AnimatePresence>
+        {webLlmProgress && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="flex-none bg-indigo-950/80 border-b border-indigo-700/40 px-4 py-3 overflow-hidden"
+          >
+            <div className="flex items-center gap-3 mb-1.5">
+              <Loader2 className="w-4 h-4 text-indigo-400 animate-spin shrink-0" />
+              <p className="text-sm text-indigo-300 font-medium">
+                Downloading free local AI — one-time setup, ~500MB
+              </p>
+            </div>
+            <p className="text-xs text-indigo-500 font-mono truncate ml-7">{webLlmProgress}</p>
+            <div className="h-1 mt-2 w-full bg-indigo-900/40 rounded-full overflow-hidden ml-7" style={{ width: 'calc(100% - 28px)' }}>
+              <motion.div
+                className="h-full bg-gradient-to-r from-indigo-600 to-indigo-400 rounded-full"
+                animate={{ opacity: [0.5, 1, 0.5] }}
+                transition={{ duration: 1.5, repeat: Infinity }}
+                style={{ width: '100%' }}
+              />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* ── MAIN AREA ───────────────────────────────────────────────────────── */}
       <main className="flex-1 overflow-hidden relative">
 
@@ -720,6 +783,22 @@ Critical rules:
               minPolarAngle={Math.PI / 3}
             />
           </Canvas>
+
+          {/* Rotating hero text */}
+          <div className="absolute inset-x-0 bottom-28 sm:bottom-36 flex items-center justify-center pointer-events-none z-10">
+            <AnimatePresence mode="wait">
+              <motion.p
+                key={heroIndex}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.7 }}
+                className="text-white/20 text-base sm:text-xl font-light tracking-wide text-center px-8"
+              >
+                {HERO_PHRASES[heroIndex]}
+              </motion.p>
+            </AnimatePresence>
+          </div>
         </div>
 
         {/* Feed view */}
@@ -1009,6 +1088,70 @@ Critical rules:
           />
         )}
       </AnimatePresence>
+
+      {/* ── ONBOARDING OVERLAY ──────────────────────────────────────────────── */}
+      <AnimatePresence>
+        {showOnboarding && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-sm px-4"
+          >
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={onboardingStep}
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.25 }}
+                className="bg-gray-900 border border-gray-700 rounded-2xl p-8 max-w-sm w-full shadow-2xl text-center"
+              >
+                <div className="w-12 h-12 bg-indigo-500/20 rounded-full flex items-center justify-center mx-auto mb-5">
+                  {onboardingStep === 0 && <Sparkles className="w-6 h-6 text-indigo-400" />}
+                  {onboardingStep === 1 && <MessageSquare className="w-6 h-6 text-indigo-400" />}
+                  {onboardingStep === 2 && <Globe className="w-6 h-6 text-indigo-400" />}
+                </div>
+                <h2 className="text-white text-xl font-bold mb-2">{ONBOARDING_STEPS[onboardingStep].title}</h2>
+                <p className="text-gray-400 text-sm leading-relaxed">{ONBOARDING_STEPS[onboardingStep].body}</p>
+                {ONBOARDING_STEPS[onboardingStep].note && (
+                  <p className="text-indigo-400 text-xs mt-4 bg-indigo-500/10 rounded-lg px-3 py-2">
+                    {ONBOARDING_STEPS[onboardingStep].note}
+                  </p>
+                )}
+                <div className="flex items-center justify-between mt-7">
+                  <div className="flex gap-1.5">
+                    {ONBOARDING_STEPS.map((_, i) => (
+                      <div key={i} className={`w-1.5 h-1.5 rounded-full transition-all ${i === onboardingStep ? 'bg-indigo-400 w-3' : 'bg-gray-600'}`} />
+                    ))}
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => { localStorage.setItem('evolutive_onboarded', '1'); setShowOnboarding(false); }}
+                      className="px-4 py-2 text-gray-500 hover:text-gray-300 text-sm transition-colors"
+                    >
+                      Skip
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (onboardingStep < ONBOARDING_STEPS.length - 1) {
+                          setOnboardingStep(s => s + 1);
+                        } else {
+                          localStorage.setItem('evolutive_onboarded', '1');
+                          setShowOnboarding(false);
+                        }
+                      }}
+                      className="px-5 py-2 bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-medium rounded-lg transition-all"
+                    >
+                      {onboardingStep < ONBOARDING_STEPS.length - 1 ? "Next →" : "Get Started"}
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            </AnimatePresence>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -1286,7 +1429,12 @@ const MODELS: Record<string, { value: string; label: string }[]> = {
     { value: "claude-3-5-sonnet-20240620", label: "Claude 3.5 Sonnet" },
   ],
   custom: [],
-  "web-llm": [{ value: "Llama-3-8B-Instruct-q4f32_1-MLC", label: "Llama 3 8B" }],
+  "web-llm": [
+    { value: "Qwen2.5-0.5B-Instruct-q4f16_1-MLC", label: "Qwen 2.5 0.5B (tiny, fast)" },
+    { value: "gemma-2-2b-it-q4f16_1-MLC", label: "Gemma 2 2B (balanced)" },
+    { value: "Llama-3.2-1B-Instruct-q4f16_1-MLC", label: "Llama 3.2 1B (small)" },
+    { value: "Llama-3-8B-Instruct-q4f32_1-MLC", label: "Llama 3 8B (GPU recommended)" },
+  ],
   "gemini-nano": [{ value: "gemini-nano", label: "Gemini Nano" }],
 };
 

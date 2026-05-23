@@ -30,12 +30,15 @@ const DEFAULT_CONFIG: AIConfig & { systemPrompt: string } = {
 export function useAI() {
   const [aiProvider, setAiProvider] = useState<AIProvider>(() => {
     const stored = localStorage.getItem('app_provider') as AIProvider;
-    // web-llm requires explicit user opt-in each session (needs GPU, model download)
-    return (stored && stored !== 'web-llm') ? stored : 'google';
+    // First visit (no stored preference): default to free local AI
+    return stored || 'web-llm';
   });
-  const [selectedModel, setSelectedModel] = useState(() =>
-    localStorage.getItem('app_model') || "gemini-3-flash-preview"
-  );
+  const [selectedModel, setSelectedModel] = useState(() => {
+    const stored = localStorage.getItem('app_model');
+    if (stored) return stored;
+    // First visit: use the tiny Qwen model (no API key required)
+    return localStorage.getItem('app_provider') ? "gemini-3-flash-preview" : "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
+  });
   const [providerKeys, setProviderKeys] = useState<Record<string, string>>(() => {
     try {
       const saved = localStorage.getItem('app_hub_keys');
