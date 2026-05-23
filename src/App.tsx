@@ -360,13 +360,23 @@ export default function App() {
         .join("\n");
 
       const appType = (suggestion.app_type || "desktop") as AppType;
+      const energy = suggestion.energy ?? 50;
+      const energyContext = energy > 50
+        ? "This is a high-energy creation — go complex and ambitious"
+        : "Start simple but make it polished and complete";
+
       const prompt = `
-System: ${AGENT_SYSTEM_PROMPTS[appType] || aiConfig.systemPrompt}
+System: ${aiConfig.systemPrompt}
+
+Type specialist: ${AGENT_SYSTEM_PROMPTS[appType]}
+
+Energy: ${energyContext}
+
 Target: ${appType.toUpperCase()}
 
 Task: Create a complete React application for: "${suggestion.content}"
 ${existingApps ? `\nOther apps already built (for context/inspiration, don't duplicate):\n${existingApps}\n` : ""}
-Guidelines:
+Type-specific guidance:
 - ${AGENT_GUIDELINES[appType]}
 
 Libraries available (already in scope, NO imports needed):
@@ -375,11 +385,12 @@ Libraries available (already in scope, NO imports needed):
 - Lucide React icons (e.g. Search, Star, Heart, Play, Settings...)
 - Recharts (LineChart, BarChart, PieChart, AreaChart...)
 - motion.div, AnimatePresence from Framer Motion
+- Canvas 2D API, Web Audio API, SVG, Math, localStorage — all available natively
 
 Critical rules:
 - Start with: export default function App() {
 - NO import statements at all
-- ALL styling via Tailwind classes
+- ALL styling via Tailwind classes or inline styles
 - Return ONLY raw code, no markdown fences
       `.trim();
 
