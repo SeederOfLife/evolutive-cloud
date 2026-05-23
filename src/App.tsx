@@ -28,6 +28,7 @@ import { useAuth } from "./hooks/useAuth";
 import { useAI } from "./hooks/useAI";
 import { useSuggestions } from "./hooks/useSuggestions";
 import { AGENT_SYSTEM_PROMPTS, AGENT_GUIDELINES, AppType } from "./services/agentSkills";
+import { SEED_APPS } from "./services/seedApps";
 
 const MANIFEST_PROVIDERS = [
   { id: "google",    label: "Google Gemini", Icon: Globe,    model: "gemini-3-flash-preview" },
@@ -119,6 +120,7 @@ export default function App() {
   const [showOnboarding, setShowOnboarding] = useState(() => !localStorage.getItem('evolutive_onboarded'));
   const [onboardingStep, setOnboardingStep] = useState(0);
   const [heroIndex, setHeroIndex] = useState(0);
+  const [seedVotes, setSeedVotes] = useState<Record<string, number>>({});
 
   const userApiKey = useMemo(() => providerKeys[aiProvider] || "", [providerKeys, aiProvider]);
 
@@ -137,6 +139,16 @@ export default function App() {
     const id = setInterval(() => setHeroIndex(i => (i + 1) % HERO_PHRASES.length), 4000);
     return () => clearInterval(id);
   }, []);
+
+  // Merge seed apps into suggestions when Firestore has no built apps or user is a guest
+  const allSuggestions = useMemo(() => {
+    const hasBuilt = suggestions.filter(s => s.status === 'built').length > 0;
+    if (user && hasBuilt) return suggestions;
+    return [
+      ...SEED_APPS.map(s => ({ ...s, votes: seedVotes[s.id] !== undefined ? seedVotes[s.id] : s.votes })),
+      ...suggestions,
+    ];
+  }, [user, suggestions, seedVotes]);
 
   useEffect(() => {
     if (!showProviderDrop) return;
@@ -283,7 +295,7 @@ export default function App() {
   const canSuggest = isFinalized || isCreator;
 
   const displaySuggestions = useMemo(() => {
-    return suggestions
+    return allSuggestions
       .filter((s) => s.status !== "system_config" && s.status !== "deleted" && !s.is_deleted)
       .filter((s) => {
         const matchesSearch = s.content.toLowerCase().includes(searchQuery.toLowerCase());
@@ -293,11 +305,11 @@ export default function App() {
         if (filterType === "mine") matchesCategory = s.user_id === user?.uid;
         return matchesSearch && matchesCategory;
       });
-  }, [suggestions, searchQuery, filterType, user]);
+  }, [allSuggestions, searchQuery, filterType, user]);
 
   const builtCount = useMemo(
-    () => suggestions.filter((s) => s.status === "built").length,
-    [suggestions]
+    () => allSuggestions.filter((s) => s.status === "built").length,
+    [allSuggestions]
   );
 
   const neuralStatus = useMemo(() => {
@@ -353,7 +365,16 @@ export default function App() {
     }
   };
 
+  const handleVote = (id: string, currentVotes: number) => {
+    if (id.startsWith('seed_')) {
+      setSeedVotes(prev => ({ ...prev, [id]: (prev[id] !== undefined ? prev[id] : currentVotes) + 1 }));
+    } else {
+      voteSuggestion(id, currentVotes);
+    }
+  };
+
   const handleDeleteSuggestion = async (id: string) => {
+    if (id.startsWith('seed_')) return;
     setIsLoading(true);
     try {
       const target = suggestions.find((s) => s.id === id);
@@ -771,7 +792,7 @@ Critical rules:
             <OrbitRing radius={5.0} opacity={0.11} color="#6366f1" />
             <OrbitRing radius={6.5} opacity={0.07} color="#4f46e5" />
             <OrbitRing radius={7.5} opacity={0.05} color="#4338ca" />
-            {suggestions
+            {allSuggestions
               .filter((s) => s.status === "built" && s.built_code)
               .map((s) => (
                 <ModuleNode key={s.id} suggestion={s} onRun={(sg) => setLaunchTarget(sg)} />
@@ -806,7 +827,7 @@ Critical rules:
           <ScrollFeed
             suggestions={displaySuggestions}
             onPlay={(s) => setLaunchTarget(s)}
-            onVote={(id, votes) => voteSuggestion(id, votes)}
+            onVote={handleVote}
             onBuild={(s) => buildEvolution(s)}
           />
         )}
@@ -828,7 +849,7 @@ Critical rules:
             onLaunch={(s: Suggestion) => setLaunchTarget(s)}
             onFork={(s: Suggestion) => setForkTarget(s)}
             onDelete={handleDeleteSuggestion}
-            onVote={(id: string, votes: number) => voteSuggestion(id, votes)}
+            onVote={handleVote}
           />
         )}
       </main>
@@ -1046,7 +1067,7 @@ Critical rules:
           <LaunchModal
             suggestion={launchTarget}
             onClose={() => setLaunchTarget(null)}
-            onVote={(id, votes) => voteSuggestion(id, votes)}
+            onVote={handleVote}
             onFork={() => { setForkTarget(launchTarget); setLaunchTarget(null); }}
             onRefine={async (message: string, currentCode: string) => {
               const isFix = message.startsWith("Fix this error:");
@@ -1285,7 +1306,8 @@ function HubView({
         )}
         {suggestions.map((s) => {
           const isBuilt = s.status === "built";
-          const isOwner = s.user_id === user?.uid || isCreator;
+          const isDemo = s.user_id === '@evolutive_demo';
+          const isOwner = !isDemo && (s.user_id === user?.uid || isCreator);
           return (
             <div
               key={s.id}
@@ -1295,7 +1317,10 @@ function HubView({
               <div className="sm:hidden flex flex-col gap-3 px-4 py-4">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm text-white font-medium leading-snug">{s.content}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm text-white font-medium leading-snug">{s.content}</p>
+                      {isDemo && <span className="shrink-0 px-1.5 py-0.5 bg-violet-500/20 text-violet-400 rounded text-[9px] font-black uppercase tracking-wider border border-violet-500/30">DEMO</span>}
+                    </div>
                     {s.parent_id && (
                       <p className="text-[10px] text-indigo-400/60 font-mono mt-0.5">forked from #{s.parent_id.substring(0, 8)}</p>
                     )}
@@ -1337,7 +1362,10 @@ function HubView({
               {/* Desktop row layout */}
               <div className="hidden sm:grid grid-cols-[1fr_72px_80px_180px] gap-3 items-center px-4 py-3">
                 <div className="min-w-0">
-                  <p className="text-sm text-white font-medium truncate">{s.content}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm text-white font-medium truncate">{s.content}</p>
+                    {isDemo && <span className="shrink-0 px-1.5 py-0.5 bg-violet-500/20 text-violet-400 rounded text-[9px] font-black uppercase tracking-wider border border-violet-500/30">DEMO</span>}
+                  </div>
                   <p className="text-xs text-gray-600 font-mono">
                     #{s.id.substring(0, 8)}
                     {s.parent_id && (

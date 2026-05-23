@@ -153,8 +153,15 @@ function FeedCard({
 
       {/* Top badges */}
       <div className="relative z-10 flex items-center justify-between p-4">
-        <div className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-[3px] border ${style.badge}`}>
-          {s.app_type || "desktop"}
+        <div className="flex items-center gap-2">
+          <div className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-[3px] border ${style.badge}`}>
+            {s.app_type || "desktop"}
+          </div>
+          {s.user_id === '@evolutive_demo' && (
+            <div className="px-2 py-1 rounded-full text-[9px] font-black uppercase tracking-[2px] border bg-violet-500/10 text-violet-400 border-violet-500/30">
+              DEMO
+            </div>
+          )}
         </div>
         <div className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-[2px] border ${
           isBuilt
