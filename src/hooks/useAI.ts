@@ -28,9 +28,11 @@ const DEFAULT_CONFIG: AIConfig & { systemPrompt: string } = {
 };
 
 export function useAI() {
-  const [aiProvider, setAiProvider] = useState<AIProvider>(() =>
-    (localStorage.getItem('app_provider') as AIProvider) || 'google'
-  );
+  const [aiProvider, setAiProvider] = useState<AIProvider>(() => {
+    const stored = localStorage.getItem('app_provider') as AIProvider;
+    // web-llm requires explicit user opt-in each session (needs GPU, model download)
+    return (stored && stored !== 'web-llm') ? stored : 'google';
+  });
   const [selectedModel, setSelectedModel] = useState(() =>
     localStorage.getItem('app_model') || "gemini-3-flash-preview"
   );

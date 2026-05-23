@@ -89,8 +89,19 @@ export default function App() {
   const [providerHealth, setProviderHealth] = useState<
     Record<string, { status: 'online' | 'offline' | 'checking' | null; ping: number | null; tokens: string | null }>
   >({});
+  const maxRateLimitCountdown = useRef(0);
 
   const userApiKey = useMemo(() => providerKeys[aiProvider] || "", [providerKeys, aiProvider]);
+
+  // Track the peak countdown value for progress bar
+  useEffect(() => {
+    if (isRateLimited && rateLimitCountdown > maxRateLimitCountdown.current) {
+      maxRateLimitCountdown.current = rateLimitCountdown;
+    }
+    if (!isRateLimited) {
+      maxRateLimitCountdown.current = 0;
+    }
+  }, [isRateLimited, rateLimitCountdown]);
 
   useEffect(() => {
     if (!showProviderDrop) return;
@@ -596,7 +607,7 @@ Critical rules:
 
       {/* Error banner */}
       <AnimatePresence>
-        {aiError && (
+        {aiError && !isRateLimited && (
           <motion.div
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
@@ -607,6 +618,37 @@ Critical rules:
             <button onClick={() => setAiError(null)} className="ml-2 text-red-400 hover:text-red-200 shrink-0">
               <X className="w-4 h-4" />
             </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Rate limit banner */}
+      <AnimatePresence>
+        {isRateLimited && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="flex-none bg-amber-950/60 border-b border-amber-700/30 px-4 py-2.5 overflow-hidden"
+          >
+            <div className="flex items-center justify-between mb-1.5">
+              <p className="text-sm text-amber-300 font-medium">
+                Gemini rate limit — ready again in{" "}
+                <span className="font-black text-amber-200 tabular-nums">{rateLimitCountdown}s</span>
+              </p>
+              <span className="text-[10px] font-mono text-amber-600 uppercase tracking-widest">20 req/min</span>
+            </div>
+            <div className="h-1 w-full bg-amber-900/40 rounded-full overflow-hidden">
+              <motion.div
+                className="h-full bg-gradient-to-r from-amber-600 to-amber-400 rounded-full"
+                animate={{
+                  width: maxRateLimitCountdown.current > 0
+                    ? `${Math.round(((maxRateLimitCountdown.current - rateLimitCountdown) / maxRateLimitCountdown.current) * 100)}%`
+                    : "0%"
+                }}
+                transition={{ duration: 0.9, ease: "linear" }}
+              />
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
