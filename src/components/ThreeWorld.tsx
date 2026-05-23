@@ -1,7 +1,7 @@
 
 import React, { useRef, useState, useMemo } from "react";
 import { useFrame } from "@react-three/fiber";
-import { Float, MeshDistortMaterial, Html } from "@react-three/drei";
+import { Html } from "@react-three/drei";
 import * as THREE from "three";
 import { Suggestion } from "../types";
 
@@ -17,35 +17,133 @@ function seededRand(seed: string, n: number): number {
   return ((h ^ (h >>> 16)) >>> 0) / 0xffffffff;
 }
 
-export function EvolutiveSeed({ onClick, isOpen }: { onClick: () => void, isOpen: boolean }) {
-  const meshRef = useRef<THREE.Mesh>(null!);
-  const timeRef = useRef(0);
+function SeedParticles({ count = 80 }: { count?: number }) {
+  const pointsRef = useRef<THREE.Points>(null!);
 
-  useFrame((state, delta) => {
-    if (!meshRef.current) return;
-    timeRef.current += delta;
-    const time = timeRef.current;
-    meshRef.current.rotation.y = time * 0.15;
-    const pulse = 1 + Math.sin(time * (isOpen ? 2 : 0.5)) * (isOpen ? 0.1 : 0.05);
-    meshRef.current.scale.set(pulse, pulse, pulse);
+  const { initPos, vel } = useMemo(() => {
+    const pos = new Float32Array(count * 3);
+    const v = new Float32Array(count * 3);
+    for (let i = 0; i < count; i++) {
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(2 * Math.random() - 1);
+      const r = 1.5 + Math.random() * 1.5;
+      const speed = 0.4 + Math.random() * 0.9;
+      const sx = Math.sin(phi) * Math.cos(theta);
+      const sy = Math.sin(phi) * Math.sin(theta);
+      const sz = Math.cos(phi);
+      pos[i * 3] = sx * r; pos[i * 3 + 1] = sy * r; pos[i * 3 + 2] = sz * r;
+      v[i * 3] = sx * speed; v[i * 3 + 1] = sy * speed; v[i * 3 + 2] = sz * speed;
+    }
+    return { initPos: pos, vel: v };
+  }, [count]);
+
+  useFrame((_, delta) => {
+    if (!pointsRef.current) return;
+    const pos = pointsRef.current.geometry.attributes.position.array as Float32Array;
+    for (let i = 0; i < count; i++) {
+      pos[i * 3] += vel[i * 3] * delta;
+      pos[i * 3 + 1] += vel[i * 3 + 1] * delta;
+      pos[i * 3 + 2] += vel[i * 3 + 2] * delta;
+      const x = pos[i * 3], y = pos[i * 3 + 1], z = pos[i * 3 + 2];
+      if (x * x + y * y + z * z > 49) {
+        const t2 = Math.random() * Math.PI * 2;
+        const p2 = Math.acos(2 * Math.random() - 1);
+        const spd = 0.4 + Math.random() * 0.9;
+        const sx2 = Math.sin(p2) * Math.cos(t2);
+        const sy2 = Math.sin(p2) * Math.sin(t2);
+        const sz2 = Math.cos(p2);
+        pos[i * 3] = sx2 * 1.5; pos[i * 3 + 1] = sy2 * 1.5; pos[i * 3 + 2] = sz2 * 1.5;
+        vel[i * 3] = sx2 * spd; vel[i * 3 + 1] = sy2 * spd; vel[i * 3 + 2] = sz2 * spd;
+      }
+    }
+    pointsRef.current.geometry.attributes.position.needsUpdate = true;
   });
 
   return (
-    <Float speed={2} rotationIntensity={1} floatIntensity={2}>
-      <mesh ref={meshRef} onClick={onClick} castShadow>
+    <points ref={pointsRef}>
+      <bufferGeometry>
+        <bufferAttribute attach="attributes-position" count={count} array={initPos} itemSize={3} />
+      </bufferGeometry>
+      <pointsMaterial size={0.07} color="#ffffc0" transparent opacity={0.85} sizeAttenuation blending={THREE.AdditiveBlending} depthWrite={false} />
+    </points>
+  );
+}
+
+export function EvolutiveSeed({ onClick, isOpen }: { onClick: () => void, isOpen: boolean }) {
+  const coreRef = useRef<THREE.Mesh>(null!);
+  const coreMat = useRef<THREE.MeshStandardMaterial>(null!);
+  const corona1Ref = useRef<THREE.Mesh>(null!);
+  const corona2Ref = useRef<THREE.Mesh>(null!);
+  const corona3Ref = useRef<THREE.Mesh>(null!);
+  const raysRef = useRef<THREE.Group>(null!);
+  const timeRef = useRef(0);
+
+  const rayData = useMemo(() => Array.from({ length: 8 }, (_, i) => {
+    const angle = (i / 8) * Math.PI * 2;
+    const dir = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle));
+    const quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+    const euler = new THREE.Euler().setFromQuaternion(quat);
+    const len = 2.5 + (i % 3) * 0.7;
+    return {
+      pos: dir.clone().multiplyScalar(1.6 + len / 2).toArray() as [number, number, number],
+      euler,
+      len,
+      opacity: 0.12 + (i % 2) * 0.06,
+    };
+  }), []);
+
+  useFrame((_, delta) => {
+    timeRef.current += delta;
+    const t = timeRef.current;
+
+    if (coreRef.current) coreRef.current.scale.setScalar(1 + Math.sin(t * 0.6) * 0.08);
+    if (corona1Ref.current) corona1Ref.current.scale.setScalar(1 + Math.sin(t * 0.5 + 0.3) * 0.10);
+    if (corona2Ref.current) corona2Ref.current.scale.setScalar(1 + Math.sin(t * 0.4 + 0.7) * 0.13);
+    if (corona3Ref.current) corona3Ref.current.scale.setScalar(1 + Math.sin(t * 0.3 + 1.1) * 0.17);
+
+    if (coreMat.current) {
+      const b = 0.55 + Math.sin(t * 0.22) * 0.45;
+      coreMat.current.emissive.setRGB(1, 0.95 + Math.sin(t * 0.15) * 0.05, Math.max(0.1, b));
+      coreMat.current.emissiveIntensity = (isOpen ? 5 : 3.5) + Math.sin(t * 0.6) * 0.5;
+    }
+
+    if (raysRef.current) raysRef.current.rotation.y = t * 0.08;
+  });
+
+  return (
+    <group onClick={onClick}>
+      <pointLight color="#fff8d0" intensity={isOpen ? 8 : 5} distance={25} decay={1.5} />
+      <pointLight color="#a0c8ff" intensity={isOpen ? 2.5 : 1.5} distance={10} decay={2} />
+
+      <mesh ref={coreRef}>
         <sphereGeometry args={[1.5, 64, 64]} />
-        <MeshDistortMaterial
-          color={isOpen ? "#818cf8" : "#6366f1"}
-          speed={isOpen ? 5 : 3}
-          distort={isOpen ? 0.6 : 0.4}
-          radius={1}
-          metalness={0.7}
-          roughness={0.1}
-          emissive={isOpen ? "#4338ca" : "#2e1065"}
-          emissiveIntensity={0.8}
-        />
+        <meshStandardMaterial ref={coreMat} color="#ffffff" emissive="#ffffa0" emissiveIntensity={4} metalness={0} roughness={0.05} />
       </mesh>
-    </Float>
+
+      <mesh ref={corona1Ref}>
+        <sphereGeometry args={[2.2, 32, 32]} />
+        <meshBasicMaterial color="#ffffff" transparent opacity={0.07} depthWrite={false} blending={THREE.AdditiveBlending} />
+      </mesh>
+      <mesh ref={corona2Ref}>
+        <sphereGeometry args={[3.0, 32, 32]} />
+        <meshBasicMaterial color="#ffffc0" transparent opacity={0.04} depthWrite={false} blending={THREE.AdditiveBlending} />
+      </mesh>
+      <mesh ref={corona3Ref}>
+        <sphereGeometry args={[4.2, 32, 32]} />
+        <meshBasicMaterial color="#ffe080" transparent opacity={0.02} depthWrite={false} blending={THREE.AdditiveBlending} />
+      </mesh>
+
+      <group ref={raysRef}>
+        {rayData.map((ray, i) => (
+          <mesh key={i} position={ray.pos} rotation={ray.euler}>
+            <cylinderGeometry args={[0.01, 0.07, ray.len, 6, 1]} />
+            <meshBasicMaterial color="#ffffff" transparent opacity={ray.opacity} depthWrite={false} blending={THREE.AdditiveBlending} />
+          </mesh>
+        ))}
+      </group>
+
+      <SeedParticles />
+    </group>
   );
 }
 
