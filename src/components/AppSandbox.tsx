@@ -3,7 +3,7 @@ import { useMemo } from "react";
 
 interface AppSandboxProps {
   code: string;
-  appType?: 'phone' | 'desktop' | 'game' | 'terminal';
+  appType?: 'phone' | 'desktop' | 'game' | 'terminal' | 'music' | 'art';
   className?: string;
   onLog?: (msg: string) => void;
   onError?: (msg: string, stack?: string) => void;

@@ -27,6 +27,7 @@ import { useQuota } from "./hooks/useQuota";
 import { useAuth } from "./hooks/useAuth";
 import { useAI } from "./hooks/useAI";
 import { useSuggestions } from "./hooks/useSuggestions";
+import { AGENT_SYSTEM_PROMPTS, AGENT_GUIDELINES, AppType } from "./services/agentSkills";
 
 const MANIFEST_PROVIDERS = [
   { id: "google",    label: "Google Gemini", Icon: Globe,    model: "gemini-3-flash-preview" },
@@ -63,7 +64,7 @@ export default function App() {
 
   // App state
   const [input, setInput] = useState("");
-  const [newAppType, setNewAppType] = useState<'phone' | 'desktop' | 'game' | 'terminal'>('desktop');
+  const [newAppType, setNewAppType] = useState<AppType>('desktop');
   const [isLoading, setIsLoading] = useState(false);
   const [isBuilding, setIsBuilding] = useState<string | null>(null);
   const [launchTarget, setLaunchTarget] = useState<Suggestion | null>(null);
@@ -358,17 +359,15 @@ export default function App() {
         .map(s => `- "${s.content}" (${s.app_type || "desktop"})`)
         .join("\n");
 
+      const appType = (suggestion.app_type || "desktop") as AppType;
       const prompt = `
-System: ${aiConfig.systemPrompt}
-Target: ${suggestion.app_type?.toUpperCase() || "DESKTOP"}
+System: ${AGENT_SYSTEM_PROMPTS[appType] || aiConfig.systemPrompt}
+Target: ${appType.toUpperCase()}
 
 Task: Create a complete React application for: "${suggestion.content}"
 ${existingApps ? `\nOther apps already built (for context/inspiration, don't duplicate):\n${existingApps}\n` : ""}
 Guidelines:
-- DESKTOP: wide viewport, dashboard layout
-- PHONE: touch-first, vertical stacking
-- GAME: high-interactivity, game state loops
-- TERMINAL: monospace, command-line style
+- ${AGENT_GUIDELINES[appType]}
 
 Libraries available (already in scope, NO imports needed):
 - React 18 hooks (useState, useEffect, useMemo, useRef, useCallback, useContext, useReducer)
@@ -681,7 +680,7 @@ Critical rules:
             className="flex gap-1 overflow-x-auto min-w-0 flex-1 sm:flex-none"
             style={{ scrollbarWidth: "none" }}
           >
-            {(["phone", "desktop", "game", "terminal"] as const).map((type) => (
+            {(["phone", "desktop", "game", "terminal", "music", "art"] as const).map((type) => (
               <button
                 key={type}
                 onClick={() => setNewAppType(type)}

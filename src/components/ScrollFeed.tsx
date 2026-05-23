@@ -9,6 +9,8 @@ const TYPE_STYLES: Record<string, { badge: string; glow: string }> = {
   desktop:  { badge: "text-blue-400 bg-blue-500/10 border-blue-500/30",         glow: "rgba(99,102,241,0.15)" },
   game:     { badge: "text-emerald-400 bg-emerald-500/10 border-emerald-500/30", glow: "rgba(16,185,129,0.15)" },
   terminal: { badge: "text-orange-400 bg-orange-500/10 border-orange-500/30",   glow: "rgba(249,115,22,0.15)" },
+  music:    { badge: "text-purple-400 bg-purple-500/10 border-purple-500/30",   glow: "rgba(168,85,247,0.15)" },
+  art:      { badge: "text-rose-400 bg-rose-500/10 border-rose-500/30",         glow: "rgba(244,63,94,0.15)"  },
 };
 
 interface Props {
@@ -279,6 +281,27 @@ function AppMockup({ appType }: { appType?: string }) {
           {[100, 75, 60, 45, 80].map((w, i) => (
             <div key={i} className="h-2 bg-white/20 rounded" style={{ width: `${w}%` }} />
           ))}
+        </div>
+      ) : appType === "music" ? (
+        <div className="w-80 h-52 rounded-2xl border border-white/20 bg-white/5 p-4 flex flex-col gap-3">
+          <div className="flex gap-1 flex-1 items-end">
+            {[40, 70, 55, 90, 45, 80, 60, 75, 50, 85].map((h, i) => (
+              <div key={i} className="flex-1 bg-white/20 rounded-t" style={{ height: `${h}%` }} />
+            ))}
+          </div>
+          <div className="flex gap-1">
+            {Array.from({ length: 14 }, (_, i) => (
+              <div key={i} className={`flex-1 h-8 rounded-sm ${[2, 4, 7, 9, 11].includes(i) ? "bg-white/10 -mx-0.5 z-10 relative" : "bg-white/25"}`} />
+            ))}
+          </div>
+        </div>
+      ) : appType === "art" ? (
+        <div className="w-72 h-72 rounded-full border border-white/20 flex items-center justify-center">
+          <div className="w-52 h-52 rounded-full border border-white/20 flex items-center justify-center">
+            <div className="w-32 h-32 rounded-full border-2 border-white/30 flex items-center justify-center">
+              <div className="w-12 h-12 rounded-full bg-white/20" />
+            </div>
+          </div>
         </div>
       ) : (
         <div className="w-80 h-52 rounded-2xl border-4 border-white/40 flex flex-col p-4 gap-3">
