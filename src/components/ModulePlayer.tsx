@@ -68,7 +68,7 @@ export function ModulePlayer({
   const cleanCode = useMemo(() => {
     if (!code) return "";
     const sanitizeCode = (c: string) => c
-      .replace(/^import\s+.*$/gm, '')
+      .replace(/^import\b.*$/gm, '')
       .replace(/^export\s+default\s+function/gm, 'function')
       .replace(/^export\s+default\s+/gm, '')
       .replace(/^export\s+/gm, '')
@@ -164,6 +164,7 @@ body{background:#050508;color:#fff;margin:0;min-height:100vh;display:flex;flex-d
       });
       Object.keys(IC).forEach(function(k){if(k!=='default')window[k]=IC[k];});
       Object.keys(RC).forEach(function(k){if(/^[A-Z]/.test(k))window[k]=RC[k];});
+      if(window.LucideReact)Object.assign(window,window.LucideReact);
       window.lucide=IC;
       window.h=R.createElement;
 

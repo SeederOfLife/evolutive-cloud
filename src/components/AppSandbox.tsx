@@ -11,10 +11,8 @@ interface AppSandboxProps {
 
 function sanitizeCode(code: string): string {
   return code
-    // Remove all import statements
-    .replace(/^import\s+.*?from\s+['"][^'"]+['"];?\s*$/gm, '')
-    .replace(/^import\s*\{[^}]*\}\s*from\s*['"][^'"]+['"];?\s*$/gm, '')
-    .replace(/^import\s+['"][^'"]+['"];?\s*$/gm, '')
+    // Remove all import statements (only lines that start with the word import)
+    .replace(/^import\b.*$/gm, '')
     // export default function/class → rename to App
     .replace(/^export\s+default\s+function\s*\w*/gm, 'function App')
     .replace(/^export\s+default\s+class\s*\w*/gm, 'class App')
@@ -92,6 +90,7 @@ body{background:#050508;color:#fff;margin:0;min-height:100vh;display:flex;flex-d
       });
       Object.keys(IC).forEach(function(k){if(k!=='default')window[k]=IC[k];});
       Object.keys(RC).forEach(function(k){if(/^[A-Z]/.test(k))window[k]=RC[k];});
+      if(window.LucideReact)Object.assign(window,window.LucideReact);
 
       var mkEl=function(tag){return function(p){p=p||{};return R.createElement(tag,{className:p.className,style:p.style,id:p.id,onClick:p.onClick,onChange:p.onChange},p.children);};};
       var motionObj={};
