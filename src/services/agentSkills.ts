@@ -1,9 +1,12 @@
 export type AppType = 'phone' | 'desktop' | 'game' | 'terminal' | 'music' | 'art';
 
+import { SKILL_GAME_SYSTEM_PROMPT } from './skills/SKILL_GAME';
+
 // System prompts enriched with patterns from:
 // - chongdashu/cc-skills-nanobananapro Three.js Builder SKILL.md
 // - chongdashu/threejs-tactics-game Three.js Builder SKILL.md
 // - Donchitos/Claude-Code-Game-Studios prototype + team-combat + map-systems skills
+// - SKILL_GAME: Canvas & Phaser 3 Game Generation (prepended to game prompt)
 export const AGENT_SYSTEM_PROMPTS: Record<AppType, string> = {
   phone:
     "You are a mobile-first app expert. Create touch-optimized apps with: large tap targets (min 44px), bottom navigation, swipe gestures, portrait layout, thumb-friendly buttons. Think Instagram, WhatsApp, TikTok style UI.",
@@ -15,6 +18,8 @@ export const AGENT_SYSTEM_PROMPTS: Record<AppType, string> = {
     "Add responsive resize handling (window resize → update layout state). Expose key config values as named constants at the top of the file.",
 
   game:
+    SKILL_GAME_SYSTEM_PROMPT + "\n\n" +
+    "ADDITIONAL CANVAS PATTERNS (andrew-lim / html5-snake / html5-raycast):\n" +
     "You are a browser game developer. Build fully playable games using React + canvas via useRef+useEffect. " +
     "Core architecture (proven patterns from html5-snake and html5-raycast): " +
 
