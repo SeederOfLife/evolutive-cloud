@@ -69,13 +69,20 @@ body{background:#050508;color:#fff;margin:0;min-height:100vh;display:flex;flex-d
     document.head.appendChild(s);
   }
   function loadChain(){
+    function runPhaser(){
+      ld('https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js',function(){
+        ld('https://unpkg.com/@babel/standalone@7.23.0/babel.min.js',runApp);
+      },function(){
+        ld('https://unpkg.com/@babel/standalone@7.23.0/babel.min.js',runApp);
+      });
+    }
     function runFM(){
       ld('https://cdn.jsdelivr.net/npm/framer-motion@10.16.4/dist/framer-motion.js',function(){
         window.motion=window.Motion&&window.Motion.motion;
         window.AnimatePresence=window.Motion&&window.Motion.AnimatePresence;
-        ld('https://unpkg.com/@babel/standalone@7.23.0/babel.min.js',runApp);
+        runPhaser();
       },function(){
-        ld('https://unpkg.com/@babel/standalone@7.23.0/babel.min.js',runApp);
+        runPhaser();
       });
     }
     ld('https://unpkg.com/react@18.2.0/umd/react.development.js',function(){

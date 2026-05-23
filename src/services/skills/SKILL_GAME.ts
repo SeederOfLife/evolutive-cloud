@@ -19,9 +19,14 @@ SANDBOX GLOBALS AVAILABLE:
 - React 18 (useState, useEffect, useRef, useMemo, useCallback)
 - ReactDOM.createRoot
 - Tailwind CSS classes
-- window.Phaser (v3) - includes Scene, Physics, Input, Display, Math
-- Canvas 2D API (2D context)
+- window.Phaser (v3) — fully loaded via CDN, includes Scene, Physics, Input, Display, Math
+- Canvas 2D API (2D context) — available natively, no import needed
 - Lucide icons as window globals
+
+PHASER 3 IS AVAILABLE: You may use \`new Phaser.Game(config)\` directly. No import needed.
+Choose between Phaser 3 (physics, sprites, scenes) or Canvas 2D (manual drawing, maximum control).
+Phaser 3 is better for: platformers, shooters, RPGs, physics-based games.
+Canvas 2D is better for: snake, tetris, raycast, particle simulations, pixel art.
 
 GAME STRUCTURE PATTERN:
 1. Initialize game state with score, gameOver, gameStarted

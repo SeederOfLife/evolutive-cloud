@@ -1,20 +1,26 @@
 export type AppType = 'phone' | 'desktop' | 'game' | 'terminal' | 'music' | 'art';
 
 import { SKILL_GAME_SYSTEM_PROMPT } from './skills/SKILL_GAME';
+import { SKILL_DESKTOP_SYSTEM_PROMPT } from './skills/SKILL_DESKTOP';
+import { SKILL_TERMINAL_SYSTEM_PROMPT } from './skills/SKILL_TERMINAL';
+import { SKILL_MUSIC_SYSTEM_PROMPT } from './skills/SKILL_MUSIC';
+import { SKILL_ART_SYSTEM_PROMPT } from './skills/SKILL_ART';
 
 // System prompts enriched with patterns from:
 // - chongdashu/cc-skills-nanobananapro Three.js Builder SKILL.md
 // - chongdashu/threejs-tactics-game Three.js Builder SKILL.md
 // - Donchitos/Claude-Code-Game-Studios prototype + team-combat + map-systems skills
-// - SKILL_GAME: Canvas & Phaser 3 Game Generation (prepended to game prompt)
+// - andrew-lim html5-snake + html5-raycast canvas patterns
+// - SKILL_* files: Canvas/Phaser3, Desktop, Terminal, Music, Art
 export const AGENT_SYSTEM_PROMPTS: Record<AppType, string> = {
   phone:
     "You are a mobile-first app expert. Create touch-optimized apps with: large tap targets (min 44px), bottom navigation, swipe gestures, portrait layout, thumb-friendly buttons. Think Instagram, WhatsApp, TikTok style UI.",
 
   desktop:
-    "You are a desktop app expert. Create rich interfaces with sidebars, multi-column layouts, keyboard shortcuts, hover states, dense information display, and drag-and-drop. Think Notion, Figma, VS Code style. " +
-    "Mental model: treat your component tree as a scene graph — parent state flows down to children; use React.memo and useMemo to keep expensive subtrees from re-rendering. " +
-    "Adapt visuals to the concept — a data dashboard looks different from a code editor or a kanban board. Never default to the same generic layout. " +
+    SKILL_DESKTOP_SYSTEM_PROMPT + "\n\n" +
+    "ADDITIONAL PATTERNS: " +
+    "Treat your component tree as a scene graph — parent state flows down; use React.memo and useMemo to keep expensive subtrees from re-rendering. " +
+    "Adapt visuals to the concept — a data dashboard looks different from a code editor or kanban board. Never default to the same generic layout. " +
     "Add responsive resize handling (window resize → update layout state). Expose key config values as named constants at the top of the file.",
 
   game:
@@ -53,28 +59,33 @@ export const AGENT_SYSTEM_PROMPTS: Record<AppType, string> = {
     "Every game must end with: clear win/lose condition, restart button, final score display.",
 
   terminal:
-    "You are a CLI/terminal app expert. Create command-line style interfaces with: monospace font, green-on-black or amber-on-black colors, command input, simulated file systems, ASCII art, typewriter effects, fake OS feel.",
+    SKILL_TERMINAL_SYSTEM_PROMPT + "\n\n" +
+    "ADDITIONAL PATTERNS: " +
+    "Create command-line style interfaces with: monospace font, green-on-black or amber-on-black colors, command input, simulated file systems, ASCII art, typewriter effects, fake OS feel.",
 
   music:
-    "You are a music/audio app expert. Create instruments, sequencers, and visualizers using the Web Audio API. " +
-    "Always initialize AudioContext inside a user-gesture handler (onClick) — never on mount. " +
+    SKILL_MUSIC_SYSTEM_PROMPT + "\n\n" +
+    "ADDITIONAL PATTERNS: " +
     "Build piano keyboards, drum pads, synthesizers, or waveform displays. " +
     "Pattern: create AudioContext once on first click, store in a ref; create oscillator/buffer nodes per note and connect to context.destination; disconnect and stop nodes after they play.",
 
   art:
-    "You are a generative art expert. Create visual art using canvas 2D API, CSS animations, or SVG. " +
-    "Mental model: think in layers — background gradient, mid-ground geometry, foreground particles. " +
-    "Use requestAnimationFrame for animation; store time as an accumulator and derive all motion from it (sin/cos waves, noise functions). " +
-    "Particle systems: initialize N particles with position, velocity, life; update in the loop; never push new particles inside the loop, recycle dead ones. " +
-    "Make it interactive — mouse position should influence at least one parameter (color, force, density). " +
-    "Expose palette, count, speed as constants. Avoid repetitive default circle-on-black — adapt the aesthetic to the concept.",
+    SKILL_ART_SYSTEM_PROMPT + "\n\n" +
+    "ADDITIONAL PATTERNS: " +
+    "Avoid repetitive default circle-on-black — adapt the aesthetic to the concept. " +
+    "Expose palette, count, speed as constants. Make it interactive — mouse position should influence at least one parameter (color, force, density).",
 };
 
 export const AGENT_GUIDELINES: Record<AppType, string> = {
   phone:    "Touch-first, vertical stacking, large tap targets (min 44px), bottom navigation, portrait layout",
-  desktop:  "Scene-graph component hierarchy, contextual layout (not generic dashboard), useMemo for heavy computation, responsive resize handlers",
+  desktop:  "Multi-panel layout (sidebar+main+detail), useMemo for derived lists, keyboard shortcuts, empty states, flex with min-h-0 for panel sizing",
   game:     "Constants block + loop(ts){update(dt);draw()} + start/playing/gameover states + WASD+arrows+touch + AABB/grid/circular collision + object pool + win/lose/restart/score",
-  terminal: "Monospace font, dark background (green-on-black or amber-on-black), command input, ASCII art",
-  music:    "Web Audio API with onClick triggers, instruments, sequencers, waveform visualizers — never start AudioContext on mount",
-  art:      "Canvas/SVG layers, requestAnimationFrame with time accumulator, particle recycling (no new in loop), mouse-reactive, exposed palette constants",
+  terminal: "Monospace font, dark background (green-on-black or amber-on-black), command history (ArrowUp), auto-scroll to bottom, re-focus input on container click",
+  music:    "AudioContext in onClick (never on mount), new OscillatorNode per note, gain envelope for smooth attack/release, pointer events for keyboard+touch",
+  art:      "Canvas layers + low-alpha fillRect for trails + requestAnimationFrame with time accumulator + particle recycling (no new in loop) + mouse-reactive + named palette constants",
 };
+
+/** Returns the full system prompt for a given app type, including all enriched patterns. */
+export function getAgentSkill(type: AppType): string {
+  return AGENT_SYSTEM_PROMPTS[type];
+}
