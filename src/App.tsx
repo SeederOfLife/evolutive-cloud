@@ -11,7 +11,7 @@ import { motion, AnimatePresence } from "motion/react";
 import {
   ChevronUp, X, Search, Zap, Play, Sparkles, Loader2,
   Settings, Activity, Trash2, LogOut, Globe, Cpu, ChevronDown, User,
-  MessageSquare, ArrowRight, GitFork
+  MessageSquare, ArrowRight, GitFork, Layers
 } from "lucide-react";
 import OpenAI from "openai";
 import {
@@ -19,7 +19,7 @@ import {
   doc, where, limit, getDocs
 } from "firebase/firestore";
 import { db } from "./lib/firebase";
-import { Suggestion, Advice, ProjectConfig, EvolutionVersion } from "./types";
+import { Suggestion, Advice, ProjectConfig, EvolutionVersion, GoalPlan } from "./types";
 import { AppSandbox } from "./components/AppSandbox";
 import { EvolutiveSeed, ModuleNode, Nebula, OrbitRing } from "./components/ThreeWorld";
 import { ScrollFeed } from "./components/ScrollFeed";
@@ -29,6 +29,8 @@ import { useAI } from "./hooks/useAI";
 import { useSuggestions } from "./hooks/useSuggestions";
 import { AGENT_SYSTEM_PROMPTS, AGENT_GUIDELINES, AppType } from "./services/agentSkills";
 import { SEED_APPS } from "./services/seedApps";
+import { decomposeGoal } from "./services/decomposer";
+import { PlanCard } from "./components/PlanCard";
 
 const MANIFEST_PROVIDERS = [
   { id: "google",    label: "Google Gemini", Icon: Globe,    model: "gemini-3-flash-preview" },
@@ -121,6 +123,7 @@ export default function App() {
   const [onboardingStep, setOnboardingStep] = useState(0);
   const [heroIndex, setHeroIndex] = useState(0);
   const [seedVotes, setSeedVotes] = useState<Record<string, number>>({});
+  const [pendingPlan, setPendingPlan] = useState<{ idea: string; plan: GoalPlan; onContinue: () => void } | null>(null);
 
   const userApiKey = useMemo(() => providerKeys[aiProvider] || "", [providerKeys, aiProvider]);
 
@@ -413,7 +416,7 @@ export default function App() {
     }
   };
 
-  const buildEvolution = async (suggestion: Suggestion) => {
+  const buildEvolution = async (suggestion: Suggestion, plan?: GoalPlan) => {
     if (isBuilding && isBuilding !== suggestion.id) return;
     try {
       setIsBuilding(suggestion.id);
@@ -432,6 +435,10 @@ export default function App() {
         ? "This is a high-energy creation — go complex and ambitious"
         : "Start simple but make it polished and complete";
 
+      const planContext = plan
+        ? `\nGOAL PLAN:\n- Core need: ${plan.coreNeed}\n- Target user: ${plan.targetUser}\n- Required features: ${plan.features.join(", ")}\n- Key interactions: ${plan.interactions.join(", ")}\n- Visual style: ${plan.visualStyle}\n- Success: ${plan.successCriteria}\n\nBuild this app following the plan above.\n`
+        : "";
+
       const prompt = `
 System: ${aiConfig.systemPrompt}
 
@@ -442,7 +449,7 @@ Energy: ${energyContext}
 Target: ${appType.toUpperCase()}
 
 Task: Create a complete React application for: "${suggestion.content}"
-${existingApps ? `\nOther apps already built (for context/inspiration, don't duplicate):\n${existingApps}\n` : ""}
+${existingApps ? `\nOther apps already built (for context/inspiration, don't duplicate):\n${existingApps}\n` : ""}${planContext}
 Type-specific guidance:
 - ${AGENT_GUIDELINES[appType]}
 
@@ -475,9 +482,11 @@ Critical rules:
 
       if (!generatedCode) throw new Error("No code returned.");
 
-      await updateDoc(doc(db, "suggestions", suggestion.id), { status: "built", built_code: generatedCode });
+      const updatePayload: any = { status: "built", built_code: generatedCode };
+      if (plan) updatePayload.plan = plan;
+      await updateDoc(doc(db, "suggestions", suggestion.id), updatePayload);
       consumeQuota(15);
-      setLaunchTarget({ ...suggestion, status: "built", built_code: generatedCode });
+      setLaunchTarget({ ...suggestion, status: "built", built_code: generatedCode, ...(plan ? { plan } : {}) });
     } catch (err: any) {
       console.error("Build failed:", err);
       setAiError(err.message);
@@ -512,6 +521,13 @@ Critical rules:
         content = refined.trim() || rawInput;
       } catch (_) {}
 
+      // Decompose goal in parallel with idea refinement
+      setManifestingStep("Planning...");
+      let plan: GoalPlan | undefined;
+      try {
+        plan = await decomposeGoal(content, newAppType, callUnifiedAI);
+      } catch (_) {}
+
       const insertData: any = {
         content,
         app_type: newAppType,
@@ -524,7 +540,17 @@ Critical rules:
       const docRef = await addDoc(collection(db, "suggestions"), insertData);
       const newSuggestion = { id: docRef.id, ...insertData } as Suggestion;
       consumeQuota(5);
-      await buildEvolution(newSuggestion);
+
+      // Show the plan card, then build once dismissed
+      setIsManifesting(false);
+      if (plan) {
+        await new Promise<void>(resolve => {
+          setPendingPlan({ idea: content, plan, onContinue: resolve });
+        });
+        setPendingPlan(null);
+      }
+
+      await buildEvolution(newSuggestion, plan);
     } catch (err: any) {
       console.error("Manifest error:", err);
       setAiError(err.message);
@@ -555,6 +581,17 @@ Critical rules:
               Skip
             </button>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Plan card overlay */}
+      <AnimatePresence>
+        {pendingPlan && (
+          <PlanCard
+            idea={pendingPlan.idea}
+            plan={pendingPlan.plan}
+            onDismiss={pendingPlan.onContinue}
+          />
         )}
       </AnimatePresence>
 
@@ -1908,6 +1945,7 @@ function LaunchModal({
   const [voted, setVoted] = useState(false);
   const [showVotePop, setShowVotePop] = useState(false);
   const [showChat, setShowChat] = useState(false);
+  const [showPlan, setShowPlan] = useState(false);
   const [chatInput, setChatInput] = useState("");
   const [messages, setMessages] = useState<{ role: "user" | "ai"; text: string }[]>([]);
   const desktopChatEndRef = useRef<HTMLDivElement>(null);
@@ -2078,6 +2116,19 @@ function LaunchModal({
           </AnimatePresence>
         </div>
 
+        {/* Plan toggle — only if plan exists */}
+        {suggestion.plan && (
+          <button
+            onClick={() => setShowPlan(p => !p)}
+            className={`flex w-8 h-8 rounded-lg items-center justify-center transition-all shrink-0 ${
+              showPlan ? "bg-indigo-500/20 text-indigo-400 border border-indigo-500/30" : "bg-gray-800 text-gray-400 hover:text-white"
+            }`}
+            title="View Goal Plan"
+          >
+            <Layers className="w-4 h-4" />
+          </button>
+        )}
+
         {/* Chat toggle — desktop only */}
         {onRefine && (
           <button
@@ -2091,6 +2142,37 @@ function LaunchModal({
           </button>
         )}
       </div>
+
+      {/* Expandable plan panel */}
+      <AnimatePresence>
+        {showPlan && suggestion.plan && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="flex-none overflow-hidden bg-gray-900/80 border-b border-indigo-500/15"
+          >
+            <div className="px-4 py-3">
+              <p className="text-[9px] font-black uppercase tracking-[4px] text-indigo-400 mb-2">Built from this plan</p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-1.5">
+                {suggestion.plan.coreNeed && (
+                  <div><span className="text-[8px] uppercase tracking-widest text-white/25 font-bold">Need · </span><span className="text-[10px] text-white/60">{suggestion.plan.coreNeed}</span></div>
+                )}
+                {suggestion.plan.targetUser && (
+                  <div><span className="text-[8px] uppercase tracking-widest text-white/25 font-bold">For · </span><span className="text-[10px] text-white/60">{suggestion.plan.targetUser}</span></div>
+                )}
+                {suggestion.plan.visualStyle && (
+                  <div><span className="text-[8px] uppercase tracking-widest text-white/25 font-bold">Style · </span><span className="text-[10px] text-white/60">{suggestion.plan.visualStyle}</span></div>
+                )}
+                {suggestion.plan.features.length > 0 && (
+                  <div className="col-span-2 sm:col-span-3"><span className="text-[8px] uppercase tracking-widest text-white/25 font-bold">Features · </span><span className="text-[10px] text-white/60">{suggestion.plan.features.join(" · ")}</span></div>
+                )}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Body */}
       <div className="flex-1 flex overflow-hidden">

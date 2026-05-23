@@ -1,4 +1,13 @@
 
+export interface GoalPlan {
+  coreNeed: string;
+  targetUser: string;
+  features: string[];
+  interactions: string[];
+  visualStyle: string;
+  successCriteria: string;
+}
+
 export interface EvolutionVersion {
   code: string;
   timestamp: string;
@@ -22,6 +31,7 @@ export interface Suggestion {
   is_deleted?: boolean;
   history?: EvolutionVersion[];
   chat_thread?: { role: 'user' | 'assistant' | 'system', content: string }[];
+  plan?: GoalPlan;
 }
 
 export interface AIConfig {
