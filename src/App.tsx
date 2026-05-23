@@ -2050,7 +2050,7 @@ function LaunchModal({
         {onFork && (
           <button
             onClick={onFork}
-            className="hidden sm:flex items-center gap-1.5 px-3 h-8 rounded-lg text-xs font-bold bg-gray-800 text-gray-400 hover:text-white transition-all shrink-0"
+            className="flex items-center gap-1.5 px-3 h-8 rounded-lg text-xs font-bold bg-gray-800 text-gray-400 hover:text-white transition-all shrink-0"
           >
             <GitFork className="w-3.5 h-3.5" />
             Fork
@@ -2106,7 +2106,7 @@ function LaunchModal({
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.8 }}
                 className="absolute z-10 pointer-events-none"
-                style={{ bottom: '88px', right: '16px' }}
+                style={{ bottom: '88px', left: '16px' }}
               >
                 {/* Mobile: circular FAB */}
                 <button
@@ -2185,7 +2185,7 @@ function LaunchModal({
             exit={{ y: "100%" }}
             transition={{ type: "spring", damping: 30, stiffness: 350 }}
             className="sm:hidden absolute bottom-0 left-0 right-0 z-[200] flex flex-col bg-gray-950 rounded-t-2xl border-t border-gray-800 shadow-2xl overflow-hidden"
-            style={{ height: "60%" }}
+            style={{ height: "70%" }}
           >
             {/* Drag handle */}
             <div className="flex justify-center pt-3 pb-1 shrink-0">
