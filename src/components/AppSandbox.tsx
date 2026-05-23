@@ -69,6 +69,15 @@ body{background:#050508;color:#fff;margin:0;min-height:100vh;display:flex;flex-d
     document.head.appendChild(s);
   }
   function loadChain(){
+    function runFM(){
+      ld('https://cdn.jsdelivr.net/npm/framer-motion@10.16.4/dist/framer-motion.js',function(){
+        window.motion=window.Motion&&window.Motion.motion;
+        window.AnimatePresence=window.Motion&&window.Motion.AnimatePresence;
+        ld('https://unpkg.com/@babel/standalone@7.23.0/babel.min.js',runApp);
+      },function(){
+        ld('https://unpkg.com/@babel/standalone@7.23.0/babel.min.js',runApp);
+      });
+    }
     ld('https://unpkg.com/react@18.2.0/umd/react.development.js',function(){
       window.LucideReact={};
       ['Activity','AlertCircle','ArrowLeft','ArrowRight','Check','ChevronDown','ChevronUp','ChevronLeft','ChevronRight','Circle','Clock','Code','Copy','Database','Delete','Edit','Eye','File','Filter','Globe','Heart','Home','Info','Key','Layers','Lock','LogOut','Menu','MessageCircle','Moon','Music','Play','Plus','Power','RefreshCw','Search','Settings','Share','Shield','Star','Sun','Trash','Trash2','Upload','User','Users','X','Zap','Sparkles','Terminal','Monitor','Phone','Cpu','Cloud','Wifi','Bell','Camera','Download','Send','Save','Loader2'].forEach(function(name){
@@ -76,17 +85,7 @@ body{background:#050508;color:#fff;margin:0;min-height:100vh;display:flex;flex-d
         window.LucideReact[name]=c;window[name]=c;
       });
       ld('https://unpkg.com/react-dom@18.2.0/umd/react-dom.development.js',function(){
-        ld('https://cdn.jsdelivr.net/npm/framer-motion@10.16.4/dist/framer-motion.js',function(){
-          window.motion=window.Motion&&window.Motion.motion;
-          window.AnimatePresence=window.Motion&&window.Motion.AnimatePresence;
-          ld('https://unpkg.com/@babel/standalone@7.23.0/babel.min.js',function(){
-            ld('https://unpkg.com/recharts@2.8.0/umd/Recharts.js',runApp,runApp);
-          });
-        },function(){
-          ld('https://unpkg.com/@babel/standalone@7.23.0/babel.min.js',function(){
-            ld('https://unpkg.com/recharts@2.8.0/umd/Recharts.js',runApp,runApp);
-          });
-        });
+        ld('https://unpkg.com/recharts@2.8.0/umd/Recharts.js',runFM,runFM);
       });
     });
   }
@@ -155,7 +154,7 @@ body{background:#050508;color:#fff;margin:0;min-height:100vh;display:flex;flex-d
       srcDoc={srcDoc}
       className={`w-full h-full border-none bg-black ${className}`}
       title="app-sandbox"
-      sandbox="allow-scripts allow-modals allow-forms allow-popups"
+      sandbox="allow-scripts allow-same-origin"
     />
   );
 }

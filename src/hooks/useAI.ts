@@ -9,7 +9,7 @@ const DEFAULT_CONFIG: AIConfig & { systemPrompt: string } = {
   topK: 40,
   maxTokens: 4096,
   safetyThreshold: 'BLOCK_NONE',
-  systemPrompt: "You are the Evolutionary Reactive Engine. Generate professional-grade, high-complexity interactive applications. Deep shadows, modern UI, responsive grids."
+  systemPrompt: "You are the Evolutionary Reactive Engine. Generate professional-grade, high-complexity interactive applications. Deep shadows, modern UI, responsive grids. For audio/sound features, use the Web Audio API with user gesture triggers (onClick). Always initialize AudioContext inside a click handler, never on mount."
 };
 
 export function useAI() {
