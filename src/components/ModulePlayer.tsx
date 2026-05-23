@@ -19,6 +19,21 @@ import {
 } from "lucide-react";
 import { Suggestion } from "../types";
 
+function findAppFunctionEnd(code: string): number {
+  const appMatch = code.match(/(?:const|function)\s+App\s*[=(]/);
+  if (!appMatch || appMatch.index === undefined) return code.length;
+  let i = code.indexOf('{', appMatch.index);
+  if (i < 0) return code.length;
+  let depth = 1;
+  i++;
+  while (i < code.length && depth > 0) {
+    if (code[i] === '{') depth++;
+    else if (code[i] === '}') depth--;
+    i++;
+  }
+  return i;
+}
+
 export function ModulePlayer({
   suggestion,
   onClose,
@@ -104,7 +119,9 @@ export function ModulePlayer({
   const srcDoc = useMemo(() => {
     if (!cleanCode) return `<!DOCTYPE html><html><body style="background:#050508;display:flex;align-items:center;justify-content:center;height:100vh;color:rgba(255,255,255,.2);font:900 11px/1 sans-serif;text-transform:uppercase;letter-spacing:10px">Awaiting Manifestation</body></html>`;
 
-    const encoded = encodeURIComponent(cleanCode);
+    const insertPoint = findAppFunctionEnd(cleanCode);
+    const codeWithRender = cleanCode.slice(0, insertPoint) + '\nReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));' + cleanCode.slice(insertPoint);
+    const encoded = encodeURIComponent(codeWithRender);
 
     return `<!DOCTYPE html>
 <html>
@@ -208,8 +225,7 @@ body{background:#050508;color:#fff;margin:0;min-height:100vh;display:flex;flex-d
         return map[m]||window[m]||{};
       };
 
-      var appCode=decodeURIComponent("${encoded}");
-      var mountCode=appCode+'\\nReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));';
+      var mountCode=decodeURIComponent("${encoded}");
 
       var out;
       try{

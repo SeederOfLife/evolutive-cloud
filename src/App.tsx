@@ -519,14 +519,18 @@ Critical rules:
           `Refine this app idea into a clear one-sentence description. Be technical and direct.\nOriginal: "${rawInput}"\nRefined:`
         );
         content = refined.trim() || rawInput;
-      } catch (_) {}
+      } catch (err: any) {
+        if (err?.message?.includes('All AI providers exhausted')) throw err;
+      }
 
-      // Decompose goal in parallel with idea refinement
+      // Decompose goal — abort immediately if all providers are exhausted
       setManifestingStep("Planning...");
       let plan: GoalPlan | undefined;
       try {
         plan = await decomposeGoal(content, newAppType, callUnifiedAI);
-      } catch (_) {}
+      } catch (err: any) {
+        if (err?.message?.includes('All AI providers exhausted')) throw err;
+      }
 
       const insertData: any = {
         content,

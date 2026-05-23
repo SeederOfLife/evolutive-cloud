@@ -29,6 +29,21 @@ function sanitizeCode(code: string): string {
     .trim();
 }
 
+function findAppFunctionEnd(code: string): number {
+  const appMatch = code.match(/(?:const|function)\s+App\s*[=(]/);
+  if (!appMatch || appMatch.index === undefined) return code.length;
+  let i = code.indexOf('{', appMatch.index);
+  if (i < 0) return code.length;
+  let depth = 1;
+  i++;
+  while (i < code.length && depth > 0) {
+    if (code[i] === '{') depth++;
+    else if (code[i] === '}') depth--;
+    i++;
+  }
+  return i;
+}
+
 export function AppSandbox({ code, className = "" }: AppSandboxProps) {
   const cleanCode = useMemo(() => sanitizeCode(code || ""), [code]);
 
@@ -37,12 +52,8 @@ export function AppSandbox({ code, className = "" }: AppSandboxProps) {
       return `<!DOCTYPE html><html><body style="background:#050508;display:flex;align-items:center;justify-content:center;height:100vh;color:rgba(255,255,255,.15);font:900 10px/1 sans-serif;text-transform:uppercase;letter-spacing:8px">Awaiting Build</body></html>`;
     }
 
-    // Inject render call after the App function's last closing brace.
-    // Appending to raw end risks landing inside the function body if AI adds trailing content.
-    const lastBrace = cleanCode.lastIndexOf('}');
-    const codeWithRender = lastBrace >= 0
-      ? cleanCode.slice(0, lastBrace + 1) + '\nReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));'
-      : cleanCode + '\nReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));';
+    const insertPoint = findAppFunctionEnd(cleanCode);
+    const codeWithRender = cleanCode.slice(0, insertPoint) + '\nReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));' + cleanCode.slice(insertPoint);
     const encoded = encodeURIComponent(codeWithRender);
 
     return `<!DOCTYPE html>

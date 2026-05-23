@@ -43,7 +43,8 @@ Keep it concise. Features max 5 items. Interactions max 4 items.`;
     const cleaned = response.replace(/```json|```/g, "").trim();
     const parsed = JSON.parse(cleaned);
     return { ...FALLBACK, ...parsed };
-  } catch {
+  } catch (err: any) {
+    if (err?.message?.includes('All AI providers exhausted')) throw err;
     return { ...FALLBACK, coreNeed: idea };
   }
 }
