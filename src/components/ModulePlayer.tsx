@@ -135,21 +135,32 @@ body{background:#050508;color:#fff;margin:0;min-height:100vh;display:flex;flex-d
     try{window.parent&&window.parent.postMessage({type:'EVO_LOG',content:Array.from(arguments).map(function(a){return typeof a==='object'?JSON.stringify(a):String(a);}).join(' ')},'*');}catch(x){}
   };
 
-  var SCRIPTS=[
-    'https://unpkg.com/react@18.2.0/umd/react.development.js',
-    'https://unpkg.com/react-dom@18.2.0/umd/react-dom.development.js',
-    'https://unpkg.com/@babel/standalone@7.23.0/babel.min.js',
-    'https://unpkg.com/lucide-react@0.263.0/dist/umd/lucide-react.js',
-    'https://unpkg.com/recharts@2.8.0/umd/Recharts.js'
-  ];
-  var idx=0;
-  function loadNext(){
-    if(idx>=SCRIPTS.length){runApp();return;}
+  function ld(src,cb,eCb){
     var s=document.createElement('script');
-    s.src=SCRIPTS[idx++];s.crossOrigin='anonymous';
-    s.onload=loadNext;
-    s.onerror=function(){showErr('CDN failed: '+SCRIPTS[idx-1]);};
+    s.src=src;s.crossOrigin='anonymous';
+    s.onload=cb;
+    s.onerror=eCb||function(){showErr('CDN failed: '+src);};
     document.head.appendChild(s);
+  }
+  function loadChain(){
+    ld('https://unpkg.com/react@18.2.0/umd/react.development.js',function(){
+      ld('https://unpkg.com/react-dom@18.2.0/umd/react-dom.development.js',function(){
+        ld('https://unpkg.com/lucide-react@0.263.0/dist/umd/lucide-react.js',function(){
+          if(window.LucideReact)Object.assign(window,window.LucideReact);
+          ld('https://cdn.jsdelivr.net/npm/framer-motion@10.16.4/dist/framer-motion.js',function(){
+            window.motion=window.Motion&&window.Motion.motion;
+            window.AnimatePresence=window.Motion&&window.Motion.AnimatePresence;
+            ld('https://unpkg.com/@babel/standalone@7.23.0/babel.min.js',function(){
+              ld('https://unpkg.com/recharts@2.8.0/umd/Recharts.js',runApp,runApp);
+            });
+          },function(){
+            ld('https://unpkg.com/@babel/standalone@7.23.0/babel.min.js',function(){
+              ld('https://unpkg.com/recharts@2.8.0/umd/Recharts.js',runApp,runApp);
+            });
+          });
+        });
+      });
+    });
   }
 
   function runApp(){
@@ -169,13 +180,16 @@ body{background:#050508;color:#fff;margin:0;min-height:100vh;display:flex;flex-d
       window.h=R.createElement;
 
       var mkEl=function(tag){return function(p){p=p||{};return R.createElement(tag,{className:p.className,style:p.style,id:p.id,onClick:p.onClick,onChange:p.onChange},p.children);};};
-      var motionObj={};
-      ['div','span','p','h1','h2','h3','h4','h5','h6','ul','ol','li','a','button','img',
-       'input','textarea','section','article','header','footer','nav','main','aside'].forEach(function(t){motionObj[t]=mkEl(t);});
-      try{window.motion=new Proxy(motionObj,{get:function(o,k){return o[k]||mkEl(String(k));}});}
-      catch(e){window.motion=motionObj;}
-      window.AnimatePresence=function(p){return p&&p.children||null;};
-      var FM={motion:window.motion,AnimatePresence:window.AnimatePresence,LayoutGroup:R.Fragment};
+      if(!window.motion){
+        var motionObj={};
+        ['div','span','p','h1','h2','h3','h4','h5','h6','ul','ol','li','a','button','img',
+         'input','textarea','section','article','header','footer','nav','main','aside'].forEach(function(t){motionObj[t]=mkEl(t);});
+        try{window.motion=new Proxy(motionObj,{get:function(o,k){return o[k]||mkEl(String(k));}});}
+        catch(e){window.motion=motionObj;}
+      }
+      if(!window.AnimatePresence)window.AnimatePresence=function(p){return p&&p.children||null;};
+      var FM=window.Motion||{motion:window.motion,AnimatePresence:window.AnimatePresence,LayoutGroup:R.Fragment};
+      FM.LayoutGroup=FM.LayoutGroup||R.Fragment;
       window.FramerMotion=FM;
       window.require=function(m){
         var map={react:R,'react-dom':RD,'react-dom/client':RD,'lucide-react':IC,recharts:RC,'framer-motion':FM,'motion/react':FM};
@@ -204,7 +218,7 @@ body{background:#050508;color:#fff;margin:0;min-height:100vh;display:flex;flex-d
     }catch(e){showErr(e.message,e.stack);}
   }
 
-  loadNext();
+  loadChain();
 })();
 <\/script>
 </body>
