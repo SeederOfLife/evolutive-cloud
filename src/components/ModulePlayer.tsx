@@ -144,19 +144,21 @@ body{background:#050508;color:#fff;margin:0;min-height:100vh;display:flex;flex-d
   }
   function loadChain(){
     ld('https://unpkg.com/react@18.2.0/umd/react.development.js',function(){
+      window.LucideReact={};
+      ['Activity','AlertCircle','ArrowLeft','ArrowRight','Check','ChevronDown','ChevronUp','ChevronLeft','ChevronRight','Circle','Clock','Code','Copy','Database','Delete','Edit','Eye','File','Filter','Globe','Heart','Home','Info','Key','Layers','Lock','LogOut','Menu','MessageCircle','Moon','Music','Play','Plus','Power','RefreshCw','Search','Settings','Share','Shield','Star','Sun','Trash','Trash2','Upload','User','Users','X','Zap','Sparkles','Terminal','Monitor','Phone','Cpu','Cloud','Wifi','Bell','Camera','Download','Send','Save','Loader2'].forEach(function(name){
+        var c=function(p){p=p||{};return React.createElement('svg',{width:p.size||16,height:p.size||16,viewBox:'0 0 24 24',fill:'none',stroke:p.color||'currentColor',strokeWidth:2,className:p.className||''});};
+        window.LucideReact[name]=c;window[name]=c;
+      });
       ld('https://unpkg.com/react-dom@18.2.0/umd/react-dom.development.js',function(){
-        ld('https://unpkg.com/lucide-react@0.263.0/dist/umd/lucide-react.js',function(){
-          if(window.LucideReact)Object.assign(window,window.LucideReact);
-          ld('https://cdn.jsdelivr.net/npm/framer-motion@10.16.4/dist/framer-motion.js',function(){
-            window.motion=window.Motion&&window.Motion.motion;
-            window.AnimatePresence=window.Motion&&window.Motion.AnimatePresence;
-            ld('https://unpkg.com/@babel/standalone@7.23.0/babel.min.js',function(){
-              ld('https://unpkg.com/recharts@2.8.0/umd/Recharts.js',runApp,runApp);
-            });
-          },function(){
-            ld('https://unpkg.com/@babel/standalone@7.23.0/babel.min.js',function(){
-              ld('https://unpkg.com/recharts@2.8.0/umd/Recharts.js',runApp,runApp);
-            });
+        ld('https://cdn.jsdelivr.net/npm/framer-motion@10.16.4/dist/framer-motion.js',function(){
+          window.motion=window.Motion&&window.Motion.motion;
+          window.AnimatePresence=window.Motion&&window.Motion.AnimatePresence;
+          ld('https://unpkg.com/@babel/standalone@7.23.0/babel.min.js',function(){
+            ld('https://unpkg.com/recharts@2.8.0/umd/Recharts.js',runApp,runApp);
+          });
+        },function(){
+          ld('https://unpkg.com/@babel/standalone@7.23.0/babel.min.js',function(){
+            ld('https://unpkg.com/recharts@2.8.0/umd/Recharts.js',runApp,runApp);
           });
         });
       });
