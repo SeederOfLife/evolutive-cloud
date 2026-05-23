@@ -11,7 +11,7 @@ import { motion, AnimatePresence } from "motion/react";
 import {
   ChevronUp, X, Search, Zap, Play, Sparkles, Loader2,
   Settings, Activity, Trash2, LogOut, Globe, Cpu, ChevronDown, User,
-  MessageSquare, ArrowRight
+  MessageSquare, ArrowRight, GitFork
 } from "lucide-react";
 import OpenAI from "openai";
 import {
@@ -67,6 +67,7 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [isBuilding, setIsBuilding] = useState<string | null>(null);
   const [launchTarget, setLaunchTarget] = useState<Suggestion | null>(null);
+  const [forkTarget, setForkTarget] = useState<Suggestion | null>(null);
   const [isManifesting, setIsManifesting] = useState(false);
   const [manifestingStep, setManifestingStep] = useState("");
   const [isTestingAI, setIsTestingAI] = useState(false);
@@ -318,6 +319,29 @@ export default function App() {
       alert(err.message || "Access Denied.");
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleForkConfirm = async (title: string) => {
+    if (!forkTarget) return;
+    try {
+      const newDoc = {
+        content: title,
+        app_type: forkTarget.app_type,
+        status: "built",
+        votes: 0,
+        energy: forkTarget.energy || 0,
+        user_id: user?.uid || null,
+        created_at: new Date().toISOString(),
+        built_code: forkTarget.built_code || "",
+        parent_id: forkTarget.id,
+      };
+      const docRef = await addDoc(collection(db, "suggestions"), newDoc);
+      const fork = { id: docRef.id, ...newDoc } as Suggestion;
+      setForkTarget(null);
+      setLaunchTarget(fork);
+    } catch (err: any) {
+      console.error("Fork failed:", err);
     }
   };
 
@@ -640,6 +664,7 @@ Critical rules:
             isLoading={isLoading}
             onBuild={buildEvolution}
             onLaunch={(s: Suggestion) => setLaunchTarget(s)}
+            onFork={(s: Suggestion) => setForkTarget(s)}
             onDelete={handleDeleteSuggestion}
             onVote={(id: string, votes: number) => voteSuggestion(id, votes)}
           />
@@ -860,6 +885,7 @@ Critical rules:
             suggestion={launchTarget}
             onClose={() => setLaunchTarget(null)}
             onVote={(id, votes) => voteSuggestion(id, votes)}
+            onFork={() => { setForkTarget(launchTarget); setLaunchTarget(null); }}
             onRefine={async (message: string, currentCode: string) => {
               const isFix = message.startsWith("Fix this error:");
               const systemPrompt = isFix
@@ -889,7 +915,76 @@ Critical rules:
           />
         )}
       </AnimatePresence>
+
+      {/* ── FORK MODAL ──────────────────────────────────────────────────────── */}
+      <AnimatePresence>
+        {forkTarget && (
+          <ForkModal
+            source={forkTarget}
+            onConfirm={handleForkConfirm}
+            onCancel={() => setForkTarget(null)}
+          />
+        )}
+      </AnimatePresence>
     </div>
+  );
+}
+
+// ── FORK MODAL ────────────────────────────────────────────────────────────────
+
+function ForkModal({
+  source,
+  onConfirm,
+  onCancel,
+}: {
+  source: Suggestion;
+  onConfirm: (title: string) => void;
+  onCancel: () => void;
+}) {
+  const [title, setTitle] = useState(`Fork of: ${source.content}`);
+  return (
+    <motion.div
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+      onClick={onCancel}
+    >
+      <motion.div
+        initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 40, opacity: 0 }}
+        transition={{ type: "spring", damping: 28, stiffness: 320 }}
+        className="w-full max-w-md bg-gray-900 border border-gray-700 rounded-2xl p-6 space-y-4"
+        onClick={e => e.stopPropagation()}
+      >
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <GitFork className="w-4 h-4 text-indigo-400" />
+            <h3 className="text-white font-bold text-base">Fork App</h3>
+          </div>
+          <p className="text-gray-400 text-xs">Creates an independent copy you can modify freely.</p>
+          <p className="text-indigo-500/60 text-[10px] font-mono mt-1">source #{source.id.substring(0, 8)}</p>
+        </div>
+        <input
+          autoFocus
+          value={title}
+          onChange={e => setTitle(e.target.value)}
+          onKeyDown={e => { if (e.key === "Enter" && title.trim()) onConfirm(title.trim()); if (e.key === "Escape") onCancel(); }}
+          className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white text-sm focus:outline-none focus:border-indigo-500 transition-colors"
+          placeholder="Fork title..."
+        />
+        <div className="flex gap-2">
+          <button onClick={onCancel} className="flex-1 py-2.5 bg-gray-800 hover:bg-gray-700 rounded-lg text-gray-400 text-sm transition-all">
+            Cancel
+          </button>
+          <button
+            onClick={() => title.trim() && onConfirm(title.trim())}
+            disabled={!title.trim()}
+            className="flex-1 py-2.5 bg-indigo-500 hover:bg-indigo-600 disabled:opacity-40 rounded-lg text-white text-sm font-semibold transition-all flex items-center justify-center gap-2"
+          >
+            <GitFork className="w-3.5 h-3.5" />
+            Fork & Open
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
   );
 }
 
@@ -908,13 +1003,14 @@ interface HubViewProps {
   isLoading: boolean;
   onBuild: (s: Suggestion) => void;
   onLaunch: (s: Suggestion) => void;
+  onFork: (s: Suggestion) => void;
   onDelete: (id: string) => void;
   onVote: (id: string, votes: number) => void;
 }
 
 function HubView({
   suggestions, searchQuery, setSearchQuery, filterType, setFilterType,
-  user, isCreator, isBuilding, isRefining, isLoading, onBuild, onLaunch, onDelete, onVote,
+  user, isCreator, isBuilding, isRefining, isLoading, onBuild, onLaunch, onFork, onDelete, onVote,
 }: HubViewProps) {
   return (
     <div className="h-full flex flex-col bg-gray-950">
@@ -974,6 +1070,9 @@ function HubView({
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">
                     <p className="text-sm text-white font-medium leading-snug">{s.content}</p>
+                    {s.parent_id && (
+                      <p className="text-[10px] text-indigo-400/60 font-mono mt-0.5">forked from #{s.parent_id.substring(0, 8)}</p>
+                    )}
                     <div className="flex items-center gap-2 mt-1.5">
                       <span className="px-2 py-0.5 bg-gray-800 rounded text-[10px] text-gray-400">{s.app_type || "desktop"}</span>
                       <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${isBuilt ? "bg-indigo-500/20 text-indigo-400" : "bg-gray-800 text-gray-400"}`}>{s.status}</span>
@@ -997,6 +1096,11 @@ function HubView({
                       Build
                     </button>
                   )}
+                  {isBuilt && (
+                    <button onClick={() => onFork(s)} className="flex items-center justify-center gap-1.5 px-3 py-3 bg-gray-800 hover:bg-gray-700 rounded-xl text-sm text-gray-400 hover:text-white transition-all min-h-[44px]" title="Fork this app">
+                      <GitFork className="w-4 h-4" />
+                    </button>
+                  )}
                   <button onClick={() => onVote(s.id, s.votes || 0)} className="flex items-center justify-center gap-1.5 px-4 py-3 bg-gray-800 hover:bg-gray-700 rounded-xl text-sm text-gray-400 hover:text-white transition-all min-h-[44px]">
                     <ChevronUp className="w-4 h-4" />
                     <span className="font-medium">{s.votes || 0}</span>
@@ -1008,7 +1112,12 @@ function HubView({
               <div className="hidden sm:grid grid-cols-[1fr_72px_80px_180px] gap-3 items-center px-4 py-3">
                 <div className="min-w-0">
                   <p className="text-sm text-white font-medium truncate">{s.content}</p>
-                  <p className="text-xs text-gray-600 font-mono">#{s.id.substring(0, 8)}</p>
+                  <p className="text-xs text-gray-600 font-mono">
+                    #{s.id.substring(0, 8)}
+                    {s.parent_id && (
+                      <span className="ml-2 text-indigo-400/60">forked from #{s.parent_id.substring(0, 8)}</span>
+                    )}
+                  </p>
                 </div>
                 <div className="flex justify-center">
                   <span className="px-2 py-1 bg-gray-800 rounded text-xs text-gray-400">{s.app_type || "desktop"}</span>
@@ -1026,6 +1135,12 @@ function HubView({
                     <button onClick={() => onBuild(s)} disabled={!!isBuilding || !!isRefining} className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed rounded text-xs font-medium text-white transition-all">
                       {isBuilding === s.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
                       Build
+                    </button>
+                  )}
+                  {isBuilt && (
+                    <button onClick={() => onFork(s)} className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-800 hover:bg-gray-700 rounded text-xs font-medium text-gray-400 hover:text-white transition-all" title="Fork this app">
+                      <GitFork className="w-3 h-3" />
+                      Fork
                     </button>
                   )}
                   <button onClick={() => onVote(s.id, s.votes || 0)} className="flex items-center gap-1 px-2 py-1.5 bg-gray-800 hover:bg-gray-700 rounded text-xs text-gray-400 hover:text-white transition-all">
@@ -1472,11 +1587,13 @@ function LaunchModal({
   suggestion,
   onClose,
   onVote,
+  onFork,
   onRefine,
 }: {
   suggestion: Suggestion;
   onClose: () => void;
   onVote: (id: string, votes: number) => void;
+  onFork?: () => void;
   onRefine?: (message: string, code: string) => Promise<string>;
 }) {
   const [code, setCode] = useState(suggestion.built_code || "");
@@ -1557,7 +1674,23 @@ function LaunchModal({
           <X className="w-4 h-4" />
         </button>
 
-        <span className="flex-1 text-sm font-semibold text-white truncate min-w-0">{title}</span>
+        <span className="flex-1 text-sm font-semibold text-white truncate min-w-0">
+          {title}
+          {suggestion.parent_id && (
+            <span className="ml-2 text-[10px] text-indigo-400/60 font-mono font-normal">forked from #{suggestion.parent_id.substring(0, 8)}</span>
+          )}
+        </span>
+
+        {onFork && (
+          <button
+            onClick={onFork}
+            className="flex items-center gap-1.5 px-3 h-8 rounded-lg text-xs font-bold bg-gray-800 text-gray-400 hover:text-white transition-all shrink-0"
+            title="Fork this app"
+          >
+            <GitFork className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Fork</span>
+          </button>
+        )}
 
         <div className="relative shrink-0">
           <motion.button whileTap={{ scale: 0.85 }} onClick={handleVote}
