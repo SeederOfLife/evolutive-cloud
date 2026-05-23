@@ -11,8 +11,11 @@ interface AppSandboxProps {
 
 function sanitizeCode(code: string): string {
   return code
-    // Remove all import statements (only lines that start with the word import)
-    .replace(/^import\b.*$/gm, '')
+    // Remove only real ES module import statements:
+    // must have 'import' as first non-whitespace word AND match the ES module import shape.
+    // Avoids false positives on const declarations, JSX, or template literal content
+    // that happens to contain the word "import".
+    .replace(/^\s*import\b[^;]*?(?:from\s+['"][^'"]+['"])?\s*;?\s*$/gm, '')
     // export default function/class → rename to App
     .replace(/^export\s+default\s+function\s*\w*/gm, 'function App')
     .replace(/^export\s+default\s+class\s*\w*/gm, 'class App')
