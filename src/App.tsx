@@ -615,6 +615,7 @@ Critical rules:
             questions={pendingRefiner.questions}
             onBuild={pendingRefiner.onBuild}
             onSkip={pendingRefiner.onSkip}
+            callAI={callUnifiedAI}
           />
         )}
       </AnimatePresence>

@@ -46,6 +46,38 @@ Questions should be specific to the idea, not generic. For "snake game" ask abou
   }
 }
 
+export async function generateMoreSuggestions(
+  question: string,
+  existingSuggestions: string[],
+  idea: string,
+  callAI: (prompt: string) => Promise<string>
+): Promise<string[]> {
+  const prompt = `For the app idea "${idea}" and question "${question}", we already have these suggestions: ${existingSuggestions.join(", ")}. Generate 3 MORE different suggestions, not duplicates. Return ONLY a JSON array of 3 strings, no markdown.`;
+  const response = await callAI(prompt);
+  try {
+    return JSON.parse(response.replace(/```json|```/g, "").trim());
+  } catch {
+    return [];
+  }
+}
+
+export async function generateMoreQuestions(
+  idea: string,
+  type: string,
+  existingQuestions: RefinementQuestion[],
+  callAI: (prompt: string) => Promise<string>
+): Promise<RefinementQuestion[]> {
+  const asked = existingQuestions.map(q => q.question).join(" | ");
+  const prompt = `For the app "${idea}" (type: ${type}), we already asked: ${asked}. Generate 2-3 MORE questions covering different aspects like visual style, sound, special features, accessibility, or edge cases. Return ONLY valid JSON: {"questions":[{"priority":"High Priority","question":"...","why":"...","suggestions":["...","...","..."]}]}`;
+  const response = await callAI(prompt);
+  try {
+    const parsed = JSON.parse(response.replace(/```json|```/g, "").trim());
+    return parsed.questions || [];
+  } catch {
+    return [];
+  }
+}
+
 export async function buildFinalPrompt(
   idea: string,
   answers: Record<number, string>,
