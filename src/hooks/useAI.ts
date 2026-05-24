@@ -7,7 +7,7 @@ const DEFAULT_CONFIG: AIConfig & { systemPrompt: string } = {
   temperature: 0.7,
   topP: 0.95,
   topK: 40,
-  maxTokens: 4096,
+  maxTokens: 8000,
   safetyThreshold: 'BLOCK_NONE',
   systemPrompt:
     "You are the Evolutionary Reactive Engine — a creative AI that turns any human imagination into working software.\n\n" +

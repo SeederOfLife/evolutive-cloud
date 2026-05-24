@@ -470,6 +470,7 @@ Critical rules:
 - NO import statements at all
 - ALL styling via Tailwind classes or inline styles
 - Return ONLY raw code, no markdown fences
+- CRITICAL: Always complete the entire function. Never truncate. The last line MUST be the closing brace of the App function. If the response is getting long, simplify features rather than cutting code mid-statement.
       `.trim();
 
       if (apiQuota < 20) {
@@ -1132,11 +1133,14 @@ Critical rules:
             onVote={handleVote}
             onFork={() => { setForkTarget(launchTarget); setLaunchTarget(null); }}
             onRefine={async (message: string, currentCode: string) => {
-              const isFix = message.startsWith("Fix this error:");
+              const isTruncated = message.includes("incomplete") || message.includes("truncated");
+              const isFix = message.startsWith("Fix this error:") || isTruncated;
               const systemPrompt = isFix
                 ? "You are fixing broken React code. Return ONLY the corrected function body. No imports. No TypeScript. No markdown. Just working JSX."
                 : aiConfig.systemPrompt;
-              const taskInstr = isFix
+              const taskInstr = isTruncated
+                ? `The previous code was truncated. Generate a COMPLETE working version that fits in your response. Simplify if needed - working simple beats broken complex.\n\nReturn ONLY the complete App function, no imports, no markdown.`
+                : isFix
                 ? `${message}\n\nReturn ONLY valid JSX with no unterminated strings, no TypeScript syntax, no import statements. The function must be named App.`
                 : `Apply this change: "${message}"\n\nReturn ONLY the complete updated React component — no markdown, no imports, no TypeScript type annotations. The function must be named App and must render valid JSX.`;
               const prompt = `${systemPrompt}\n\nCurrent code:\n${currentCode}\n\n${taskInstr}`.trim();

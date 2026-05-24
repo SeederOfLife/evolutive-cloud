@@ -19,6 +19,17 @@ import {
 } from "lucide-react";
 import { Suggestion } from "../types";
 
+function isCodeBalanced(code: string): boolean {
+  const stack: string[] = [];
+  const pairs: Record<string, string> = { '{': '}', '(': ')', '[': ']' };
+  const closing = new Set([')', '}', ']']);
+  for (const ch of code) {
+    if (pairs[ch]) stack.push(pairs[ch]);
+    else if (closing.has(ch) && stack.pop() !== ch) return false;
+  }
+  return stack.length === 0;
+}
+
 function findAppFunctionEnd(code: string): number {
   const appMatch = code.match(/(?:const|function)\s+App\s*[=(]/);
   if (!appMatch || appMatch.index === undefined) return code.length;
@@ -118,6 +129,11 @@ export function ModulePlayer({
 
   const srcDoc = useMemo(() => {
     if (!cleanCode) return `<!DOCTYPE html><html><body style="background:#050508;display:flex;align-items:center;justify-content:center;height:100vh;color:rgba(255,255,255,.2);font:900 11px/1 sans-serif;text-transform:uppercase;letter-spacing:10px">Awaiting Manifestation</body></html>`;
+
+    if (!isCodeBalanced(cleanCode)) {
+      const msg = "Generated code was incomplete (likely truncated by rate limit). Click Fix with AI to retry.";
+      return `<!DOCTYPE html><html><body style="background:#050508;display:flex;align-items:center;justify-content:center;height:100vh;padding:24px;box-sizing:border-box"><div style="max-width:360px;text-align:center;color:rgba(239,68,68,.9);font:700 13px/1.6 system-ui">${msg}</div></body></html>`;
+    }
 
     const insertPoint = findAppFunctionEnd(cleanCode);
     const codeWithRender = cleanCode.slice(0, insertPoint) + '\nReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));' + cleanCode.slice(insertPoint);
