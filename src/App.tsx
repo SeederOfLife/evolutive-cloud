@@ -19,7 +19,7 @@ import {
   doc, where, limit, getDocs
 } from "firebase/firestore";
 import { db } from "./lib/firebase";
-import { Suggestion, Advice, ProjectConfig, EvolutionVersion, GoalPlan } from "./types";
+import { Suggestion, Advice, ProjectConfig, EvolutionVersion } from "./types";
 import { AppSandbox } from "./components/AppSandbox";
 import { EvolutiveSeed, ModuleNode, Nebula, OrbitRing } from "./components/ThreeWorld";
 import { ScrollFeed } from "./components/ScrollFeed";
@@ -29,8 +29,8 @@ import { useAI } from "./hooks/useAI";
 import { useSuggestions } from "./hooks/useSuggestions";
 import { AGENT_SYSTEM_PROMPTS, AGENT_GUIDELINES, AppType } from "./services/agentSkills";
 import { SEED_APPS } from "./services/seedApps";
-import { decomposeGoal } from "./services/decomposer";
-import { PlanCard } from "./components/PlanCard";
+import { generateRefinementQuestions, buildFinalPrompt, RefinementQuestion } from "./services/refiner";
+import { PromptRefiner } from "./components/PromptRefiner";
 
 const MANIFEST_PROVIDERS = [
   { id: "google",    label: "Google Gemini", Icon: Globe,    model: "gemini-3-flash-preview" },
@@ -123,7 +123,13 @@ export default function App() {
   const [onboardingStep, setOnboardingStep] = useState(0);
   const [heroIndex, setHeroIndex] = useState(0);
   const [seedVotes, setSeedVotes] = useState<Record<string, number>>({});
-  const [pendingPlan, setPendingPlan] = useState<{ idea: string; plan: GoalPlan; onContinue: (editedTitle?: string) => void } | null>(null);
+  const [pendingRefiner, setPendingRefiner] = useState<{
+    idea: string;
+    title: string;
+    questions: RefinementQuestion[];
+    onBuild: (answers: Record<number, string>, editedTitle: string) => void;
+    onSkip: (editedTitle: string) => void;
+  } | null>(null);
 
   const userApiKey = useMemo(() => providerKeys[aiProvider] || "", [providerKeys, aiProvider]);
 
@@ -416,7 +422,7 @@ export default function App() {
     }
   };
 
-  const buildEvolution = async (suggestion: Suggestion, plan?: GoalPlan) => {
+  const buildEvolution = async (suggestion: Suggestion, _plan?: unknown, overridePrompt?: string) => {
     if (isBuilding && isBuilding !== suggestion.id) return;
     try {
       setIsBuilding(suggestion.id);
@@ -435,9 +441,7 @@ export default function App() {
         ? "This is a high-energy creation — go complex and ambitious"
         : "Start simple but make it polished and complete";
 
-      const planContext = plan
-        ? `\nGOAL PLAN:\n- Core need: ${plan.coreNeed}\n- Target user: ${plan.targetUser}\n- Required features: ${plan.features.join(", ")}\n- Key interactions: ${plan.interactions.join(", ")}\n- Visual style: ${plan.visualStyle}\n- Success: ${plan.successCriteria}\n\nBuild this app following the plan above.\n`
-        : "";
+      const taskDescription = overridePrompt || suggestion.content;
 
       const prompt = `
 System: ${aiConfig.systemPrompt}
@@ -448,8 +452,8 @@ Energy: ${energyContext}
 
 Target: ${appType.toUpperCase()}
 
-Task: Create a complete React application for: "${suggestion.content}"
-${existingApps ? `\nOther apps already built (for context/inspiration, don't duplicate):\n${existingApps}\n` : ""}${planContext}
+Task: Create a complete React application for: "${taskDescription}"
+${existingApps ? `\nOther apps already built (for context/inspiration, don't duplicate):\n${existingApps}\n` : ""}
 Type-specific guidance:
 - ${AGENT_GUIDELINES[appType]}
 
@@ -482,11 +486,9 @@ Critical rules:
 
       if (!generatedCode) throw new Error("No code returned.");
 
-      const updatePayload: any = { status: "built", built_code: generatedCode };
-      if (plan) updatePayload.plan = plan;
-      await updateDoc(doc(db, "suggestions", suggestion.id), updatePayload);
+      await updateDoc(doc(db, "suggestions", suggestion.id), { status: "built", built_code: generatedCode });
       consumeQuota(15);
-      setLaunchTarget({ ...suggestion, status: "built", built_code: generatedCode, ...(plan ? { plan } : {}) });
+      setLaunchTarget({ ...suggestion, status: "built", built_code: generatedCode });
     } catch (err: any) {
       console.error("Build failed:", err);
       setAiError(err.message);
@@ -511,53 +513,66 @@ Critical rules:
     const rawInput = input.trim();
     setInput("");
     try {
-      setManifestingStep("Refining idea...");
+      // Generate refinement questions — abort on exhausted providers
+      setManifestingStep("Generating questions...");
       setIsManifesting(true);
-      let content = rawInput;
+      let questions: RefinementQuestion[] = [];
+      let aiTitle = rawInput;
       try {
-        const refined = await callUnifiedAI(
-          `Refine this app idea into a clear one-sentence description. Be technical and direct.\nOriginal: "${rawInput}"\nRefined:`
-        );
-        content = refined.trim() || rawInput;
+        const result = await generateRefinementQuestions(rawInput, newAppType, callUnifiedAI);
+        questions = result.questions;
+        aiTitle = result.title || rawInput;
       } catch (err: any) {
         if (err?.message?.includes('All AI providers exhausted')) throw err;
       }
-
-      // Decompose goal — abort immediately if all providers are exhausted
-      setManifestingStep("Planning...");
-      let plan: GoalPlan | undefined;
-      try {
-        plan = await decomposeGoal(content, newAppType, callUnifiedAI);
-      } catch (err: any) {
-        if (err?.message?.includes('All AI providers exhausted')) throw err;
-      }
-
-      // Use plan title as the app name if available, else fall back to refined content
-      let appTitle = (plan?.title?.trim()) || content;
-
-      // Show the plan card so the user can rename before build
       setIsManifesting(false);
-      if (plan) {
-        appTitle = await new Promise<string>(resolve => {
-          setPendingPlan({ idea: content, plan, onContinue: (editedTitle) => resolve(editedTitle?.trim() || appTitle) });
-        });
-        setPendingPlan(null);
-      }
 
+      // Show PromptRefiner — user answers questions or skips
+      type RefinerResult = { answers: Record<number, string>; title: string; skipped: boolean };
+      const { answers, title: finalTitle, skipped } = await new Promise<RefinerResult>(resolve => {
+        setPendingRefiner({
+          idea: rawInput,
+          title: aiTitle,
+          questions,
+          onBuild: (answers, editedTitle) => resolve({ answers, title: editedTitle, skipped: false }),
+          onSkip: (editedTitle) => resolve({ answers: {}, title: editedTitle, skipped: true }),
+        });
+      });
+      setPendingRefiner(null);
+
+      // Build final prompt from answers (or use raw input if skipped)
+      setManifestingStep("Refining prompt...");
+      setIsManifesting(true);
+      let buildPrompt = rawInput;
+      if (!skipped && Object.values(answers).some(v => v.trim())) {
+        try {
+          buildPrompt = await buildFinalPrompt(rawInput, answers, questions, newAppType, callUnifiedAI);
+        } catch (err: any) {
+          if (err?.message?.includes('All AI providers exhausted')) throw err;
+          buildPrompt = rawInput;
+        }
+      }
+      setIsManifesting(false);
+
+      // Save to Firestore with title + refinement metadata
       const insertData: any = {
-        content: appTitle,
+        content: finalTitle,
         app_type: newAppType,
         status: "pending",
         votes: 0,
         energy: 0,
         user_id: user?.uid || null,
         created_at: new Date().toISOString(),
+        ...(questions.length > 0 ? {
+          refinement_questions: questions.map(q => ({ question: q.question, priority: q.priority, why: q.why })),
+          refinement_answers: answers,
+        } : {}),
       };
       const docRef = await addDoc(collection(db, "suggestions"), insertData);
       const newSuggestion = { id: docRef.id, ...insertData } as Suggestion;
       consumeQuota(5);
 
-      await buildEvolution(newSuggestion, plan);
+      await buildEvolution(newSuggestion, undefined, buildPrompt);
     } catch (err: any) {
       console.error("Manifest error:", err);
       setAiError(err.message);
@@ -591,13 +606,15 @@ Critical rules:
         )}
       </AnimatePresence>
 
-      {/* Plan card overlay */}
+      {/* Prompt refiner overlay */}
       <AnimatePresence>
-        {pendingPlan && (
-          <PlanCard
-            idea={pendingPlan.idea}
-            plan={pendingPlan.plan}
-            onDismiss={pendingPlan.onContinue}
+        {pendingRefiner && (
+          <PromptRefiner
+            idea={pendingRefiner.idea}
+            title={pendingRefiner.title}
+            questions={pendingRefiner.questions}
+            onBuild={pendingRefiner.onBuild}
+            onSkip={pendingRefiner.onSkip}
           />
         )}
       </AnimatePresence>

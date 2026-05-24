@@ -33,6 +33,8 @@ export interface Suggestion {
   history?: EvolutionVersion[];
   chat_thread?: { role: 'user' | 'assistant' | 'system', content: string }[];
   plan?: GoalPlan;
+  refinement_questions?: { question: string; priority: string; why: string }[];
+  refinement_answers?: Record<number, string>;
 }
 
 export interface AIConfig {
