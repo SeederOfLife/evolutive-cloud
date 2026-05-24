@@ -1,23 +1,30 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Target, Users, Layers, MousePointer, Palette, CheckCircle, X } from "lucide-react";
+import { Target, Users, Layers, MousePointer, Palette, CheckCircle, X, Pencil } from "lucide-react";
 import { GoalPlan } from "../types";
 
 interface Props {
   idea: string;
   plan: GoalPlan;
-  onDismiss: () => void;
+  onDismiss: (editedTitle?: string) => void;
   autoDismissMs?: number;
 }
 
 export function PlanCard({ idea, plan, onDismiss, autoDismissMs = 3000 }: Props) {
   const [countdown, setCountdown] = useState(Math.round(autoDismissMs / 1000));
+  const [title, setTitle] = useState(plan.title || idea);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const titleInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const interval = setInterval(() => setCountdown(c => Math.max(0, c - 1)), 1000);
-    const timer = setTimeout(onDismiss, autoDismissMs);
+    const timer = setTimeout(() => onDismiss(title), autoDismissMs);
     return () => { clearInterval(interval); clearTimeout(timer); };
-  }, [onDismiss, autoDismissMs]);
+  }, [onDismiss, autoDismissMs, title]);
+
+  useEffect(() => {
+    if (editingTitle) titleInputRef.current?.select();
+  }, [editingTitle]);
 
   const sections: { icon: React.ReactNode; label: string; value: string | string[] }[] = [
     { icon: <Target className="w-3.5 h-3.5" />, label: "Core Need", value: plan.coreNeed },
@@ -45,12 +52,38 @@ export function PlanCard({ idea, plan, onDismiss, autoDismissMs = 3000 }: Props)
         {/* Header */}
         <div className="px-5 pt-5 pb-4 border-b border-gray-800">
           <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-[9px] font-black uppercase tracking-[4px] text-indigo-400 mb-1">Goal Plan</p>
-              <h3 className="text-sm font-bold text-white leading-snug truncate">{idea}</h3>
+            <div className="min-w-0 flex-1">
+              <p className="text-[9px] font-black uppercase tracking-[4px] text-indigo-400 mb-2">Goal Plan</p>
+
+              {/* Editable title */}
+              {editingTitle ? (
+                <input
+                  ref={titleInputRef}
+                  value={title}
+                  onChange={e => setTitle(e.target.value)}
+                  onBlur={() => setEditingTitle(false)}
+                  onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Escape') setEditingTitle(false); }}
+                  className="w-full bg-gray-800 border border-indigo-500/40 rounded-lg px-2 py-1 text-base font-black text-white focus:outline-none focus:border-indigo-400"
+                  autoFocus
+                />
+              ) : (
+                <button
+                  onClick={() => setEditingTitle(true)}
+                  className="group flex items-center gap-2 text-left w-full"
+                  title="Tap to rename"
+                >
+                  <h3 className="text-base font-black text-white leading-snug">{title}</h3>
+                  <Pencil className="w-3 h-3 text-white/20 group-hover:text-indigo-400 transition-colors shrink-0" />
+                </button>
+              )}
+
+              {/* Original idea shown smaller */}
+              {idea !== title && (
+                <p className="text-[9px] font-mono text-white/25 mt-1 truncate">from: {idea}</p>
+              )}
             </div>
             <button
-              onClick={onDismiss}
+              onClick={() => onDismiss(title)}
               className="shrink-0 w-7 h-7 rounded-lg bg-gray-800 flex items-center justify-center text-gray-400 hover:text-white transition-all"
             >
               <X className="w-3.5 h-3.5" />
@@ -61,7 +94,7 @@ export function PlanCard({ idea, plan, onDismiss, autoDismissMs = 3000 }: Props)
         {/* Plan sections */}
         <div className="px-5 py-4 space-y-3">
           {sections.map(({ icon, label, value }) => {
-            if (Array.isArray(value) && value.length === 0) return null;
+            if (!value || (Array.isArray(value) && value.length === 0)) return null;
             return (
               <div key={label} className="flex gap-3">
                 <div className="shrink-0 w-6 h-6 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 mt-0.5">
@@ -100,7 +133,7 @@ export function PlanCard({ idea, plan, onDismiss, autoDismissMs = 3000 }: Props)
             <span className="text-[9px] font-mono text-white/20">{countdown}s</span>
           </div>
           <button
-            onClick={onDismiss}
+            onClick={() => onDismiss(title)}
             className="px-4 py-2 bg-indigo-500 hover:bg-indigo-600 rounded-xl text-[10px] font-black uppercase tracking-[3px] text-white transition-all active:scale-95"
           >
             Build Now

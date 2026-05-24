@@ -123,7 +123,7 @@ export default function App() {
   const [onboardingStep, setOnboardingStep] = useState(0);
   const [heroIndex, setHeroIndex] = useState(0);
   const [seedVotes, setSeedVotes] = useState<Record<string, number>>({});
-  const [pendingPlan, setPendingPlan] = useState<{ idea: string; plan: GoalPlan; onContinue: () => void } | null>(null);
+  const [pendingPlan, setPendingPlan] = useState<{ idea: string; plan: GoalPlan; onContinue: (editedTitle?: string) => void } | null>(null);
 
   const userApiKey = useMemo(() => providerKeys[aiProvider] || "", [providerKeys, aiProvider]);
 
@@ -532,8 +532,20 @@ Critical rules:
         if (err?.message?.includes('All AI providers exhausted')) throw err;
       }
 
+      // Use plan title as the app name if available, else fall back to refined content
+      let appTitle = (plan?.title?.trim()) || content;
+
+      // Show the plan card so the user can rename before build
+      setIsManifesting(false);
+      if (plan) {
+        appTitle = await new Promise<string>(resolve => {
+          setPendingPlan({ idea: content, plan, onContinue: (editedTitle) => resolve(editedTitle?.trim() || appTitle) });
+        });
+        setPendingPlan(null);
+      }
+
       const insertData: any = {
-        content,
+        content: appTitle,
         app_type: newAppType,
         status: "pending",
         votes: 0,
@@ -544,15 +556,6 @@ Critical rules:
       const docRef = await addDoc(collection(db, "suggestions"), insertData);
       const newSuggestion = { id: docRef.id, ...insertData } as Suggestion;
       consumeQuota(5);
-
-      // Show the plan card, then build once dismissed
-      setIsManifesting(false);
-      if (plan) {
-        await new Promise<void>(resolve => {
-          setPendingPlan({ idea: content, plan, onContinue: resolve });
-        });
-        setPendingPlan(null);
-      }
 
       await buildEvolution(newSuggestion, plan);
     } catch (err: any) {

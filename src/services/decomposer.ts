@@ -1,4 +1,5 @@
 export interface GoalPlan {
+  title: string;
   coreNeed: string;
   targetUser: string;
   features: string[];
@@ -8,6 +9,7 @@ export interface GoalPlan {
 }
 
 const FALLBACK: GoalPlan = {
+  title: "",
   coreNeed: "",
   targetUser: "anyone",
   features: [],
@@ -28,6 +30,7 @@ APP TYPE: ${type}
 
 Return ONLY valid JSON in this exact format, no markdown:
 {
+  "title": "2-4 word app name exactly as the user would say it (e.g. 'snake game' → 'Snake Game', 'flashcards for spanish' → 'Spanish Flashcards', 'todo list app' → 'Todo List')",
   "coreNeed": "1 sentence - what problem does this solve",
   "targetUser": "1 phrase - who is this for",
   "features": ["feature 1", "feature 2", "feature 3"],

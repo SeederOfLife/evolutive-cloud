@@ -1,5 +1,6 @@
 
 export interface GoalPlan {
+  title: string;
   coreNeed: string;
   targetUser: string;
   features: string[];
