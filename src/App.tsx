@@ -31,6 +31,7 @@ import { AGENT_SYSTEM_PROMPTS, AGENT_GUIDELINES, AppType } from "./services/agen
 import { SEED_APPS } from "./services/seedApps";
 import { generateRefinementQuestions, buildFinalPrompt, RefinementQuestion } from "./services/refiner";
 import { PromptRefiner } from "./components/PromptRefiner";
+import { AIProgress, AIStageIndex } from "./components/AIProgress";
 
 const MANIFEST_PROVIDERS = [
   { id: "google",    label: "Google Gemini", Icon: Globe,    model: "gemini-3-flash-preview" },
@@ -100,6 +101,7 @@ export default function App() {
   const [forkTarget, setForkTarget] = useState<Suggestion | null>(null);
   const [isManifesting, setIsManifesting] = useState(false);
   const [manifestingStep, setManifestingStep] = useState("");
+  const [aiStage, setAiStage] = useState<AIStageIndex>(0);
   const [isTestingAI, setIsTestingAI] = useState(false);
   const [testResponse, setTestResponse] = useState<string | null>(null);
   const [isFinalized, setIsFinalized] = useState(false);
@@ -427,6 +429,7 @@ export default function App() {
     try {
       setIsBuilding(suggestion.id);
       setManifestingStep("Generating app...");
+      setAiStage(2);
       setIsManifesting(true);
 
       const existingApps = suggestions
@@ -478,7 +481,9 @@ Critical rules:
         return;
       }
 
+      setAiStage(3);
       const text = await callUnifiedAI(prompt);
+      setAiStage(4);
       const match = text.match(/```(?:javascript|typescript|tsx|jsx)?\s?([\s\S]*?)```/);
       const generatedCode = (match ? match[1] : text)
         .replace(/```[a-z]*\n?/gi, "")
@@ -487,8 +492,10 @@ Critical rules:
 
       if (!generatedCode) throw new Error("No code returned.");
 
+      setAiStage(5);
       await updateDoc(doc(db, "suggestions", suggestion.id), { status: "built", built_code: generatedCode });
       consumeQuota(15);
+      setAiStage(6);
       setLaunchTarget({ ...suggestion, status: "built", built_code: generatedCode });
     } catch (err: any) {
       console.error("Build failed:", err);
@@ -516,6 +523,7 @@ Critical rules:
     try {
       // Generate refinement questions — abort on exhausted providers
       setManifestingStep("Generating questions...");
+      setAiStage(0);
       setIsManifesting(true);
       let questions: RefinementQuestion[] = [];
       let aiTitle = rawInput;
@@ -543,6 +551,7 @@ Critical rules:
 
       // Build final prompt from answers (or use raw input if skipped)
       setManifestingStep("Refining prompt...");
+      setAiStage(1);
       setIsManifesting(true);
       let buildPrompt = rawInput;
       if (!skipped && Object.values(answers).some(v => v.trim())) {
@@ -623,25 +632,7 @@ Critical rules:
 
       {/* Building overlay */}
       <AnimatePresence>
-        {isManifesting && (
-          <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[90] bg-gray-950/90 flex flex-col items-center justify-center gap-6"
-          >
-            <Loader2 className="w-10 h-10 text-indigo-500 animate-spin" />
-            <div className="text-center">
-              <p className="text-base font-semibold text-white">Building App</p>
-              <p className="text-sm text-gray-400 mt-1">{manifestingStep}</p>
-            </div>
-            <div className="w-64 h-1 bg-gray-800 rounded-full overflow-hidden">
-              <motion.div
-                initial={{ width: "0%" }} animate={{ width: "100%" }}
-                transition={{ duration: 12, ease: "easeInOut" }}
-                className="h-full bg-indigo-500 rounded-full"
-              />
-            </div>
-          </motion.div>
-        )}
+        {isManifesting && <AIProgress stage={aiStage} />}
       </AnimatePresence>
 
       {/* ── TOP BAR ─────────────────────────────────────────────────────────── */}
@@ -1971,30 +1962,45 @@ function LaunchModal({
   const [code, setCode] = useState(suggestion.built_code || "");
   const [lastError, setLastError] = useState<string | null>(null);
   const [isFixing, setIsFixing] = useState(false);
+  const [autoRetries, setAutoRetries] = useState(0);
   const [voted, setVoted] = useState(false);
   const [showVotePop, setShowVotePop] = useState(false);
   const [showChat, setShowChat] = useState(false);
   const [showPlan, setShowPlan] = useState(false);
+  const [showJourney, setShowJourney] = useState(false);
   const [chatInput, setChatInput] = useState("");
   const [messages, setMessages] = useState<{ role: "user" | "ai"; text: string }[]>([]);
   const desktopChatEndRef = useRef<HTMLDivElement>(null);
   const mobileChatEndRef = useRef<HTMLDivElement>(null);
+  const autoRetryRef = useRef(0);
+
+  const pendingRetryMsg = useRef<string | null>(null);
+
+  const handleCodeError = (msg: string) => {
+    setLastError(msg);
+    setMessages(prev => {
+      if (prev.at(-1)?.text.startsWith("⚠️")) return prev;
+      return [...prev, { role: "ai", text: `⚠️ ${msg}` }];
+    });
+    // Auto-retry truncated code up to 2 times
+    if ((msg.includes("incomplete") || msg.includes("truncated")) && onRefine) {
+      if (autoRetryRef.current < 2) {
+        autoRetryRef.current += 1;
+        setAutoRetries(autoRetryRef.current);
+        pendingRetryMsg.current = "The previous code was truncated. Generate a COMPLETE working version that fits in your response. Simplify if needed - working simple beats broken complex.";
+      }
+    }
+  };
 
   useEffect(() => {
     const handler = (e: MessageEvent) => {
-      if (e.data?.type === "EVO_ERROR") {
-        setLastError(e.data.msg);
-        setMessages(prev => {
-          if (prev.at(-1)?.text.startsWith("⚠️")) return prev;
-          return [...prev, { role: "ai", text: `⚠️ ${e.data.msg}` }];
-        });
-      }
+      if (e.data?.type === "EVO_ERROR") handleCodeError(e.data.msg);
     };
     window.addEventListener("message", handler);
     return () => window.removeEventListener("message", handler);
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => { setLastError(null); }, [code]);
+  useEffect(() => { setLastError(null); autoRetryRef.current = 0; setAutoRetries(0); }, [code]);
 
   useEffect(() => {
     desktopChatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -2019,6 +2025,15 @@ function LaunchModal({
       setIsFixing(false);
     }
   };
+
+  // Drain pending auto-retry after sendMessage is defined
+  useEffect(() => {
+    if (!pendingRetryMsg.current || isFixing) return;
+    const msg = pendingRetryMsg.current;
+    pendingRetryMsg.current = null;
+    const t = setTimeout(() => sendMessage(msg), 800);
+    return () => clearTimeout(t);
+  }, [autoRetries]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleVote = () => {
     if (voted) return;
@@ -2145,10 +2160,23 @@ function LaunchModal({
           </AnimatePresence>
         </div>
 
+        {/* Journey toggle — if questions were asked */}
+        {suggestion.refinement_questions && suggestion.refinement_questions.length > 0 && (
+          <button
+            onClick={() => { setShowJourney(p => !p); setShowPlan(false); }}
+            className={`flex w-8 h-8 rounded-lg items-center justify-center transition-all shrink-0 ${
+              showJourney ? "bg-indigo-500/20 text-indigo-400 border border-indigo-500/30" : "bg-gray-800 text-gray-400 hover:text-white"
+            }`}
+            title="View Build Journey"
+          >
+            <Activity className="w-4 h-4" />
+          </button>
+        )}
+
         {/* Plan toggle — only if plan exists */}
         {suggestion.plan && (
           <button
-            onClick={() => setShowPlan(p => !p)}
+            onClick={() => { setShowPlan(p => !p); setShowJourney(false); }}
             className={`flex w-8 h-8 rounded-lg items-center justify-center transition-all shrink-0 ${
               showPlan ? "bg-indigo-500/20 text-indigo-400 border border-indigo-500/30" : "bg-gray-800 text-gray-400 hover:text-white"
             }`}
@@ -2203,49 +2231,88 @@ function LaunchModal({
         )}
       </AnimatePresence>
 
+      {/* Journey panel — questions asked + answers given */}
+      <AnimatePresence>
+        {showJourney && suggestion.refinement_questions && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="flex-none overflow-hidden bg-gray-900/80 border-b border-indigo-500/15"
+          >
+            <div className="px-4 py-3">
+              <p className="text-[9px] font-black uppercase tracking-[4px] text-indigo-400 mb-2">Build Journey</p>
+              <div className="space-y-2">
+                {suggestion.refinement_questions.map((q, i) => {
+                  const answer = suggestion.refinement_answers?.[i];
+                  return (
+                    <div key={i} className="flex gap-2">
+                      <span className={`text-[8px] font-black uppercase shrink-0 mt-0.5 ${q.priority === "Critical" ? "text-red-400/60" : "text-orange-400/60"}`}>
+                        {q.priority === "Critical" ? "!" : "↑"}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-[10px] text-white/50">{q.question}</p>
+                        {answer ? (
+                          <p className="text-[10px] text-indigo-300/80 font-medium">→ {answer}</p>
+                        ) : (
+                          <p className="text-[10px] text-white/20 italic">skipped</p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Body */}
       <div className="flex-1 flex overflow-hidden">
         {/* Preview — always full width on mobile, shrinks on desktop when chat open */}
         <div className="flex-1 relative min-w-0">
-          <AppSandbox code={code} appType={suggestion.app_type} className="absolute inset-0 w-full h-full" />
+          <AppSandbox code={code} appType={suggestion.app_type} className="absolute inset-0 w-full h-full" onError={handleCodeError} />
 
-          {/* Fix with AI — FAB (mobile, bottom-right above chat FAB) / banner (desktop) */}
+          {/* Fix with AI — always visible when there's an error */}
           <AnimatePresence>
-            {lastError && onRefine && !isFixing && (
-              <motion.div
-                initial={{ opacity: 0, scale: 0.8 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.8 }}
-                className="absolute z-10 pointer-events-none"
-                style={{ bottom: '88px', left: '16px' }}
-              >
-                {/* Mobile: circular FAB */}
-                <button
-                  onClick={() => sendMessage(`Fix this error: ${lastError}`)}
-                  className="sm:hidden pointer-events-auto w-14 h-14 bg-red-500 hover:bg-red-600 rounded-full shadow-xl flex items-center justify-center text-white active:scale-90 transition-all"
-                  title="Fix with AI"
+            {lastError && !isFixing && (
+              <>
+                {/* Mobile: circular FAB bottom-left */}
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.8 }}
+                  className="sm:hidden absolute z-20 pointer-events-none"
+                  style={{ bottom: '88px', left: '16px' }}
                 >
-                  <Zap className="w-6 h-6" />
-                </button>
-              </motion.div>
-            )}
-          </AnimatePresence>
+                  <button
+                    onClick={() => sendMessage(lastError.includes("incomplete") || lastError.includes("truncated")
+                      ? `This code is broken with error: ${lastError}. Generate a COMPLETE working version. Simplify if needed.`
+                      : `Fix this error: ${lastError}`)}
+                    className="pointer-events-auto w-14 h-14 bg-red-500 hover:bg-red-600 rounded-full shadow-xl flex items-center justify-center text-white active:scale-90 transition-all"
+                    title="Fix with AI"
+                  >
+                    <Zap className="w-6 h-6" />
+                  </button>
+                </motion.div>
 
-          {/* Desktop: Fix with AI banner */}
-          <AnimatePresence>
-            {lastError && onRefine && !isFixing && (
-              <motion.div
-                initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }}
-                className="hidden sm:flex absolute bottom-4 left-0 right-0 justify-center z-10 pointer-events-none"
-              >
-                <button
-                  onClick={() => sendMessage(`Fix this error: ${lastError}`)}
-                  className="pointer-events-auto flex items-center gap-2 px-4 py-2.5 bg-red-500 hover:bg-red-600 rounded-xl text-sm font-bold text-white shadow-xl transition-all active:scale-95"
+                {/* Desktop: banner bottom-center */}
+                <motion.div
+                  initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }}
+                  className="hidden sm:flex absolute bottom-4 left-0 right-0 justify-center z-10 pointer-events-none"
                 >
-                  <Zap className="w-4 h-4" />
-                  Fix with AI
-                </button>
-              </motion.div>
+                  <button
+                    onClick={() => sendMessage(lastError.includes("incomplete") || lastError.includes("truncated")
+                      ? `This code is broken with error: ${lastError}. Generate a COMPLETE working version. Simplify if needed.`
+                      : `Fix this error: ${lastError}`)}
+                    className="pointer-events-auto flex items-center gap-2 px-4 py-2.5 bg-red-500 hover:bg-red-600 rounded-xl text-sm font-bold text-white shadow-xl transition-all active:scale-95"
+                  >
+                    <Zap className="w-4 h-4" />
+                    {autoRetries > 0 ? `Fix with AI (retry ${autoRetries}/2)` : "Fix with AI"}
+                  </button>
+                </motion.div>
+              </>
             )}
           </AnimatePresence>
 

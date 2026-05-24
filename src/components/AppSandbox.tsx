@@ -1,5 +1,5 @@
 
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 
 interface AppSandboxProps {
   code: string;
@@ -55,17 +55,23 @@ function findAppFunctionEnd(code: string): number {
   return i;
 }
 
-export function AppSandbox({ code, className = "" }: AppSandboxProps) {
+export function AppSandbox({ code, className = "", onError }: AppSandboxProps) {
   const cleanCode = useMemo(() => sanitizeCode(code || ""), [code]);
+  const isBalanced = useMemo(() => !cleanCode || isCodeBalanced(cleanCode), [cleanCode]);
+
+  useEffect(() => {
+    if (cleanCode && !isBalanced) {
+      onError?.("Generated code was incomplete (likely truncated by rate limit). Click Fix with AI to retry.");
+    }
+  }, [cleanCode, isBalanced]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const srcDoc = useMemo(() => {
     if (!cleanCode) {
       return `<!DOCTYPE html><html><body style="background:#050508;display:flex;align-items:center;justify-content:center;height:100vh;color:rgba(255,255,255,.15);font:900 10px/1 sans-serif;text-transform:uppercase;letter-spacing:8px">Awaiting Build</body></html>`;
     }
 
-    if (!isCodeBalanced(cleanCode)) {
+    if (!isBalanced) {
       const msg = "Generated code was incomplete (likely truncated by rate limit). Click Fix with AI to retry.";
-      try { window.parent?.postMessage({ type: 'EVO_ERROR', msg }, '*'); } catch (_) {}
       return `<!DOCTYPE html><html><body style="background:#050508;display:flex;align-items:center;justify-content:center;height:100vh;padding:24px;box-sizing:border-box"><div style="max-width:360px;text-align:center;color:rgba(239,68,68,.9);font:700 13px/1.6 system-ui">${msg}</div></body></html>`;
     }
 
@@ -200,7 +206,7 @@ body{background:#050508;color:#fff;margin:0;min-height:100vh;display:flex;flex-d
 <\/script>
 </body>
 </html>`;
-  }, [cleanCode]);
+  }, [cleanCode, isBalanced]);
 
   return (
     <iframe
