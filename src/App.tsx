@@ -61,6 +61,12 @@ const HERO_PHRASES = [
   "Turn imagination into code.",
 ];
 
+const EXAMPLE_CHIPS = [
+  "snake game with neon style",
+  "vocabulary flashcards for spanish",
+  "particle art that follows my mouse",
+];
+
 const ONBOARDING_STEPS = [
   {
     title: "Welcome to Evolutive",
@@ -136,6 +142,7 @@ export default function App() {
   const [showProviderDrop, setShowProviderDrop] = useState(false);
   const [settingsMessage, setSettingsMessage] = useState<string | null>(null);
   const providerDropRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const [providerHealth, setProviderHealth] = useState<
     Record<string, { status: 'online' | 'offline' | 'checking' | null; ping: number | null; tokens: string | null }>
   >({});
@@ -389,6 +396,16 @@ export default function App() {
     () => allSuggestions.filter((s) => s.status === "built").length,
     [allSuggestions]
   );
+
+  const socialProof = useMemo(() => {
+    const built = allSuggestions.filter(s => s.status === 'built');
+    const creatorIds = new Set(
+      built.filter(s => !s.id.startsWith('seed_') && s.user_id).map(s => s.user_id!)
+    );
+    return { apps: built.length, creators: Math.max(creatorIds.size, 1) };
+  }, [allSuggestions]);
+
+  const showLanding = !user && view === 'galaxy' && input === '';
 
   const neuralStatus = useMemo(() => {
     if (isRateLimited) return `RATE LIMITED (${rateLimitCountdown}s)`;
@@ -973,21 +990,96 @@ Critical rules:
             />
           </Canvas>
 
-          {/* Rotating hero text */}
-          <div className="absolute inset-x-0 bottom-28 sm:bottom-36 flex items-center justify-center pointer-events-none z-10">
-            <AnimatePresence mode="wait">
-              <motion.p
-                key={heroIndex}
-                initial={{ opacity: 0, y: 8 }}
+          {/* Landing hero — shown for logged-out guests with empty input */}
+          <AnimatePresence>
+            {showLanding && (
+              <motion.div
+                initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -8 }}
-                transition={{ duration: 0.7 }}
-                className="text-white/20 text-base sm:text-xl font-light tracking-wide text-center px-8"
+                exit={{ opacity: 0, y: -8, transition: { duration: 0.25 } }}
+                transition={{ duration: 0.6 }}
+                className="absolute inset-0 flex flex-col items-center justify-center z-10 px-5 pb-20 pointer-events-none"
               >
-                {HERO_PHRASES[heroIndex]}
-              </motion.p>
-            </AnimatePresence>
-          </div>
+                {/* Hero */}
+                <h1 className="text-3xl sm:text-4xl md:text-5xl font-black text-white text-center leading-tight tracking-tight max-w-lg mb-3">
+                  Imagine an app.<br />
+                  <span className="text-indigo-400">AI builds it.</span>{" "}
+                  <span className="text-white/70">Share it.</span>
+                </h1>
+
+                {/* Subtitle */}
+                <p className="text-sm sm:text-base text-gray-400 text-center max-w-sm mb-6 leading-relaxed">
+                  Type any idea. Watch it become a real working app in 30 seconds. Built on AI, shared with the world.
+                </p>
+
+                {/* Example chips */}
+                <div className="flex flex-wrap justify-center gap-2 mb-7 pointer-events-auto">
+                  {EXAMPLE_CHIPS.map(chip => (
+                    <button
+                      key={chip}
+                      onClick={() => {
+                        setInput(chip);
+                        setTimeout(() => inputRef.current?.focus(), 50);
+                      }}
+                      className="px-3.5 py-1.5 bg-white/8 hover:bg-indigo-500/20 border border-white/12 hover:border-indigo-500/40 rounded-full text-xs text-white/70 hover:text-white transition-all backdrop-blur-sm"
+                    >
+                      {chip}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Social proof */}
+                <div className="flex items-center gap-4 mb-8 text-xs text-gray-500">
+                  <span className="flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-indigo-400/70" />
+                    <span className="tabular-nums">
+                      <CountUp target={socialProof.apps} />
+                    </span>
+                    {" "}apps built
+                  </span>
+                  <span className="w-px h-3 bg-gray-700" />
+                  <span className="tabular-nums">
+                    By <CountUp target={socialProof.creators} /> creator{socialProof.creators !== 1 ? "s" : ""}
+                  </span>
+                </div>
+
+                {/* How it works */}
+                <div className="flex items-start gap-4 sm:gap-8">
+                  {[
+                    { icon: MessageSquare, step: "1", label: "Describe your idea" },
+                    { icon: Sparkles,      step: "2", label: "AI asks you questions" },
+                    { icon: Globe,         step: "3", label: "App appears in galaxy" },
+                  ].map(({ icon: Icon, step, label }) => (
+                    <div key={step} className="flex flex-col items-center gap-1.5 text-center max-w-[80px]">
+                      <div className="w-8 h-8 rounded-xl bg-indigo-500/15 border border-indigo-500/25 flex items-center justify-center">
+                        <Icon className="w-4 h-4 text-indigo-400" />
+                      </div>
+                      <span className="text-[10px] font-black text-indigo-500/60 uppercase tracking-widest">{step}</span>
+                      <span className="text-[11px] text-gray-400 leading-tight">{label}</span>
+                    </div>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Rotating hero text — shown for signed-in users or while typing */}
+          {!showLanding && (
+            <div className="absolute inset-x-0 bottom-28 sm:bottom-36 flex items-center justify-center pointer-events-none z-10">
+              <AnimatePresence mode="wait">
+                <motion.p
+                  key={heroIndex}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.7 }}
+                  className="text-white/20 text-base sm:text-xl font-light tracking-wide text-center px-8"
+                >
+                  {HERO_PHRASES[heroIndex]}
+                </motion.p>
+              </AnimatePresence>
+            </div>
+          )}
         </div>
 
         {/* Feed view */}
@@ -1098,6 +1190,7 @@ Critical rules:
         {/* Row 2 on mobile / continues single row on sm+: input + provider(desktop) + manifest */}
         <div className="flex items-center gap-2 flex-1 min-w-0 order-2">
           <input
+            ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSuggest()}
@@ -1390,6 +1483,27 @@ Critical rules:
       </AnimatePresence>
     </div>
   );
+}
+
+// ── COUNT UP ──────────────────────────────────────────────────────────────────
+
+function CountUp({ target }: { target: number }) {
+  const [count, setCount] = React.useState(0);
+  React.useEffect(() => {
+    if (target === 0) return;
+    const duration = 1400;
+    const start = Date.now();
+    let raf: number;
+    const tick = () => {
+      const t = Math.min((Date.now() - start) / duration, 1);
+      const eased = 1 - Math.pow(1 - t, 3);
+      setCount(Math.round(eased * target));
+      if (t < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [target]);
+  return <>{count}</>;
 }
 
 // ── FORK MODAL ────────────────────────────────────────────────────────────────
