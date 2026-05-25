@@ -18,10 +18,11 @@ CRITICAL REQUIREMENTS:
 SANDBOX GLOBALS AVAILABLE:
 - React 18 (useState, useEffect, useRef, useMemo, useCallback)
 - ReactDOM.createRoot
-- Tailwind CSS classes
+- Tailwind CSS classes (use class names directly — there is no window.Tailwind)
 - window.Phaser (v3) — fully loaded via CDN, includes Scene, Physics, Input, Display, Math
 - Canvas 2D API (2D context) — available natively, no import needed
-- Lucide icons as window globals
+- Lucide icons as window globals (Play, Pause, Trophy, Volume2, RotateCcw, etc.)
+- IMPORTANT: NO localStorage (sandbox restriction), NO imports of any kind
 
 PHASER 3 IS AVAILABLE: You may use \`new Phaser.Game(config)\` directly. No import needed.
 Choose between Phaser 3 (physics, sprites, scenes) or Canvas 2D (manual drawing, maximum control).
@@ -30,18 +31,28 @@ Canvas 2D is better for: snake, tetris, raycast, particle simulations, pixel art
 
 GAME STRUCTURE PATTERN:
 1. Initialize game state with score, gameOver, gameStarted
-2. useEffect for Phaser scene setup with lifecycle hooks (create, update)
-3. Input handling: keyboard, mouse click, touch
-4. Collision callbacks update React state
-5. Game over screen overlays canvas
-6. useEffect cleanup: scene.stop(), game.destroy()
+2. Use useRef for ALL mutable game state accessed inside the animation loop / Phaser callbacks (never useState — stale closures will freeze your state)
+3. Use useState ONLY for values that need to trigger React re-renders (score display, screen transitions)
+4. Pattern: const gameStateRef = useRef({ score:0, gameOver:false, lives:3 }); — mutate in loop, call setScore(gameStateRef.current.score) to sync display
+5. Input handling: keyboard, mouse click, touch
+6. Game over screen overlays canvas (conditional render in React JSX based on state)
+7. useEffect cleanup: cancelAnimationFrame(rafId) or game.destroy(true)
+
+STALE CLOSURE WARNING — CRITICAL:
+When Phaser update() or requestAnimationFrame callbacks read React state (useState), they always
+see the VALUE FROM WHEN THE EFFECT RAN — not the current value. This causes:
+  ❌ if (gameOver) return;  // gameOver is always false inside the loop
+  ✅ if (gameStateRef.current.gameOver) return;  // always current
+
+ALWAYS use useRef for state that the animation loop needs to read or write.
+React setState (setScore, setLives) is only for updating the JSX display.
 
 COMMON MISTAKES TO AVOID:
+- Reading React state (useState) inside Phaser update() or requestAnimationFrame — use useRef instead
 - Forgetting physics.stop() or destroying game on unmount (memory leak)
-- Not checking gameOver state before updating score
 - Rendering UI AFTER canvas instead of in overlay divs
-- Using setTimeout instead of game.time for frame-based updates
-- Not resetting state when "Play Again" is clicked
+- Using setTimeout instead of AudioContext.currentTime for timing
+- Not resetting ALL refs AND state when "Play Again" is clicked
 
 STATE STRUCTURE:
 {
@@ -59,63 +70,95 @@ INPUT HANDLING:
 
 export const SKILL_GAME_MISTAKES = [
   {
-    mistake: "Forgetting to destroy Phaser game on unmount",
-    solution: "Return cleanup function from useEffect: return () => { if (game) game.destroy(true); }",
-    example: "game instance persists after component unmounts, causing memory leak and ghost input handlers"
+    mistake: "Reading React useState values inside requestAnimationFrame or Phaser update() — stale closure",
+    solution: "Put ALL mutable game data in a useRef object (gs = useRef({score,lives,phase,...})); only call setState to sync the display",
+    example: "gameOver from useState is always false inside the loop because the effect captured the initial value"
   },
   {
-    mistake: "Updating score inside physics collision without checking gameOver",
-    solution: "Always check: if (!gameOver) { updateScore(); } before modifying game state",
-    example: "Score keeps incrementing after game over, confusing player with hidden points"
+    mistake: "Forgetting to destroy Phaser game or cancel rAF on unmount",
+    solution: "Return cleanup: return () => { cancelAnimationFrame(rafRef.current); } or game.destroy(true)",
+    example: "game instance persists after component unmounts, stacking animation loops and leaking event listeners"
   },
   {
     mistake: "Trying to use dynamic asset URLs instead of canvas procedural drawing",
-    solution: "Use Graphics objects in Phaser or Canvas fillRect/drawImage with data URLs only",
-    example: "Game fails silently because image.load() can't access external URLs in sandbox"
+    solution: "Use Canvas fillRect/arc/lineTo or Phaser.GameObjects.Graphics for all visuals; no external image URLs",
+    example: "Game fails silently because image.load() can't access external URLs in the sandboxed iframe"
+  },
+  {
+    mistake: "Using localStorage for high scores (blocked in sandbox)",
+    solution: "Keep the high score in a useRef or useState — it persists for the session",
+    example: "localStorage throws SecurityError inside sandbox='allow-scripts', crashing the app on load"
   }
 ];
 
-export const SKILL_GAME_TEMPLATE = `export default function GameComponent() {
-  const [score, setScore] = useState(0);
-  const [gameOver, setGameOver] = useState(false);
-  const [gameStarted, setGameStarted] = useState(false);
-  const gameRef = useRef(null);
+export const SKILL_GAME_TEMPLATE = `// Canvas 2D game pattern — correct ref-based state, no stale closures
+export default function App() {
+  const canvasRef = useRef(null);
+  const rafRef = useRef(null);
+  // ALL mutable game state lives in a single ref — readable from the loop without stale closures
+  const gs = useRef({ score: 0, lives: 3, phase: 'start', x: 200, y: 300, vx: 0, vy: 0 });
+  // React state only for driving JSX re-renders (score display, screen transitions)
+  const [display, setDisplay] = useState({ score: 0, lives: 3, phase: 'start' });
+  const keysRef = useRef({});
 
   useEffect(() => {
-    if (!gameStarted) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    canvas.width = canvas.offsetWidth; canvas.height = canvas.offsetHeight;
 
-    const config = {
-      type: Phaser.AUTO,
-      width: 800,
-      height: 600,
-      parent: gameRef.current,
-      physics: { default: 'arcade', arcade: { gravity: { y: 200 } } },
-      scene: {
-        create: function() {
-          this.player = this.add.rectangle(100, 500, 50, 50, 0x00ff00);
-          this.physics.add.existing(this.player);
-          this.input.keyboard.createCursorKeys();
-        },
-        update: function() {
-          if (gameOver) return;
-          const keys = this.input.keyboard.createCursorKeys();
-          if (keys.left.isDown) this.player.body.setVelocityX(-200);
-          if (keys.right.isDown) this.player.body.setVelocityX(200);
-          if (this.player.y > 600) setGameOver(true);
+    const onKey = (e) => { keysRef.current[e.code] = e.type === 'keydown'; };
+    window.addEventListener('keydown', onKey); window.addEventListener('keyup', onKey);
+
+    let prev = 0;
+    function loop(ts) {
+      const dt = Math.min((ts - prev) / 1000, 0.05); prev = ts;
+      const g = gs.current;
+
+      if (g.phase === 'playing') {
+        // --- update logic here using g.x, g.y, keysRef.current ---
+        if (g.score !== display.score || g.phase !== display.phase) {
+          setDisplay({ score: g.score, lives: g.lives, phase: g.phase });
         }
       }
-    };
 
-    const game = new Phaser.Game(config);
-    return () => game.destroy(true);
-  }, [gameStarted, gameOver]);
+      // --- draw ---
+      ctx.fillStyle = '#050508'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      // draw game objects here
+      rafRef.current = requestAnimationFrame(loop);
+    }
+    rafRef.current = requestAnimationFrame(loop);
+
+    return () => {
+      cancelAnimationFrame(rafRef.current);
+      window.removeEventListener('keydown', onKey); window.removeEventListener('keyup', onKey);
+    };
+  }, []);
+
+  const startGame = () => {
+    Object.assign(gs.current, { score: 0, lives: 3, phase: 'playing', x: 200, y: 300 });
+    setDisplay({ score: 0, lives: 3, phase: 'playing' });
+  };
+  const restartGame = () => startGame();
 
   return (
-    <div className="flex flex-col items-center gap-4 bg-black p-4">
-      <div className="text-2xl font-bold text-white">Score: {score}</div>
-      {!gameStarted && <button onClick={() => setGameStarted(true)}>Start Game</button>}
-      {gameOver && <button onClick={() => { setGameOver(false); setScore(0); }}>Play Again</button>}
-      <div ref={gameRef} />
+    <div className="relative w-full h-screen bg-black">
+      <canvas ref={canvasRef} className="w-full h-full" />
+      {display.phase === 'start' && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-4">
+          <h1 className="text-4xl font-black text-white">My Game</h1>
+          <button onClick={startGame} className="px-8 py-3 bg-indigo-600 text-white rounded-xl font-bold text-lg">Start</button>
+        </div>
+      )}
+      {display.phase === 'gameover' && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-4">
+          <p className="text-2xl text-white font-bold">Score: {display.score}</p>
+          <button onClick={restartGame} className="px-8 py-3 bg-indigo-600 text-white rounded-xl font-bold">Play Again</button>
+        </div>
+      )}
+      {display.phase === 'playing' && (
+        <div className="absolute top-3 left-4 text-white font-bold">Score: {display.score} · Lives: {display.lives}</div>
+      )}
     </div>
   );
 }`;

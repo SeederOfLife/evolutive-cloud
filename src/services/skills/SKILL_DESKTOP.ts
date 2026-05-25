@@ -20,7 +20,7 @@ SANDBOX GLOBALS AVAILABLE:
 - Lucide icons as window globals (Search, Settings, Plus, Trash, Edit, Eye, etc.)
 - Recharts (LineChart, BarChart, PieChart, AreaChart, ResponsiveContainer, XAxis, YAxis, Tooltip, Legend)
 - Framer Motion (motion.div, AnimatePresence)
-- localStorage for persistence
+- React state and useReducer for all data (localStorage is NOT available in the sandbox — do NOT use it)
 
 LAYOUT PATTERN:
 1. Outer shell: full-height flex row (sidebar | main | detail)
@@ -63,9 +63,9 @@ export const SKILL_DESKTOP_MISTAKES = [
     example: "Large lists re-sort on every keystroke unrelated to sort state, causing jank"
   },
   {
-    mistake: "Not persisting state to localStorage for session continuity",
-    solution: "Initialize state from localStorage, write back in useEffect on change",
-    example: "User loses all entered data on page refresh, making the app feel broken"
+    mistake: "Trying to use localStorage for persistence (not available in sandbox)",
+    solution: "Use React useState with rich initial data so the app looks populated on first render",
+    example: "localStorage throws SecurityError in the sandbox; pre-populate state with realistic sample data instead"
   }
 ];
 

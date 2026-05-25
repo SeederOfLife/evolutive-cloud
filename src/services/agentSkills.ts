@@ -14,7 +14,21 @@ import { SKILL_ART_SYSTEM_PROMPT } from './skills/SKILL_ART';
 // - SKILL_* files: Canvas/Phaser3, Desktop, Terminal, Music, Art
 export const AGENT_SYSTEM_PROMPTS: Record<AppType, string> = {
   phone:
-    "You are a mobile-first app expert. Create touch-optimized apps with: large tap targets (min 44px), bottom navigation, swipe gestures, portrait layout, thumb-friendly buttons. Think Instagram, WhatsApp, TikTok style UI.",
+    "You are a mobile-first app expert. Create touch-optimized apps with: large tap targets (min 44px), bottom navigation, swipe gestures, portrait layout, thumb-friendly buttons. Think Instagram, WhatsApp, TikTok style UI.\n\n" +
+    "SANDBOX GLOBALS AVAILABLE (NO imports — these are already in scope):\n" +
+    "- React 18 hooks: useState, useEffect, useMemo, useRef, useCallback\n" +
+    "- Tailwind CSS classes (use class names directly)\n" +
+    "- Lucide React icons (use any name directly: Heart, Star, Check, X, ArrowLeft, etc.)\n" +
+    "- motion.div, AnimatePresence from Framer Motion\n" +
+    "- Canvas 2D API and requestAnimationFrame if needed for animations\n" +
+    "- IMPORTANT: NO localStorage, NO external fetch, NO imports of any kind\n\n" +
+    "MOBILE PATTERNS:\n" +
+    "- Full-height layout: className='h-screen flex flex-col bg-gray-950 text-white'\n" +
+    "- Scrollable content: className='flex-1 overflow-y-auto'\n" +
+    "- Fixed bottom nav: className='flex-none h-16 bg-gray-900 border-t border-white/10 flex items-center'\n" +
+    "- Card swipe: use onTouchStart/onTouchEnd to detect swipe direction (deltaX > 50 = right swipe)\n" +
+    "- Flip animation (flashcards): use CSS transform rotateY with transition-all via inline style + state toggle\n" +
+    "- All initial data must be hardcoded in state — no fetch, no localStorage",
 
   desktop:
     SKILL_DESKTOP_SYSTEM_PROMPT + "\n\n" +
@@ -32,16 +46,17 @@ export const AGENT_SYSTEM_PROMPTS: Record<AppType, string> = {
     "(1) CONSTANTS BLOCK at top — speed, size, gravity, lives, all tunable values exposed as named constants, never magic numbers inside logic. " +
 
     "(2) CANVAS GAME LOOP — use requestAnimationFrame inside useEffect with a named loop function: " +
-    "`function loop(ts){ const dt=Math.min((ts-prev)/1000,0.05); prev=ts; update(dt); draw(); reqId=requestAnimationFrame(loop); }` " +
+    "`function loop(ts){ const dt=Math.min((ts-prev)/1000,0.05); prev=ts; update(dt); draw(); rafId=requestAnimationFrame(loop); }` " +
     "Separate update(dt) and draw() functions — never mix logic and rendering. Store the frame ID and cancel on cleanup. " +
-    "Canvas id='gameCanvas', sized to fill container via ref. " +
 
-    "(3) GAME STATE — explicit 'start' | 'playing' | 'gameover' states stored in a useRef; " +
-    "show a start screen with click/tap to begin, show score prominently during play, show game-over screen with final score and a restart button. " +
-    "Click or tap on the canvas (or a button) transitions between states. " +
+    "(3) REF-BASED GAME STATE — CRITICAL: all mutable state accessed inside the loop MUST live in a useRef, not useState. " +
+    "Pattern: `const gs = useRef({ score:0, lives:3, phase:'start' })` — mutate gs.current in the loop, " +
+    "call setScore(gs.current.score) only to update React display. " +
+    "useState values are stale inside the loop (captured at effect creation time). " +
+    "Show 'start' | 'playing' | 'gameover' screens as React JSX overlays driven by a display state object. " +
 
-    "(4) INPUT — keyboard: maintain a queue/map of pressed keys via keydown/keyup; support both WASD and arrow keys mapped to the same actions. " +
-    "Touch: onTouchStart/onTouchEnd on the canvas for mobile; map swipes or zones to game actions. " +
+    "(4) INPUT — keyboard: maintain a map of pressed keys via keydown/keyup event listeners; support both WASD and arrow keys. " +
+    "Touch: onTouchStart/onTouchEnd on the canvas for mobile. " +
     "Store all input state in refs (never setState inside input handlers). " +
 
     "(5) COLLISION DETECTION — choose the right algorithm: " +
@@ -49,13 +64,10 @@ export const AGENT_SYSTEM_PROMPTS: Record<AppType, string> = {
     "AABB (platformers, shooters): `r1.x < r2.x+r2.w && r1.x+r1.w > r2.x && r1.y < r2.y+r2.h && r1.y+r1.h > r2.y`. " +
     "Circular (asteroids, balls): `dx*dx + dy*dy < (r1+r2)*(r1+r2)`. " +
 
-    "(6) RAYCASTING (for 3D-look games) — cast one ray per screen column, compute wall height from perpendicular distance, " +
-    "shade walls by distance (far=darker), support keyboard strafe + mouse look. " +
-
-    "(7) OBJECT POOL DISCIPLINE — initialize entity arrays outside the loop; recycle dead objects instead of pushing new ones. " +
+    "(6) OBJECT POOL DISCIPLINE — initialize entity arrays outside the loop; recycle dead objects instead of pushing new ones. " +
     "Never call 'new' or array.push inside the animation frame. " +
 
-    "(8) SINGLE CORE MECHANIC — nail one mechanic that is actually fun before adding score/lives/levels. " +
+    "(7) SINGLE CORE MECHANIC — nail one mechanic that is actually fun before adding score/lives/levels. " +
     "Every game must end with: clear win/lose condition, restart button, final score display.",
 
   terminal:
@@ -77,9 +89,9 @@ export const AGENT_SYSTEM_PROMPTS: Record<AppType, string> = {
 };
 
 export const AGENT_GUIDELINES: Record<AppType, string> = {
-  phone:    "Touch-first, vertical stacking, large tap targets (min 44px), bottom navigation, portrait layout",
+  phone:    "Touch-first, vertical stacking, large tap targets (min 44px), bottom navigation, portrait layout, hardcoded initial data (no fetch/localStorage), flip animations via CSS rotateY + state toggle",
   desktop:  "Multi-panel layout (sidebar+main+detail), useMemo for derived lists, keyboard shortcuts, empty states, flex with min-h-0 for panel sizing",
-  game:     "Constants block + loop(ts){update(dt);draw()} + start/playing/gameover states + WASD+arrows+touch + AABB/grid/circular collision + object pool + win/lose/restart/score",
+  game:     "Constants block + loop(ts){update(dt);draw()} + gs=useRef({score,lives,phase}) for loop state + setDisplay() for JSX + WASD+arrows+touch + AABB/grid/circular collision + object pool + win/lose/restart",
   terminal: "Monospace font, dark background (green-on-black or amber-on-black), command history (ArrowUp), auto-scroll to bottom, re-focus input on container click",
   music:    "AudioContext in onClick (never on mount), new OscillatorNode per note, gain envelope for smooth attack/release, pointer events for keyboard+touch",
   art:      "Canvas layers + low-alpha fillRect for trails + requestAnimationFrame with time accumulator + particle recycling (no new in loop) + mouse-reactive + named palette constants",

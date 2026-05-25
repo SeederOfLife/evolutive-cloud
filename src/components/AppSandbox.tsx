@@ -129,10 +129,15 @@ body{background:#050508;color:#fff;margin:0;min-height:100vh;display:flex;flex-d
     }
     ld('https://unpkg.com/react@18.2.0/umd/react.development.js',function(){
       window.LucideReact={};
-      ['Activity','AlertCircle','ArrowLeft','ArrowRight','Check','ChevronDown','ChevronUp','ChevronLeft','ChevronRight','Circle','Clock','Code','Copy','Database','Delete','Edit','Eye','File','Filter','Globe','Heart','Home','Info','Key','Layers','Lock','LogOut','Menu','MessageCircle','Moon','Music','Play','Plus','Power','RefreshCw','Search','Settings','Share','Shield','Star','Sun','Trash','Trash2','Upload','User','Users','X','Zap','Sparkles','Terminal','Monitor','Phone','Cpu','Cloud','Wifi','Bell','Camera','Download','Send','Save','Loader2'].forEach(function(name){
-        var c=function(p){p=p||{};return React.createElement('svg',{width:p.size||16,height:p.size||16,viewBox:'0 0 24 24',fill:'none',stroke:p.color||'currentColor',strokeWidth:2,className:p.className||''});};
-        window.LucideReact[name]=c;window[name]=c;
+      var _ic=function(p){p=p||{};return React.createElement('svg',{width:p.size||16,height:p.size||16,viewBox:'0 0 24 24',fill:'none',stroke:p.color||'currentColor',strokeWidth:p.strokeWidth||2,className:p.className||''});};
+      ['Activity','AlertCircle','AlertTriangle','ArrowLeft','ArrowRight','ArrowUp','ArrowDown','ArrowUpDown','Award','Bell','Bookmark','BookOpen','Brush','Camera','Check','CheckCircle','CheckSquare','ChevronDown','ChevronUp','ChevronLeft','ChevronRight','Circle','Clock','Cloud','Code','Code2','Columns','Compass','Copy','CreditCard','Crown','Cpu','Database','Delete','Download','Edit','Eraser','ExternalLink','Eye','EyeOff','FastForward','File','FileText','Filter','Flag','Flame','FlipHorizontal2','Folder','FolderOpen','Globe','GripHorizontal','GripVertical','Hash','Headphones','Heart','Home','HelpCircle','Hourglass','Image','Info','Key','Layers','Layout','Link','List','Loader2','Lock','LogOut','Maximize','Maximize2','Medal','Menu','MessageCircle','MessageSquare','Mic','Mic2','Minimize','Minimize2','Minus','Monitor','Moon','Music','Music2','Package','Palette','Pause','Phone','Play','Plus','Power','QrCode','RefreshCcw','RefreshCw','Repeat','RotateCcw','RotateCw','Save','Search','Send','Settings','Share','Share2','Shield','Shuffle','SkipBack','SkipForward','Speaker','Square','Sparkles','Star','Sun','Table','Tag','Target','Terminal','Timer','ToggleLeft','ToggleRight','Trash','Trash2','TrendingDown','TrendingUp','Trophy','Upload','User','Users','Video','Volume1','Volume2','VolumeX','Wand2','Wifi','X','XCircle','Zap','ZoomIn','ZoomOut'].forEach(function(name){
+        window.LucideReact[name]=_ic;window[name]=_ic;
       });
+      // Catch-all: any icon name the AI uses that isn't in the list above → empty SVG (no crash)
+      try{
+        var _iconProxy=new Proxy(window.LucideReact,{get:function(t,k){return t[k]||_ic;}});
+        window.LucideReact=_iconProxy;
+      }catch(e){}
       ld('https://unpkg.com/react-dom@18.2.0/umd/react-dom.development.js',function(){
         window.Recharts={
           LineChart:function(p){return React.createElement('div',{style:{width:'100%',height:'100%'}},p&&p.children);},
@@ -163,6 +168,20 @@ body{background:#050508;color:#fff;margin:0;min-height:100vh;display:flex;flex-d
       Object.keys(IC).forEach(function(k){if(k!=='default')window[k]=IC[k];});
       Object.keys(RC).forEach(function(k){if(/^[A-Z]/.test(k))window[k]=RC[k];});
       if(window.LucideReact)Object.assign(window,window.LucideReact);
+      // Patch React.createElement so undefined/null component types (e.g. missing icons) render as
+      // empty spans instead of throwing "React.createElement: type is invalid"
+      var _origCE=R.createElement;
+      R.createElement=window.React.createElement=function(type,props){
+        if(type==null||type===undefined){
+          var safe={};if(props){if(props.className)safe.className=props.className;if(props.style)safe.style=props.style;}
+          return _origCE('span',safe);
+        }
+        return _origCE.apply(this,arguments);
+      };
+      // Make require('lucide-react') return a catch-all proxy so destructured named imports work
+      try{
+        IC=new Proxy(IC,{get:function(t,k){return t[k]||window[k]||_ic;}});
+      }catch(e){}
 
       var mkEl=function(tag){return function(p){p=p||{};return R.createElement(tag,{className:p.className,style:p.style,id:p.id,onClick:p.onClick,onChange:p.onChange},p.children);};};
       if(!window.motion){

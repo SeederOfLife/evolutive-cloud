@@ -556,11 +556,12 @@ Type-specific guidance:
 
 Libraries available (already in scope, NO imports needed):
 - React 18 hooks (useState, useEffect, useMemo, useRef, useCallback, useContext, useReducer)
-- Tailwind CSS classes
-- Lucide React icons (e.g. Search, Star, Heart, Play, Settings...)
-- Recharts (LineChart, BarChart, PieChart, AreaChart...)
+- Tailwind CSS classes (use class names directly, no window.Tailwind)
+- Lucide React icons (use any icon name directly: Play, Pause, Volume2, Trophy, etc.)
+- Recharts (LineChart, BarChart, PieChart, AreaChart, ResponsiveContainer...)
 - motion.div, AnimatePresence from Framer Motion
-- Canvas 2D API, Web Audio API, SVG, Math, localStorage — all available natively
+- Canvas 2D API, Web Audio API, SVG, requestAnimationFrame, Math — all available natively
+- IMPORTANT: localStorage is NOT available (sandbox restriction) — use React state only
 
 Critical rules:
 - Start with: export default function App() {
