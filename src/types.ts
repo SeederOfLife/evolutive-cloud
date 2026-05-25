@@ -35,6 +35,7 @@ export interface Suggestion {
   plan?: GoalPlan;
   refinement_questions?: { question: string; priority: string; why: string }[];
   refinement_answers?: Record<number, string>;
+  visibility?: 'public' | 'private';
 }
 
 export interface AIConfig {

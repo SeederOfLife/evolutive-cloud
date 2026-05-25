@@ -29,6 +29,7 @@
     "qrcode": "^1.5.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "react-router-dom": "^7.15.1",
     "three": "^0.184.0",
     "tone": "^15.1.22",
     "use-sync-external-store": "^1.6.0",

@@ -11,7 +11,7 @@ import { motion, AnimatePresence } from "motion/react";
 import {
   ChevronUp, X, Search, Zap, Play, Sparkles, Loader2,
   Settings, Activity, Trash2, LogOut, Globe, Cpu, ChevronDown, User,
-  MessageSquare, ArrowRight, GitFork, Layers, Wrench
+  MessageSquare, ArrowRight, GitFork, Layers, Wrench, Share2, Lock
 } from "lucide-react";
 import OpenAI from "openai";
 import {
@@ -34,6 +34,7 @@ import { PromptRefiner } from "./components/PromptRefiner";
 import { AIProgress, AIStageIndex } from "./components/AIProgress";
 import { NetworkPanel } from "./components/NetworkPanel";
 import { JoinModal } from "./components/JoinModal";
+import { ShareMenu } from "./components/ShareMenu";
 import { getLinkedAccounts, LinkedAccount } from "./services/invites";
 
 async function checkWebGPUSupport(): Promise<boolean> {
@@ -487,6 +488,16 @@ export default function App() {
       setLaunchTarget(fork);
     } catch (err: any) {
       console.error("Fork failed:", err);
+    }
+  };
+
+  const handleToggleVisibility = async (newVis: 'public' | 'private') => {
+    if (!launchTarget || launchTarget.id.startsWith('seed_')) return;
+    try {
+      await updateDoc(doc(db, "suggestions", launchTarget.id), { visibility: newVis });
+      setLaunchTarget(prev => prev ? { ...prev, visibility: newVis } : null);
+    } catch (e) {
+      console.error("Visibility update failed:", e);
     }
   };
 
@@ -1226,9 +1237,11 @@ Critical rules:
         {launchTarget && (
           <LaunchModal
             suggestion={launchTarget}
+            currentUserId={user?.uid}
             onClose={() => setLaunchTarget(null)}
             onVote={handleVote}
             onFork={() => { setForkTarget(launchTarget); setLaunchTarget(null); }}
+            onToggleVisibility={handleToggleVisibility}
             onRefine={async (message: string, currentCode: string) => {
               const isTruncated = message.includes("incomplete") || message.includes("truncated");
               const isFix = message.startsWith("Fix this error:") || isTruncated;
@@ -2131,15 +2144,19 @@ function AuthModal({
 
 function LaunchModal({
   suggestion,
+  currentUserId,
   onClose,
   onVote,
   onFork,
+  onToggleVisibility,
   onRefine,
 }: {
   suggestion: Suggestion;
+  currentUserId?: string;
   onClose: () => void;
   onVote: (id: string, votes: number) => void;
   onFork?: () => void;
+  onToggleVisibility?: (vis: 'public' | 'private') => void;
   onRefine?: (message: string, code: string) => Promise<string>;
 }) {
   const [code, setCode] = useState(suggestion.built_code || "");
@@ -2305,6 +2322,25 @@ function LaunchModal({
             </span>
           )}
         </span>
+
+        {/* Visibility toggle — owner only, not seed apps */}
+        {onToggleVisibility && currentUserId && suggestion.user_id === currentUserId && !suggestion.id.startsWith('seed_') && (
+          <button
+            onClick={() => onToggleVisibility(suggestion.visibility === 'public' ? 'private' : 'public')}
+            title={suggestion.visibility === 'public' ? 'Make private' : 'Make public'}
+            className="flex w-8 h-8 rounded-lg items-center justify-center bg-gray-800 text-gray-400 hover:text-white transition-all shrink-0"
+          >
+            {suggestion.visibility === 'public'
+              ? <Globe className="w-3.5 h-3.5 text-emerald-400" />
+              : <Lock className="w-3.5 h-3.5" />
+            }
+          </button>
+        )}
+
+        {/* Share — always visible for built apps that aren't seeds */}
+        {!suggestion.id.startsWith('seed_') && (
+          <ShareMenu appId={suggestion.id} appTitle={suggestion.content} />
+        )}
 
         {/* Fork — hidden on mobile */}
         {onFork && (
