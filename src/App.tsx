@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
@@ -32,6 +32,9 @@ import { SEED_APPS } from "./services/seedApps";
 import { generateRefinementQuestions, buildFinalPrompt, RefinementQuestion } from "./services/refiner";
 import { PromptRefiner } from "./components/PromptRefiner";
 import { AIProgress, AIStageIndex } from "./components/AIProgress";
+import { NetworkPanel } from "./components/NetworkPanel";
+import { JoinModal } from "./components/JoinModal";
+import { getLinkedAccounts, LinkedAccount } from "./services/invites";
 
 async function checkWebGPUSupport(): Promise<boolean> {
   if (typeof navigator === 'undefined' || !('gpu' in navigator)) return false;
@@ -149,6 +152,12 @@ export default function App() {
   } | null>(null);
   const [webGPUSupported, setWebGPUSupported] = useState<boolean | null>(null);
   const [showNoGPUBanner, setShowNoGPUBanner] = useState(false);
+  const [joinToken, setJoinToken] = useState<string | null>(() => {
+    const m = window.location.pathname.match(/^\/join\/([a-f0-9]{40})$/);
+    return m ? m[1] : null;
+  });
+  // userId → short display name for linked accounts
+  const [linkedUserMap, setLinkedUserMap] = useState<Map<string, string>>(new Map());
 
   const userApiKey = useMemo(() => providerKeys[aiProvider] || "", [providerKeys, aiProvider]);
 
@@ -252,6 +261,31 @@ export default function App() {
   useEffect(() => {
     if (user?.uid) setFilterType("mine");
   }, [user]);
+
+  // After sign-in: pick up any pending invite stored by JoinModal
+  useEffect(() => {
+    if (!user) return;
+    const pending = localStorage.getItem("pending_invite_token");
+    if (pending) {
+      localStorage.removeItem("pending_invite_token");
+      setJoinToken(pending);
+    }
+  }, [user?.uid]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fetch linked accounts when user is known, build userId → displayName map
+  const refreshLinkedAccounts = useCallback(async () => {
+    if (!user) { setLinkedUserMap(new Map()); return; }
+    try {
+      const accounts: LinkedAccount[] = await getLinkedAccounts(user.uid);
+      const m = new Map<string, string>();
+      for (const a of accounts) {
+        m.set(a.linkedUserId, a.linkedDisplayName || a.linkedEmail.split("@")[0]);
+      }
+      setLinkedUserMap(m);
+    } catch { /* non-critical */ }
+  }, [user?.uid]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => { refreshLinkedAccounts(); }, [refreshLinkedAccounts]);
 
   // Firestore listeners
   useEffect(() => {
@@ -913,7 +947,12 @@ Critical rules:
             {allSuggestions
               .filter((s) => s.status === "built" && s.built_code)
               .map((s) => (
-                <ModuleNode key={s.id} suggestion={s} onRun={(sg) => setLaunchTarget(sg)} />
+                <ModuleNode
+                  key={s.id}
+                  suggestion={s}
+                  onRun={(sg) => setLaunchTarget(sg)}
+                  linkedFromLabel={s.user_id && linkedUserMap.has(s.user_id) ? linkedUserMap.get(s.user_id) : undefined}
+                />
               ))}
             <OrbitControls
               enableZoom={false}
@@ -1153,6 +1192,8 @@ Critical rules:
             settingsMessage={settingsMessage}
             setSettingsMessage={setSettingsMessage}
             webGPUSupported={webGPUSupported}
+            user={user}
+            onLinkedAccountsChange={refreshLinkedAccounts}
           />
         )}
       </AnimatePresence>
@@ -1228,6 +1269,19 @@ Critical rules:
             source={forkTarget}
             onConfirm={handleForkConfirm}
             onCancel={() => setForkTarget(null)}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* ── JOIN MODAL ──────────────────────────────────────────────────────── */}
+      <AnimatePresence>
+        {joinToken && (
+          <JoinModal
+            token={joinToken}
+            user={user}
+            onAccepted={() => { setJoinToken(null); refreshLinkedAccounts(); }}
+            onClose={() => setJoinToken(null)}
+            onSignInRequired={() => { setShowAuth(true); }}
           />
         )}
       </AnimatePresence>
@@ -1589,6 +1643,8 @@ interface SettingsModalProps {
   settingsMessage?: string | null;
   setSettingsMessage?: (m: string | null) => void;
   webGPUSupported?: boolean | null;
+  user?: any;
+  onLinkedAccountsChange?: () => void;
 }
 
 const MODELS: Record<string, { value: string; label: string }[]> = {
@@ -1634,8 +1690,9 @@ function SettingsModal({
   userApiKey, saveApiKeyToAccount, customEndpoint, setCustomEndpoint,
   forceCloud, setForceCloud, aiConfig, setAiConfig, providerHealth,
   checkHealth, isTestingAI, testResponse, handleTestNeuralLink, setTestResponse,
-  settingsMessage, setSettingsMessage, webGPUSupported,
+  settingsMessage, setSettingsMessage, webGPUSupported, user, onLinkedAccountsChange,
 }: SettingsModalProps) {
+  const [tab, setTab] = useState<"ai" | "network">("ai");
   const providers = ["google", "openai", "anthropic", "custom", "web-llm"] as const;
   const providerModels = MODELS[aiProvider] || [];
 
@@ -1658,7 +1715,24 @@ function SettingsModal({
           </button>
         </div>
 
-        {settingsMessage && (
+        {/* Tabs — only shown when logged in */}
+        {user && (
+          <div className="flex gap-1 px-4 pt-3">
+            {(["ai", "network"] as const).map(t => (
+              <button
+                key={t}
+                onClick={() => setTab(t)}
+                className={`px-4 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${
+                  tab === t ? "bg-indigo-500 text-white" : "text-gray-400 hover:text-white hover:bg-gray-800"
+                }`}
+              >
+                {t === "ai" ? "AI Settings" : "My Network"}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {settingsMessage && tab === "ai" && (
           <div className="mx-4 mt-4 flex items-start justify-between gap-3 p-3 bg-amber-900/30 border border-amber-700/50 rounded-lg text-sm text-amber-300">
             <span>{settingsMessage}</span>
             <button onClick={() => setSettingsMessage?.(null)} className="shrink-0 opacity-60 hover:opacity-100">
@@ -1667,7 +1741,14 @@ function SettingsModal({
           </div>
         )}
 
-        <div className="p-4 space-y-5">
+        {/* Network tab content */}
+        {tab === "network" && user && (
+          <div className="p-4">
+            <NetworkPanel user={user} onLinkedAccountsChange={() => onLinkedAccountsChange?.()} />
+          </div>
+        )}
+
+        <div className={tab === "network" ? "hidden" : "p-4 space-y-5"}>
           {/* Provider */}
           <section>
             <label className="block text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">

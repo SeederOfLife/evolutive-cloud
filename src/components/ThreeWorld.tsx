@@ -160,11 +160,15 @@ export function EvolutiveSeed({ onClick, isOpen }: { onClick: () => void, isOpen
   );
 }
 
-export function ModuleNode({ suggestion, onRun }: { suggestion: Suggestion, onRun: (s: Suggestion) => void }) {
+export function ModuleNode({ suggestion, onRun, linkedFromLabel }: {
+  suggestion: Suggestion;
+  onRun: (s: Suggestion) => void;
+  linkedFromLabel?: string;
+}) {
   const meshRef = useRef<THREE.Mesh>(null!);
   const timeRef = useRef(0);
   const [hovered, setHovered] = useState(false);
-  
+
   const { radius, speed, offset, yOffset, color } = useMemo(() => {
     const colors = ["#ff006e", "#3a86ff", "#fb5607", "#ffbe0b", "#8338ec", "#00f5d4"];
     const id = suggestion.id;
@@ -173,9 +177,10 @@ export function ModuleNode({ suggestion, onRun }: { suggestion: Suggestion, onRu
       speed: 0.1 + seededRand(id, 0) * 0.2,
       offset: seededRand(id, 1) * Math.PI * 2,
       yOffset: (seededRand(id, 2) - 0.5) * 2,
-      color: colors[Math.floor(seededRand(id, 3) * colors.length)]
+      // Linked apps glow emerald-teal so they're visually distinct
+      color: linkedFromLabel ? "#34d399" : colors[Math.floor(seededRand(id, 3) * colors.length)]
     };
-  }, [suggestion.id, suggestion.energy]);
+  }, [suggestion.id, suggestion.energy, linkedFromLabel]);
 
   useFrame((state, delta) => {
     if (!meshRef.current) return;
@@ -213,7 +218,7 @@ export function ModuleNode({ suggestion, onRun }: { suggestion: Suggestion, onRu
         <Html center position={[0, 0.38, 0]} zIndexRange={[100, 0]}>
           <div style={{
             background: "rgba(9,9,11,0.92)",
-            border: "1px solid rgba(99,102,241,0.4)",
+            border: `1px solid ${linkedFromLabel ? "rgba(52,211,153,0.4)" : "rgba(99,102,241,0.4)"}`,
             borderRadius: "8px",
             padding: "5px 10px",
             fontSize: "10px",
@@ -225,6 +230,11 @@ export function ModuleNode({ suggestion, onRun }: { suggestion: Suggestion, onRu
             boxShadow: "0 4px 16px rgba(0,0,0,0.6)",
           }}>
             {label}
+            {linkedFromLabel && (
+              <span style={{ display: "block", fontSize: "9px", fontWeight: "600", color: "#34d399", marginTop: "2px", opacity: 0.9 }}>
+                from @{linkedFromLabel}
+              </span>
+            )}
           </div>
         </Html>
       )}
