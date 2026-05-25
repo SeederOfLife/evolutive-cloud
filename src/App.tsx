@@ -11,7 +11,7 @@ import { motion, AnimatePresence } from "motion/react";
 import {
   ChevronUp, X, Search, Zap, Play, Sparkles, Loader2,
   Settings, Activity, Trash2, LogOut, Globe, Cpu, ChevronDown, User,
-  MessageSquare, ArrowRight, GitFork, Layers
+  MessageSquare, ArrowRight, GitFork, Layers, Wrench
 } from "lucide-react";
 import OpenAI from "openai";
 import {
@@ -1974,7 +1974,7 @@ function LaunchModal({
   const mobileChatEndRef = useRef<HTMLDivElement>(null);
   const autoRetryRef = useRef(0);
 
-  const pendingRetryMsg = useRef<string | null>(null);
+  const sendMessageRef = useRef<(msg: string) => void>(() => {});
 
   const handleCodeError = (msg: string) => {
     setLastError(msg);
@@ -1982,12 +1982,13 @@ function LaunchModal({
       if (prev.at(-1)?.text.startsWith("⚠️")) return prev;
       return [...prev, { role: "ai", text: `⚠️ ${msg}` }];
     });
-    // Auto-retry truncated code up to 2 times
+    // Auto-retry truncated code up to 3 times
     if ((msg.includes("incomplete") || msg.includes("truncated")) && onRefine) {
-      if (autoRetryRef.current < 2) {
+      if (autoRetryRef.current < 3) {
         autoRetryRef.current += 1;
         setAutoRetries(autoRetryRef.current);
-        pendingRetryMsg.current = "The previous code was truncated. Generate a COMPLETE working version that fits in your response. Simplify if needed - working simple beats broken complex.";
+        const retryMsg = "The previous code was truncated. Generate a COMPLETE working version that fits in your response. Simplify if needed - working simple beats broken complex.";
+        setTimeout(() => sendMessageRef.current(retryMsg), 800);
       }
     }
   };
@@ -2026,14 +2027,8 @@ function LaunchModal({
     }
   };
 
-  // Drain pending auto-retry after sendMessage is defined
-  useEffect(() => {
-    if (!pendingRetryMsg.current || isFixing) return;
-    const msg = pendingRetryMsg.current;
-    pendingRetryMsg.current = null;
-    const t = setTimeout(() => sendMessage(msg), 800);
-    return () => clearTimeout(t);
-  }, [autoRetries]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Keep sendMessageRef always pointing at the latest sendMessage closure
+  useEffect(() => { sendMessageRef.current = sendMessage; }); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleVote = () => {
     if (voted) return;
@@ -2076,7 +2071,7 @@ function LaunchModal({
           onClick={() => sendMessage(`Fix this error: ${lastError}`)}
           className="w-full flex items-center justify-center gap-1.5 py-2 bg-red-500/15 hover:bg-red-500/25 border border-red-500/25 rounded-lg text-[11px] font-bold text-red-400 transition-all"
         >
-          <Zap className="w-3 h-3" /> Fix Error
+          <Wrench className="w-3 h-3" /> Fix Error
         </button>
       )}
       <div className="flex gap-2">
@@ -2283,7 +2278,7 @@ function LaunchModal({
                   initial={{ opacity: 0, scale: 0.8 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.8 }}
-                  className="sm:hidden absolute z-20 pointer-events-none"
+                  className="sm:hidden absolute z-[9999] pointer-events-none"
                   style={{ bottom: '88px', left: '16px' }}
                 >
                   <button
@@ -2293,14 +2288,14 @@ function LaunchModal({
                     className="pointer-events-auto w-14 h-14 bg-red-500 hover:bg-red-600 rounded-full shadow-xl flex items-center justify-center text-white active:scale-90 transition-all"
                     title="Fix with AI"
                   >
-                    <Zap className="w-6 h-6" />
+                    <Wrench className="w-6 h-6" />
                   </button>
                 </motion.div>
 
                 {/* Desktop: banner bottom-center */}
                 <motion.div
                   initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }}
-                  className="hidden sm:flex absolute bottom-4 left-0 right-0 justify-center z-10 pointer-events-none"
+                  className="hidden sm:flex absolute bottom-4 left-0 right-0 justify-center z-[9999] pointer-events-none"
                 >
                   <button
                     onClick={() => sendMessage(lastError.includes("incomplete") || lastError.includes("truncated")
@@ -2308,8 +2303,8 @@ function LaunchModal({
                       : `Fix this error: ${lastError}`)}
                     className="pointer-events-auto flex items-center gap-2 px-4 py-2.5 bg-red-500 hover:bg-red-600 rounded-xl text-sm font-bold text-white shadow-xl transition-all active:scale-95"
                   >
-                    <Zap className="w-4 h-4" />
-                    {autoRetries > 0 ? `Fix with AI (retry ${autoRetries}/2)` : "Fix with AI"}
+                    <Wrench className="w-4 h-4" />
+                    {autoRetries > 0 ? `Fix with AI (retry ${autoRetries}/3)` : "Fix with AI"}
                   </button>
                 </motion.div>
               </>
