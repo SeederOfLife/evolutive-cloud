@@ -33,6 +33,16 @@ import { generateRefinementQuestions, buildFinalPrompt, RefinementQuestion } fro
 import { PromptRefiner } from "./components/PromptRefiner";
 import { AIProgress, AIStageIndex } from "./components/AIProgress";
 
+async function checkWebGPUSupport(): Promise<boolean> {
+  if (typeof navigator === 'undefined' || !('gpu' in navigator)) return false;
+  try {
+    const adapter = await (navigator as any).gpu.requestAdapter();
+    return adapter !== null;
+  } catch {
+    return false;
+  }
+}
+
 const MANIFEST_PROVIDERS = [
   { id: "google",    label: "Google Gemini", Icon: Globe,    model: "gemini-3-flash-preview" },
   { id: "openai",    label: "OpenAI GPT-4",  Icon: Zap,      model: "gpt-4o" },
@@ -51,7 +61,12 @@ const ONBOARDING_STEPS = [
   {
     title: "Welcome to Evolutive",
     body: "Turn any idea into a working app — games, tools, art, music — in seconds.",
-    note: "Free local AI is active by default. No API key needed to start.",
+    note: null, // rendered dynamically based on GPU support
+  },
+  {
+    title: "Choose Your AI",
+    body: "Pick how to power your apps. Google Gemini is free and works on any device — no GPU needed.",
+    note: null,
   },
   {
     title: "Describe your idea",
@@ -132,8 +147,25 @@ export default function App() {
     onBuild: (answers: Record<number, string>, editedTitle: string) => void;
     onSkip: (editedTitle: string) => void;
   } | null>(null);
+  const [webGPUSupported, setWebGPUSupported] = useState<boolean | null>(null);
+  const [showNoGPUBanner, setShowNoGPUBanner] = useState(false);
 
   const userApiKey = useMemo(() => providerKeys[aiProvider] || "", [providerKeys, aiProvider]);
+
+  // Detect WebGPU on mount — if unsupported and no explicit provider stored, fall back to Google
+  useEffect(() => {
+    checkWebGPUSupport().then(supported => {
+      setWebGPUSupported(supported);
+      if (!supported) {
+        const stored = localStorage.getItem('app_provider');
+        if (!stored || stored === 'web-llm') {
+          setAiProvider('google' as any);
+          setSelectedModel('gemini-3-flash-preview');
+          setShowNoGPUBanner(true);
+        }
+      }
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Track the peak countdown value for progress bar
   useEffect(() => {
@@ -735,7 +767,7 @@ Critical rules:
                   <div className="min-w-0">
                     <p className="text-sm text-indigo-200 font-medium leading-snug">No AI provider available</p>
                     <p className="text-[11px] text-indigo-400 mt-0.5 leading-snug">
-                      Add a free Google Gemini key to get started — or use OpenAI / Anthropic
+                      Add a free Google Gemini key at aistudio.google.com — takes 30 seconds, no credit card needed
                     </p>
                   </div>
                 </div>
@@ -817,6 +849,38 @@ Critical rules:
                 transition={{ duration: 1.5, repeat: Infinity }}
                 style={{ width: '100%' }}
               />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* No-GPU banner */}
+      <AnimatePresence>
+        {showNoGPUBanner && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="flex-none bg-indigo-950/60 border-b border-indigo-700/30 px-4 py-2.5 overflow-hidden"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <Cpu className="w-4 h-4 text-indigo-400 shrink-0" />
+                <p className="text-sm text-indigo-200 leading-snug min-w-0">
+                  Local AI unavailable on this device. Add a free Google Gemini key to start.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => { setShowSettings(true); setShowNoGPUBanner(false); }}
+                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-black uppercase tracking-widest rounded-lg transition-all whitespace-nowrap"
+                >
+                  Add Key
+                </button>
+                <button onClick={() => setShowNoGPUBanner(false)} className="text-indigo-500 hover:text-indigo-300">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           </motion.div>
         )}
@@ -1088,6 +1152,7 @@ Critical rules:
             setTestResponse={setTestResponse}
             settingsMessage={settingsMessage}
             setSettingsMessage={setSettingsMessage}
+            webGPUSupported={webGPUSupported}
           />
         )}
       </AnimatePresence>
@@ -1187,15 +1252,41 @@ Critical rules:
               >
                 <div className="w-12 h-12 bg-indigo-500/20 rounded-full flex items-center justify-center mx-auto mb-5">
                   {onboardingStep === 0 && <Sparkles className="w-6 h-6 text-indigo-400" />}
-                  {onboardingStep === 1 && <MessageSquare className="w-6 h-6 text-indigo-400" />}
-                  {onboardingStep === 2 && <Globe className="w-6 h-6 text-indigo-400" />}
+                  {onboardingStep === 1 && <Cpu className="w-6 h-6 text-indigo-400" />}
+                  {onboardingStep === 2 && <MessageSquare className="w-6 h-6 text-indigo-400" />}
+                  {onboardingStep === 3 && <Globe className="w-6 h-6 text-indigo-400" />}
                 </div>
                 <h2 className="text-white text-xl font-bold mb-2">{ONBOARDING_STEPS[onboardingStep].title}</h2>
                 <p className="text-gray-400 text-sm leading-relaxed">{ONBOARDING_STEPS[onboardingStep].body}</p>
-                {ONBOARDING_STEPS[onboardingStep].note && (
+
+                {/* Step 0: dynamic GPU note */}
+                {onboardingStep === 0 && (
                   <p className="text-indigo-400 text-xs mt-4 bg-indigo-500/10 rounded-lg px-3 py-2">
-                    {ONBOARDING_STEPS[onboardingStep].note}
+                    {webGPUSupported
+                      ? "Free local AI is active by default. No API key needed to start."
+                      : "Local AI requires a GPU. Add a free Google Gemini key to start — 30 seconds."}
                   </p>
+                )}
+
+                {/* Step 1: provider selection */}
+                {onboardingStep === 1 && (
+                  <div className="mt-4 grid grid-cols-2 gap-2">
+                    {MANIFEST_PROVIDERS.filter(p => webGPUSupported !== false || p.id !== 'web-llm').map(p => (
+                      <button
+                        key={p.id}
+                        onClick={() => { setAiProvider(p.id as any); setSelectedModel(p.model); }}
+                        className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border text-sm font-medium transition-all ${
+                          aiProvider === p.id
+                            ? 'bg-indigo-500/20 border-indigo-500/50 text-indigo-300'
+                            : 'bg-gray-800 border-gray-700 text-gray-400 hover:text-white hover:border-gray-600'
+                        }`}
+                      >
+                        <p.Icon className="w-4 h-4 shrink-0" />
+                        <span className="truncate">{p.label}</span>
+                        {aiProvider === p.id && <span className="ml-auto w-1.5 h-1.5 rounded-full bg-indigo-400 shrink-0" />}
+                      </button>
+                    ))}
+                  </div>
                 )}
                 <div className="flex items-center justify-between mt-7">
                   <div className="flex gap-1.5">
@@ -1497,6 +1588,7 @@ interface SettingsModalProps {
   setTestResponse: (r: string | null) => void;
   settingsMessage?: string | null;
   setSettingsMessage?: (m: string | null) => void;
+  webGPUSupported?: boolean | null;
 }
 
 const MODELS: Record<string, { value: string; label: string }[]> = {
@@ -1542,7 +1634,7 @@ function SettingsModal({
   userApiKey, saveApiKeyToAccount, customEndpoint, setCustomEndpoint,
   forceCloud, setForceCloud, aiConfig, setAiConfig, providerHealth,
   checkHealth, isTestingAI, testResponse, handleTestNeuralLink, setTestResponse,
-  settingsMessage, setSettingsMessage,
+  settingsMessage, setSettingsMessage, webGPUSupported,
 }: SettingsModalProps) {
   const providers = ["google", "openai", "anthropic", "custom", "web-llm"] as const;
   const providerModels = MODELS[aiProvider] || [];
@@ -1618,7 +1710,17 @@ function SettingsModal({
                       {g.badge}
                     </span>
                   )}
+                  {aiProvider === 'web-llm' && (
+                    <span className="text-[10px] text-gray-500 font-medium">Requires GPU</span>
+                  )}
                 </div>
+                {/* WebGPU not available warning */}
+                {aiProvider === 'web-llm' && webGPUSupported === false && (
+                  <div className="flex items-start gap-2 mb-3 p-3 bg-amber-900/30 border border-amber-700/40 rounded-lg text-xs text-amber-300 leading-relaxed">
+                    <Cpu className="w-3.5 h-3.5 shrink-0 mt-0.5 text-amber-400" />
+                    Your device doesn't support local AI (no compatible GPU). Try Google Gemini (free) or OpenAI instead.
+                  </div>
+                )}
                 {needsKey && (
                   <div className="flex gap-2">
                     <input
