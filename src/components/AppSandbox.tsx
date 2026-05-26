@@ -232,7 +232,7 @@ body{background:#050508;color:#fff;margin:0;min-height:100vh;display:flex;flex-d
       srcDoc={srcDoc}
       className={`w-full h-full border-none bg-black ${className}`}
       title="app-sandbox"
-      sandbox="allow-scripts"
+      sandbox="allow-scripts allow-same-origin"
     />
   );
 }

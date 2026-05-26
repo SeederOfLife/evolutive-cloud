@@ -21,7 +21,7 @@ import {
 import { db } from "./lib/firebase";
 import { Suggestion, Advice, ProjectConfig, EvolutionVersion } from "./types";
 import { AppSandbox } from "./components/AppSandbox";
-import { EvolutiveSeed, ModuleNode, Nebula, OrbitRing } from "./components/ThreeWorld";
+import { EvolutiveSeed, ModuleNode, Nebula, OrbitRing, GalaxyField, ForkLines } from "./components/ThreeWorld";
 import { ScrollFeed } from "./components/ScrollFeed";
 import { useQuota } from "./hooks/useQuota";
 import { useAuth } from "./hooks/useAuth";
@@ -170,6 +170,7 @@ export default function App() {
   });
   // userId → short display name for linked accounts
   const [linkedUserMap, setLinkedUserMap] = useState<Map<string, string>>(new Map());
+  const nodePositionsRef = useRef(new Map<string, THREE.Vector3>());
   const [wateringId, setWateringId] = useState<string | null>(null);
   const [showWaterDialog, setShowWaterDialog] = useState(false);
   const [pendingEvolution, setPendingEvolution] = useState<AppEvolution | null>(null);
@@ -1007,6 +1008,7 @@ Critical rules:
             <pointLight position={[-10, -10, -10]} intensity={1} color="#6366f1" />
             <EvolutiveSeed onClick={() => setView("hub")} isOpen={view === "hub"} />
             <Nebula />
+            <GalaxyField />
             <OrbitRing radius={3.5} opacity={0.18} color="#818cf8" />
             <OrbitRing radius={5.0} opacity={0.11} color="#6366f1" />
             <OrbitRing radius={6.5} opacity={0.07} color="#4f46e5" />
@@ -1021,8 +1023,13 @@ Critical rules:
                   linkedFromLabel={s.user_id && linkedUserMap.has(s.user_id) ? linkedUserMap.get(s.user_id) : undefined}
                   isWatering={wateringId === s.id}
                   forkCount={suggestions.filter(f => f.parent_id === s.id).length}
+                  posRef={nodePositionsRef}
                 />
               ))}
+            <ForkLines
+              suggestions={allSuggestions.filter(s => s.status === "built" && !!s.built_code)}
+              posRef={nodePositionsRef}
+            />
             <OrbitControls
               enableZoom={false}
               enablePan={false}
@@ -2303,6 +2310,57 @@ function AuthModal({
   );
 }
 
+// ── CHAT INPUT BAR (defined OUTSIDE LaunchModal so component identity is stable) ──
+// If defined inside LaunchModal, React sees a new type every keystroke → unmount/remount → focus lost.
+const ChatInputBar = React.memo(function ChatInputBar({
+  lastError,
+  isFixing,
+  onSend,
+}: {
+  lastError: string | null;
+  isFixing: boolean;
+  onSend: (text: string) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const submit = () => {
+    const text = inputRef.current?.value.trim() ?? "";
+    if (!text || isFixing) return;
+    onSend(text);
+    if (inputRef.current) inputRef.current.value = "";
+  };
+
+  return (
+    <div className="flex-none p-3 border-t border-gray-800 space-y-2">
+      {lastError && !isFixing && (
+        <button
+          onClick={() => onSend(`Fix this error: ${lastError}`)}
+          className="w-full flex items-center justify-center gap-1.5 py-2 bg-red-500/15 hover:bg-red-500/25 border border-red-500/25 rounded-lg text-[11px] font-bold text-red-400 transition-all"
+        >
+          <Wrench className="w-3 h-3" /> Fix Error
+        </button>
+      )}
+      <div className="flex gap-2">
+        <input
+          ref={inputRef}
+          type="text"
+          onKeyDown={e => e.key === "Enter" && !e.shiftKey && submit()}
+          placeholder="Improve or change this app..."
+          disabled={isFixing}
+          className="flex-1 min-w-0 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-[11px] text-white placeholder:text-gray-500 focus:outline-none focus:border-indigo-500 transition-colors disabled:opacity-40"
+        />
+        <button
+          onClick={submit}
+          disabled={isFixing}
+          className="w-9 h-9 bg-indigo-500 hover:bg-indigo-600 disabled:opacity-40 rounded-lg flex items-center justify-center text-white transition-all shrink-0"
+        >
+          {isFixing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ArrowRight className="w-3.5 h-3.5" />}
+        </button>
+      </div>
+    </div>
+  );
+});
+
 // ── LAUNCH MODAL ──────────────────────────────────────────────────────────────
 
 function LaunchModal({
@@ -2347,7 +2405,6 @@ function LaunchModal({
   const [showChat, setShowChat] = useState(false);
   const [showPlan, setShowPlan] = useState(false);
   const [showJourney, setShowJourney] = useState(false);
-  const [chatInput, setChatInput] = useState("");
   const [messages, setMessages] = useState<{ role: "user" | "ai"; text: string }[]>([]);
   const desktopChatEndRef = useRef<HTMLDivElement>(null);
   const mobileChatEndRef = useRef<HTMLDivElement>(null);
@@ -2387,10 +2444,8 @@ function LaunchModal({
     mobileChatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const sendMessage = async (override?: string) => {
-    const text = override ?? chatInput.trim();
-    if (!text || !onRefine || isFixing) return;
-    setChatInput("");
+  const sendMessage = async (text: string) => {
+    if (!text?.trim() || !onRefine || isFixing) return;
     setMessages(prev => [...prev, { role: "user", text }]);
     setIsFixing(true);
     try {
@@ -2440,37 +2495,6 @@ function LaunchModal({
         </div>
       ))}
       <div ref={endRef} />
-    </div>
-  );
-
-  const ChatInput = () => (
-    <div className="flex-none p-3 border-t border-gray-800 space-y-2">
-      {lastError && !isFixing && (
-        <button
-          onClick={() => sendMessage(`Fix this error: ${lastError}`)}
-          className="w-full flex items-center justify-center gap-1.5 py-2 bg-red-500/15 hover:bg-red-500/25 border border-red-500/25 rounded-lg text-[11px] font-bold text-red-400 transition-all"
-        >
-          <Wrench className="w-3 h-3" /> Fix Error
-        </button>
-      )}
-      <div className="flex gap-2">
-        <input
-          type="text"
-          value={chatInput}
-          onChange={e => setChatInput(e.target.value)}
-          onKeyDown={e => e.key === "Enter" && !e.shiftKey && sendMessage()}
-          placeholder="Improve or change this app..."
-          disabled={isFixing}
-          className="flex-1 min-w-0 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-[11px] text-white placeholder:text-gray-500 focus:outline-none focus:border-indigo-500 transition-colors disabled:opacity-40"
-        />
-        <button
-          onClick={() => sendMessage()}
-          disabled={!chatInput.trim() || isFixing}
-          className="w-9 h-9 bg-indigo-500 hover:bg-indigo-600 disabled:opacity-40 rounded-lg flex items-center justify-center text-white transition-all shrink-0"
-        >
-          {isFixing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ArrowRight className="w-3.5 h-3.5" />}
-        </button>
-      </div>
     </div>
   );
 
@@ -2757,7 +2781,7 @@ function LaunchModal({
                   {isFixing && <Loader2 className="w-3 h-3 text-indigo-400 animate-spin" />}
                 </div>
                 <ChatMessages endRef={desktopChatEndRef} />
-                <ChatInput />
+                <ChatInputBar lastError={lastError} isFixing={isFixing} onSend={sendMessage} />
               </motion.div>
             )}
           </AnimatePresence>
@@ -2790,7 +2814,7 @@ function LaunchModal({
               </div>
             </div>
             <ChatMessages endRef={mobileChatEndRef} />
-            <ChatInput />
+            <ChatInputBar lastError={lastError} isFixing={isFixing} onSend={sendMessage} />
           </motion.div>
         )}
       </AnimatePresence>

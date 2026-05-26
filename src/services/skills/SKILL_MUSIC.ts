@@ -18,9 +18,21 @@ SANDBOX GLOBALS AVAILABLE:
 - React 18 (useState, useEffect, useRef, useCallback)
 - ReactDOM.createRoot
 - Tailwind CSS classes
-- Web Audio API (AudioContext, OscillatorNode, GainNode, AnalyserNode, BiquadFilterNode)
+- Web Audio API — FULLY AVAILABLE: AudioContext, OscillatorNode, GainNode, AnalyserNode, BiquadFilterNode
+  (sandbox uses allow-same-origin so Web Audio works; AudioContext still requires a user gesture)
 - Lucide icons (Play, Pause, Volume2, Music, etc.)
 - Framer Motion (motion.div, AnimatePresence)
+
+CORRECT AudioContext PATTERN — copy this exactly:
+  const audioCtxRef = useRef(null);
+  const handleClick = () => {
+    if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
+    const osc = audioCtxRef.current.createOscillator();
+    osc.connect(audioCtxRef.current.destination);
+    osc.start();
+    osc.stop(audioCtxRef.current.currentTime + 0.3);
+  };
+  // AudioContext MUST be created inside a click/pointerdown handler — never on mount
 
 AUDIO PATTERNS:
 1. AudioContext: create once in onClick, store in ref — \`if (!ctx.current) ctx.current = new AudioContext()\`

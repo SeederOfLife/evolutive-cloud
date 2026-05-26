@@ -17,6 +17,42 @@ function seededRand(seed: string, n: number): number {
   return ((h ^ (h >>> 16)) >>> 0) / 0xffffffff;
 }
 
+// ── GALAXY FIELD: 200 deep-space sparkles in two loose arms ───────────────────
+export function GalaxyField() {
+  const ref = useRef<THREE.Points>(null!);
+  const timeRef = useRef(0);
+
+  const positions = useMemo(() => {
+    const pos = new Float32Array(200 * 3);
+    for (let i = 0; i < 200; i++) {
+      const arm = i % 2;
+      const armBase = arm * Math.PI;
+      const spread = (Math.random() - 0.5) * 2.2;
+      const r = 9 + Math.random() * 22;
+      const angle = armBase + spread;
+      pos[i * 3]     = Math.cos(angle) * r;
+      pos[i * 3 + 2] = Math.sin(angle) * r;
+      pos[i * 3 + 1] = (Math.random() - 0.5) * r * 0.22;
+    }
+    return pos;
+  }, []);
+
+  useFrame((_, delta) => {
+    timeRef.current += delta;
+    if (ref.current) ref.current.rotation.y = timeRef.current * 0.006;
+  });
+
+  return (
+    <points ref={ref}>
+      <bufferGeometry>
+        <bufferAttribute attach="attributes-position" count={200} array={positions} itemSize={3} />
+      </bufferGeometry>
+      <pointsMaterial size={0.045} color="#aad4ff" transparent opacity={0.28} sizeAttenuation blending={THREE.AdditiveBlending} depthWrite={false} />
+    </points>
+  );
+}
+
+// ── SEED PARTICLES: emitted from the central sun ──────────────────────────────
 function SeedParticles({ count = 80 }: { count?: number }) {
   const pointsRef = useRef<THREE.Points>(null!);
 
@@ -69,8 +105,8 @@ function SeedParticles({ count = 80 }: { count?: number }) {
   );
 }
 
+// ── EVOLUTIVE SEED: the central star with organic irregular heartbeat ──────────
 const CORE_R = 0.9;
-const PULSE_FREQ = (2 * Math.PI) / 3; // 3-second breathing cycle
 
 export function EvolutiveSeed({ onClick, isOpen }: { onClick: () => void, isOpen: boolean }) {
   const coreRef = useRef<THREE.Mesh>(null!);
@@ -99,18 +135,22 @@ export function EvolutiveSeed({ onClick, isOpen }: { onClick: () => void, isOpen
     timeRef.current += delta;
     const t = timeRef.current;
 
-    // Slow breathing pulse: 0.95 → 1.05 over 3 seconds
-    const pulse = 1 + Math.sin(t * PULSE_FREQ) * 0.05;
+    // Irregular heartbeat: overlapping sines at non-harmonic frequencies
+    const pulse = 1
+      + Math.sin(t * 2.09) * 0.05      // main beat
+      + Math.sin(t * 3.77) * 0.022     // fast flutter
+      + Math.sin(t * 0.61) * 0.018     // slow swell
+      + Math.sin(t * 5.13) * 0.008;    // micro tremor
+
     if (coreRef.current) coreRef.current.scale.setScalar(pulse);
     if (corona1Ref.current) corona1Ref.current.scale.setScalar(pulse * (1 + Math.sin(t * 0.4 + 0.4) * 0.03));
     if (corona2Ref.current) corona2Ref.current.scale.setScalar(pulse * (1 + Math.sin(t * 0.35 + 0.8) * 0.04));
     if (corona3Ref.current) corona3Ref.current.scale.setScalar(pulse * (1 + Math.sin(t * 0.28 + 1.2) * 0.05));
 
-    // Emissive color: warm white-yellow cycling with subtle drift
     if (coreMat.current) {
-      const warm = 0.82 + Math.sin(t * 0.2) * 0.18;
-      coreMat.current.emissive.setRGB(1, warm, Math.max(0.55, warm * 0.65));
-      coreMat.current.emissiveIntensity = (isOpen ? 5 : 3.5) + Math.sin(t * PULSE_FREQ) * 0.5;
+      const warm = 0.82 + Math.sin(t * 0.23) * 0.18 + Math.sin(t * 0.71) * 0.06;
+      coreMat.current.emissive.setRGB(1, Math.min(1, warm), Math.max(0.45, warm * 0.6));
+      coreMat.current.emissiveIntensity = (isOpen ? 5 : 3.5) + Math.sin(t * 2.09) * 0.5 + Math.sin(t * 3.77) * 0.2;
     }
 
     if (raysRef.current) raysRef.current.rotation.y = t * 0.07;
@@ -121,31 +161,26 @@ export function EvolutiveSeed({ onClick, isOpen }: { onClick: () => void, isOpen
       <pointLight color="#fff8d0" intensity={isOpen ? 8 : 5} distance={25} decay={1.5} />
       <pointLight color="#a0c8ff" intensity={isOpen ? 2.5 : 1.5} distance={10} decay={2} />
 
-      {/* Innermost core: bright white-yellow */}
       <mesh ref={coreRef}>
         <sphereGeometry args={[CORE_R, 64, 64]} />
         <meshStandardMaterial ref={coreMat} color="#ffffd0" emissive="#ffffd0" emissiveIntensity={4} metalness={0} roughness={0.02} />
       </mesh>
 
-      {/* Middle corona: warm gold */}
       <mesh ref={corona1Ref}>
         <sphereGeometry args={[1.4, 32, 32]} />
         <meshBasicMaterial color="#ffcc44" transparent opacity={0.35} depthWrite={false} blending={THREE.AdditiveBlending} />
       </mesh>
 
-      {/* Outer halo: pale blue-white */}
       <mesh ref={corona2Ref}>
         <sphereGeometry args={[2.2, 32, 32]} />
         <meshBasicMaterial color="#aaddff" transparent opacity={0.12} depthWrite={false} blending={THREE.AdditiveBlending} />
       </mesh>
 
-      {/* Far diffuse warmth — stays well inside 3.5 min orbit */}
       <mesh ref={corona3Ref}>
         <sphereGeometry args={[3.0, 32, 32]} />
         <meshBasicMaterial color="#ffe8aa" transparent opacity={0.04} depthWrite={false} blending={THREE.AdditiveBlending} />
       </mesh>
 
-      {/* Light rays: thin, golden, transparent */}
       <group ref={raysRef}>
         {rayData.map((ray, i) => (
           <mesh key={i} position={ray.pos} rotation={ray.euler}>
@@ -160,138 +195,227 @@ export function EvolutiveSeed({ onClick, isOpen }: { onClick: () => void, isOpen
   );
 }
 
-export function ModuleNode({ suggestion, onRun, linkedFromLabel, isWatering, forkCount }: {
+// ── MODULE NODE: icosahedron crystal, spiral arms, inclined orbit, trailing wisps ──
+const TRAIL_LEN = 7;
+const NODE_COLORS = ["#ff006e", "#3a86ff", "#fb5607", "#ffbe0b", "#8338ec", "#00f5d4", "#06d6a0"];
+
+export function ModuleNode({ suggestion, onRun, linkedFromLabel, isWatering, forkCount, posRef }: {
   suggestion: Suggestion;
   onRun: (s: Suggestion) => void;
   linkedFromLabel?: string;
   isWatering?: boolean;
   forkCount?: number;
+  posRef?: React.MutableRefObject<Map<string, THREE.Vector3>>;
 }) {
   const meshRef = useRef<THREE.Mesh>(null!);
   const moonRef = useRef<THREE.Mesh>(null!);
+  const trailRef = useRef<THREE.Points>(null!);
+  const trailBuf = useRef(new Float32Array(TRAIL_LEN * 3));
   const timeRef = useRef(0);
   const [hovered, setHovered] = useState(false);
 
   const evolutionCount = suggestion.evolutions?.length ?? 0;
   const lastEvolved = suggestion.evolutions?.[0]?.timestamp;
   const msSinceWater = lastEvolved ? Date.now() - new Date(lastEvolved).getTime() : Infinity;
-  const isRecent = msSinceWater < 60 * 60 * 1000; // < 1 hour
-  const isNeglected = msSinceWater > 30 * 24 * 60 * 60 * 1000; // > 30 days
+  const isRecent = msSinceWater < 60 * 60 * 1000;
+  const isNeglected = msSinceWater > 30 * 24 * 60 * 60 * 1000;
 
-  const { radius, speed, offset, yOffset, color, nodeSize } = useMemo(() => {
-    const colors = ["#ff006e", "#3a86ff", "#fb5607", "#ffbe0b", "#8338ec", "#00f5d4"];
+  const { radius, speed, offset, yOffset, incl, color, nodeSize } = useMemo(() => {
     const id = suggestion.id;
-    // Size grows with evolution count: base 0.15, +0.025 per evolution, cap at 0.4
-    const nodeSize = Math.min(0.15 + evolutionCount * 0.025, 0.4);
+    const nodeSize = Math.min(0.16 + evolutionCount * 0.028, 0.44);
+    // Spiral arm: bias orbit starting angle toward one of two arms (0° or 180°)
+    const arm = Math.floor(seededRand(id, 5) * 2);
+    const armBase = arm * Math.PI;
+    const spread = (seededRand(id, 6) - 0.5) * 1.7;
+    const offset = armBase + spread;
+    // Orbit inclination: tilt plane out of horizontal by ±25°
+    const incl = (seededRand(id, 4) - 0.5) * 0.9;
     return {
       nodeSize,
       radius: 3.5 + (1 - (suggestion.energy || 0) / 100) * 4,
-      speed: 0.1 + seededRand(id, 0) * 0.2,
-      offset: seededRand(id, 1) * Math.PI * 2,
-      yOffset: (seededRand(id, 2) - 0.5) * 2,
-      color: linkedFromLabel ? "#34d399" : colors[Math.floor(seededRand(id, 3) * colors.length)]
+      speed: 0.08 + seededRand(id, 0) * 0.18,
+      offset,
+      incl,
+      yOffset: (seededRand(id, 2) - 0.5) * 1.5,
+      color: linkedFromLabel ? "#34d399" : NODE_COLORS[Math.floor(seededRand(id, 3) * NODE_COLORS.length)],
     };
   }, [suggestion.id, suggestion.energy, linkedFromLabel, evolutionCount]);
 
-  // Glow: bright if recent, dim if neglected, pulse if watering
-  const baseGlow = isWatering ? 3.5 : isRecent ? 2.8 : isNeglected ? 0.5 : 1.5;
+  const baseGlow = isWatering ? 3.5 : isRecent ? 2.8 : isNeglected ? 0.5 : 1.6;
+  const opacity = isNeglected ? 0.4 : 0.92;
 
-  useFrame((state, delta) => {
+  useFrame((_, delta) => {
     if (!meshRef.current) return;
     timeRef.current += delta;
-    const time = timeRef.current;
-    const t = time * speed + offset;
-    meshRef.current.position.x = Math.cos(t) * radius;
-    meshRef.current.position.z = Math.sin(t) * radius;
-    meshRef.current.position.y = yOffset + Math.sin(t * 2) * 0.5;
-    meshRef.current.rotation.y += 0.01;
+    const t = timeRef.current;
+    const orbitT = t * speed + offset;
 
-    // Pulse scale when watering
-    if (isWatering) {
-      const pulse = 1 + Math.sin(time * 6) * 0.15;
-      meshRef.current.scale.setScalar(pulse);
-    } else {
-      meshRef.current.scale.setScalar(1);
-    }
+    // Inclined orbit: tilt the XZ plane by `incl` around the X axis
+    const orbX = Math.cos(orbitT) * radius;
+    const orbZ = Math.sin(orbitT) * radius;
+    meshRef.current.position.x = orbX;
+    meshRef.current.position.y = orbZ * Math.sin(incl) + yOffset + Math.sin(orbitT * 1.7) * 0.28;
+    meshRef.current.position.z = orbZ * Math.cos(incl);
 
-    // Orbit moon around parent node
+    // Organic breathing wobble — per-axis, non-harmonic
+    const wobbleScale = isWatering ? (1 + Math.sin(t * 6) * 0.15) : 1;
+    meshRef.current.scale.set(
+      wobbleScale * (1 + Math.sin(t * 2.1 + offset) * 0.07),
+      wobbleScale * (1 + Math.sin(t * 1.67 + offset + 1.1) * 0.07),
+      wobbleScale * (1 + Math.sin(t * 2.43 + offset + 2.2) * 0.07),
+    );
+    meshRef.current.rotation.x += delta * 0.3;
+    meshRef.current.rotation.y += delta * 0.5;
+
+    // Moon orbit (local to mesh, so it orbits the node)
     if (moonRef.current && forkCount && forkCount > 0) {
-      const mt = time * 1.8;
-      moonRef.current.position.x = Math.cos(mt) * (nodeSize * 3);
-      moonRef.current.position.z = Math.sin(mt) * (nodeSize * 3);
-      moonRef.current.position.y = 0;
+      const mt = t * 1.8;
+      moonRef.current.position.x = Math.cos(mt) * (nodeSize * 3.5);
+      moonRef.current.position.z = Math.sin(mt) * (nodeSize * 3.5);
+      moonRef.current.position.y = Math.sin(mt * 0.7) * (nodeSize * 1.2);
     }
+
+    // Trail: shift buffer back, push current world position at front
+    for (let i = TRAIL_LEN - 1; i > 0; i--) {
+      trailBuf.current[i * 3]     = trailBuf.current[(i - 1) * 3];
+      trailBuf.current[i * 3 + 1] = trailBuf.current[(i - 1) * 3 + 1];
+      trailBuf.current[i * 3 + 2] = trailBuf.current[(i - 1) * 3 + 2];
+    }
+    trailBuf.current[0] = meshRef.current.position.x;
+    trailBuf.current[1] = meshRef.current.position.y;
+    trailBuf.current[2] = meshRef.current.position.z;
+    if (trailRef.current) {
+      (trailRef.current.geometry.attributes.position as THREE.BufferAttribute).needsUpdate = true;
+    }
+
+    // Report position for fork lines
+    if (posRef) posRef.current.set(suggestion.id, meshRef.current.position.clone());
   });
 
   const label = suggestion.content.length > 28
     ? suggestion.content.substring(0, 28) + "…"
     : suggestion.content;
 
-  const opacity = isNeglected ? 0.4 : 0.9;
-
   return (
-    <mesh
-      ref={meshRef}
-      onClick={(e) => { e.stopPropagation(); onRun(suggestion); }}
-      onPointerOver={() => { setHovered(true); document.body.style.cursor = "pointer"; }}
-      onPointerOut={() => { setHovered(false); document.body.style.cursor = "default"; }}
-    >
-      <sphereGeometry args={[nodeSize, 32, 32]} />
-      <meshStandardMaterial
-        color={hovered ? "#fff" : color}
-        emissive={hovered ? "#fff" : color}
-        emissiveIntensity={hovered ? 2 : baseGlow}
-        metalness={0.9}
-        roughness={0.1}
-        transparent
-        opacity={opacity}
-      />
-      {/* Moon for forked apps */}
-      {forkCount && forkCount > 0 && (
-        <mesh ref={moonRef}>
-          <sphereGeometry args={[nodeSize * 0.35, 16, 16]} />
-          <meshStandardMaterial
-            color="#a5b4fc"
-            emissive="#a5b4fc"
-            emissiveIntensity={1}
-            transparent
-            opacity={0.7}
-          />
-        </mesh>
-      )}
-      {hovered && (
-        <Html center position={[0, nodeSize + 0.25, 0]} zIndexRange={[100, 0]}>
-          <div style={{
-            background: "rgba(9,9,11,0.92)",
-            border: `1px solid ${linkedFromLabel ? "rgba(52,211,153,0.4)" : "rgba(99,102,241,0.4)"}`,
-            borderRadius: "8px",
-            padding: "5px 10px",
-            fontSize: "10px",
-            fontWeight: "700",
-            color: "white",
-            whiteSpace: "nowrap",
-            pointerEvents: "none",
-            letterSpacing: "0.3px",
-            boxShadow: "0 4px 16px rgba(0,0,0,0.6)",
-          }}>
-            {label}
-            {evolutionCount > 0 && (
-              <span style={{ display: "block", fontSize: "9px", fontWeight: "600", color: "#67e8f9", marginTop: "2px", opacity: 0.9 }}>
-                gen {evolutionCount + 1} · {isRecent ? "just watered" : isNeglected ? "needs water" : "growing"}
-              </span>
-            )}
-            {linkedFromLabel && (
-              <span style={{ display: "block", fontSize: "9px", fontWeight: "600", color: "#34d399", marginTop: "2px", opacity: 0.9 }}>
-                from @{linkedFromLabel}
-              </span>
-            )}
-          </div>
-        </Html>
-      )}
-    </mesh>
+    <group>
+      <mesh
+        ref={meshRef}
+        onClick={(e) => { e.stopPropagation(); onRun(suggestion); }}
+        onPointerOver={() => { setHovered(true); document.body.style.cursor = "pointer"; }}
+        onPointerOut={() => { setHovered(false); document.body.style.cursor = "default"; }}
+      >
+        {/* Icosahedron: angular crystal, organic bioluminescent feel */}
+        <icosahedronGeometry args={[nodeSize, 1]} />
+        <meshStandardMaterial
+          color={hovered ? "#fff" : color}
+          emissive={hovered ? "#fff" : color}
+          emissiveIntensity={hovered ? 2.5 : baseGlow}
+          metalness={0.6}
+          roughness={0.25}
+          transparent
+          opacity={opacity}
+        />
+
+        {/* Moon for forked apps — orbits in local space */}
+        {forkCount && forkCount > 0 && (
+          <mesh ref={moonRef}>
+            <icosahedronGeometry args={[nodeSize * 0.3, 0]} />
+            <meshStandardMaterial color="#a5b4fc" emissive="#a5b4fc" emissiveIntensity={1.2} transparent opacity={0.75} />
+          </mesh>
+        )}
+
+        {hovered && (
+          <Html center position={[0, nodeSize + 0.3, 0]} zIndexRange={[100, 0]}>
+            <div style={{
+              background: "rgba(9,9,11,0.93)",
+              border: `1px solid ${linkedFromLabel ? "rgba(52,211,153,0.45)" : "rgba(99,102,241,0.45)"}`,
+              borderRadius: "8px",
+              padding: "5px 10px",
+              fontSize: "10px",
+              fontWeight: "700",
+              color: "white",
+              whiteSpace: "nowrap",
+              pointerEvents: "none",
+              letterSpacing: "0.3px",
+              boxShadow: "0 4px 16px rgba(0,0,0,0.65)",
+            }}>
+              {label}
+              {evolutionCount > 0 && (
+                <span style={{ display: "block", fontSize: "9px", fontWeight: "600", color: "#67e8f9", marginTop: "2px", opacity: 0.9 }}>
+                  gen {evolutionCount + 1} · {isRecent ? "just watered" : isNeglected ? "needs water" : "growing"}
+                </span>
+              )}
+              {linkedFromLabel && (
+                <span style={{ display: "block", fontSize: "9px", fontWeight: "600", color: "#34d399", marginTop: "2px", opacity: 0.9 }}>
+                  from @{linkedFromLabel}
+                </span>
+              )}
+            </div>
+          </Html>
+        )}
+      </mesh>
+
+      {/* Trailing wisp — positions updated each frame from trailBuf */}
+      <points ref={trailRef}>
+        <bufferGeometry>
+          <bufferAttribute attach="attributes-position" count={TRAIL_LEN} array={trailBuf.current} itemSize={3} />
+        </bufferGeometry>
+        <pointsMaterial size={nodeSize * 0.22} color={color} transparent opacity={0.22} sizeAttenuation blending={THREE.AdditiveBlending} depthWrite={false} />
+      </points>
+    </group>
   );
 }
 
+// ── FORK LINES: glowing threads showing lineage between parent and child nodes ──
+export function ForkLines({ suggestions, posRef }: {
+  suggestions: Suggestion[];
+  posRef: React.MutableRefObject<Map<string, THREE.Vector3>>;
+}) {
+  const linesRef = useRef<THREE.LineSegments>(null!);
+
+  const forkPairs = useMemo(() =>
+    suggestions
+      .filter(s => s.parent_id && suggestions.some(p => p.id === s.parent_id))
+      .map(s => ({ child: s.id, parent: s.parent_id! }))
+      .slice(0, 20),
+    [suggestions]
+  );
+
+  const lineCount = forkPairs.length;
+  // 2 endpoints × 3 floats per pair; minimum 6 to avoid zero-length buffer
+  const posArray = useRef(new Float32Array(Math.max(lineCount * 6, 6)));
+
+  useFrame(() => {
+    if (!linesRef.current || lineCount === 0) return;
+    const map = posRef.current;
+    for (let i = 0; i < lineCount; i++) {
+      const child = map.get(forkPairs[i].child);
+      const parent = map.get(forkPairs[i].parent);
+      if (child && parent) {
+        posArray.current[i * 6 + 0] = child.x;
+        posArray.current[i * 6 + 1] = child.y;
+        posArray.current[i * 6 + 2] = child.z;
+        posArray.current[i * 6 + 3] = parent.x;
+        posArray.current[i * 6 + 4] = parent.y;
+        posArray.current[i * 6 + 5] = parent.z;
+      }
+    }
+    (linesRef.current.geometry.attributes.position as THREE.BufferAttribute).needsUpdate = true;
+  });
+
+  if (lineCount === 0) return null;
+
+  return (
+    <lineSegments ref={linesRef}>
+      <bufferGeometry>
+        <bufferAttribute attach="attributes-position" count={lineCount * 2} array={posArray.current} itemSize={3} />
+      </bufferGeometry>
+      <lineBasicMaterial color="#818cf8" transparent opacity={0.22} blending={THREE.AdditiveBlending} depthWrite={false} />
+    </lineSegments>
+  );
+}
+
+// ── ORBIT RING ────────────────────────────────────────────────────────────────
 export function OrbitRing({ radius, opacity = 0.12, color = "#6366f1" }: { radius: number; opacity?: number; color?: string }) {
   const ref = useRef<THREE.Mesh>(null!);
   useFrame((_, delta) => {
@@ -305,21 +429,21 @@ export function OrbitRing({ radius, opacity = 0.12, color = "#6366f1" }: { radiu
   );
 }
 
+// ── NEBULA: vast star-field backdrop ─────────────────────────────────────────
 export function Nebula({ count = 4000 }) {
   const timeRef = useRef(0);
   const groupRef = useRef<THREE.Group>(null!);
-  
+
   const circleTexture = useMemo(() => {
-    const canvas = document.createElement('canvas');
-    canvas.width = 64;
-    canvas.height = 64;
-    const ctx = canvas.getContext('2d');
+    const canvas = document.createElement("canvas");
+    canvas.width = 64; canvas.height = 64;
+    const ctx = canvas.getContext("2d");
     if (ctx) {
       const gradient = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
-      gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
-      gradient.addColorStop(0.2, 'rgba(255, 255, 255, 0.8)');
-      gradient.addColorStop(0.5, 'rgba(99, 102, 241, 0.2)');
-      gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      gradient.addColorStop(0, "rgba(255,255,255,1)");
+      gradient.addColorStop(0.2, "rgba(255,255,255,0.8)");
+      gradient.addColorStop(0.5, "rgba(99,102,241,0.2)");
+      gradient.addColorStop(1, "rgba(0,0,0,0)");
       ctx.fillStyle = gradient;
       ctx.fillRect(0, 0, 64, 64);
     }
@@ -330,32 +454,25 @@ export function Nebula({ count = 4000 }) {
     const p = new Float32Array(count * 3);
     const c = new Float32Array(count * 3);
     const palette = [
-      new THREE.Color("#6366f1"),
-      new THREE.Color("#818cf8"),
-      new THREE.Color("#4f46e5"),
-      new THREE.Color("#c084fc"),
+      new THREE.Color("#6366f1"), new THREE.Color("#818cf8"),
+      new THREE.Color("#4f46e5"), new THREE.Color("#c084fc"),
       new THREE.Color("#2dd4bf"),
     ];
-
     for (let i = 0; i < count; i++) {
       const r = 10 + Math.random() * 40;
       const theta = Math.random() * Math.PI * 2;
       const phi = Math.acos(2 * Math.random() - 1);
-      
-      p[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+      p[i * 3]     = r * Math.sin(phi) * Math.cos(theta);
       p[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
       p[i * 3 + 2] = r * Math.cos(phi);
-      
       const col = palette[Math.floor(Math.random() * palette.length)];
-      c[i * 3] = col.r;
-      c[i * 3 + 1] = col.g;
-      c[i * 3 + 2] = col.b;
+      c[i * 3] = col.r; c[i * 3 + 1] = col.g; c[i * 3 + 2] = col.b;
     }
     return { points: p, colors: c };
   }, [count]);
 
   const matRef = useRef<THREE.PointsMaterial>(null!);
-  useFrame((state, delta) => {
+  useFrame((_, delta) => {
     if (!matRef.current || !groupRef.current) return;
     timeRef.current += delta;
     const time = timeRef.current;
@@ -368,18 +485,8 @@ export function Nebula({ count = 4000 }) {
     <group ref={groupRef}>
       <points>
         <bufferGeometry>
-          <bufferAttribute
-            attach="attributes-position"
-            count={points.length / 3}
-            array={points}
-            itemSize={3}
-          />
-          <bufferAttribute
-            attach="attributes-color"
-            count={colors.length / 3}
-            array={colors}
-            itemSize={3}
-          />
+          <bufferAttribute attach="attributes-position" count={points.length / 3} array={points} itemSize={3} />
+          <bufferAttribute attach="attributes-color" count={colors.length / 3} array={colors} itemSize={3} />
         </bufferGeometry>
         <pointsMaterial
           ref={matRef}
