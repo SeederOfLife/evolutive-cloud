@@ -104,6 +104,7 @@ export default function App() {
     aiProvider, setAiProvider,
     selectedModel, setSelectedModel,
     providerKeys, setProviderKeys,
+    addProviderKey, removeProviderKey,
     aiConfig, setAiConfig,
     customEndpoint, setCustomEndpoint,
     forceCloud, setForceCloud,
@@ -175,7 +176,7 @@ export default function App() {
   const [showWaterDialog, setShowWaterDialog] = useState(false);
   const [pendingEvolution, setPendingEvolution] = useState<AppEvolution | null>(null);
 
-  const userApiKey = useMemo(() => providerKeys[aiProvider] || "", [providerKeys, aiProvider]);
+  const userApiKey = useMemo(() => providerKeys[aiProvider]?.[0] || "", [providerKeys, aiProvider]);
 
   // Detect WebGPU on mount — if unsupported and no explicit provider stored, fall back to Google
   useEffect(() => {
@@ -249,15 +250,21 @@ export default function App() {
   useEffect(() => {
     if (!userProfile?.personal_api_key) return;
     try {
-      const cloudKeys = JSON.parse(userProfile.personal_api_key);
+      const raw = JSON.parse(userProfile.personal_api_key);
+      // Normalize: values may be strings (legacy) or arrays (new)
+      const cloudKeys: Record<string, string[]> = {};
+      for (const [k, v] of Object.entries(raw)) {
+        cloudKeys[k] = Array.isArray(v) ? (v as string[]) : (typeof v === 'string' && v ? [v] : []);
+      }
       setProviderKeys((prev) => {
         const merged = { ...prev, ...cloudKeys };
         localStorage.setItem("app_hub_keys", JSON.stringify(merged));
         return merged;
       });
     } catch {
+      // Legacy: personal_api_key stored as a raw string (single Google key)
       setProviderKeys((prev) => {
-        const merged = { ...prev, google: userProfile.personal_api_key as string };
+        const merged = { ...prev, google: [userProfile.personal_api_key as string] };
         localStorage.setItem("app_hub_keys", JSON.stringify(merged));
         return merged;
       });
@@ -355,10 +362,13 @@ export default function App() {
   }, [user?.uid]);
 
   const saveApiKeyToAccount = async (key: string, provider: string = aiProvider) => {
-    const newKeys = { ...providerKeys, [provider]: key };
+    // Sets/replaces the first key for the provider; use addProviderKey for additional keys
+    const existing = providerKeys[provider] || [];
+    const newArr = key ? [key, ...existing.slice(1)] : existing.slice(1);
+    const newKeys = { ...providerKeys, [provider]: newArr };
     setProviderKeys(newKeys);
     localStorage.setItem("app_hub_keys", JSON.stringify(newKeys));
-    if (provider === "google") localStorage.setItem("evolutive_energy_key", key);
+    if (provider === "google") localStorage.setItem("evolutive_energy_key", key || "");
     if (user) {
       try {
         await updateDoc(doc(db, "user_profiles", user.uid), { personal_api_key: JSON.stringify(newKeys) });
@@ -428,7 +438,7 @@ export default function App() {
     setProviderHealth((prev) => ({ ...prev, [provider]: { ...prev[provider], status: "checking" } }));
     const startTime = Date.now();
     try {
-      const key = providerKeys[provider];
+      const key = providerKeys[provider]?.[0];
       if (provider === "google") {
         if (!key) throw new Error("No key");
         const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`);
@@ -646,7 +656,7 @@ Critical rules:
       alert("Build capacity too low (needs 20%). Wait for recharge.");
       return;
     }
-    if (["openai", "anthropic"].includes(aiProvider) && !providerKeys[aiProvider]) {
+    if (["openai", "anthropic"].includes(aiProvider) && !providerKeys[aiProvider]?.length) {
       const providerLabel = aiProvider === "anthropic" ? "Claude (Anthropic)" : "OpenAI";
       setSettingsMessage(`Add your ${providerLabel} API key to start generating`);
       setShowSettings(true);
@@ -1329,6 +1339,9 @@ Critical rules:
             setSelectedModel={setSelectedModel}
             userApiKey={userApiKey}
             saveApiKeyToAccount={saveApiKeyToAccount}
+            providerKeysMap={providerKeys}
+            addProviderKey={addProviderKey}
+            removeProviderKey={removeProviderKey}
             customEndpoint={customEndpoint}
             setCustomEndpoint={setCustomEndpoint}
             forceCloud={forceCloud}
@@ -1674,7 +1687,7 @@ function HubView({
       </div>
 
       {/* Column headers */}
-      <div className="flex-none hidden sm:grid grid-cols-[1fr_72px_80px_180px] gap-4 px-4 py-2 text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-800">
+      <div className="flex-none hidden sm:grid grid-cols-[1fr_72px_96px_180px] gap-3 px-4 py-2 text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-800">
         <span>Title</span>
         <span className="text-center">Type</span>
         <span className="text-center">Status</span>
@@ -1745,7 +1758,7 @@ function HubView({
               </div>
 
               {/* Desktop row layout */}
-              <div className="hidden sm:grid grid-cols-[1fr_72px_80px_180px] gap-3 items-center px-4 py-3">
+              <div className="hidden sm:grid grid-cols-[1fr_72px_96px_180px] gap-3 items-center px-4 py-3">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <p className="text-sm text-white font-medium truncate">{s.content}</p>
@@ -1761,8 +1774,8 @@ function HubView({
                 <div className="flex justify-center">
                   <span className="px-2 py-1 bg-gray-800 rounded text-xs text-gray-400">{s.app_type || "desktop"}</span>
                 </div>
-                <div className="flex justify-center">
-                  <span className={`px-2 py-1 rounded text-xs font-medium ${isBuilt ? "bg-indigo-500/20 text-indigo-400" : "bg-gray-800 text-gray-400"}`}>{s.status}</span>
+                <div className="flex justify-center overflow-hidden">
+                  <span className={`px-2 py-1 rounded text-xs font-medium truncate max-w-full ${isBuilt ? "bg-indigo-500/20 text-indigo-400" : "bg-gray-800 text-gray-400"}`}>{s.status}</span>
                 </div>
                 <div className="flex items-center justify-end gap-1.5">
                   {isBuilt ? (
@@ -1811,6 +1824,9 @@ interface SettingsModalProps {
   setSelectedModel: (m: string) => void;
   userApiKey: string;
   saveApiKeyToAccount: (key: string, provider?: string) => void;
+  providerKeysMap: Record<string, string[]>;
+  addProviderKey: (provider: string, key: string) => void;
+  removeProviderKey: (provider: string, index: number) => void;
   customEndpoint: string;
   setCustomEndpoint: (e: string) => void;
   forceCloud: boolean;
@@ -1870,14 +1886,17 @@ const PROVIDER_GUIDANCE: Record<string, ProviderGuidance> = {
 
 function SettingsModal({
   onClose, aiProvider, setAiProvider, selectedModel, setSelectedModel,
-  userApiKey, saveApiKeyToAccount, customEndpoint, setCustomEndpoint,
+  userApiKey, saveApiKeyToAccount, providerKeysMap, addProviderKey, removeProviderKey,
+  customEndpoint, setCustomEndpoint,
   forceCloud, setForceCloud, aiConfig, setAiConfig, providerHealth,
   checkHealth, isTestingAI, testResponse, handleTestNeuralLink, setTestResponse,
   settingsMessage, setSettingsMessage, webGPUSupported, user, onLinkedAccountsChange,
 }: SettingsModalProps) {
   const [tab, setTab] = useState<"ai" | "network">("ai");
+  const [newKeyInput, setNewKeyInput] = useState("");
   const providers = ["google", "openai", "anthropic", "custom", "web-llm"] as const;
   const providerModels = MODELS[aiProvider] || [];
+  const currentKeys = providerKeysMap[aiProvider] || [];
 
   return (
     <motion.div
@@ -1986,20 +2005,59 @@ function SettingsModal({
                   </div>
                 )}
                 {needsKey && (
-                  <div className="flex gap-2">
-                    <input
-                      type="password"
-                      placeholder={`${aiProvider} API key...`}
-                      value={userApiKey}
-                      onChange={(e) => saveApiKeyToAccount(e.target.value)}
-                      className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-indigo-500 transition-colors"
-                    />
-                    <button
-                      onClick={() => saveApiKeyToAccount(userApiKey)}
-                      className="px-3 py-2 bg-indigo-500 hover:bg-indigo-600 rounded-lg text-sm font-medium text-white transition-all"
-                    >
-                      Save
-                    </button>
+                  <div className="space-y-2">
+                    {/* Existing keys list */}
+                    {currentKeys.map((k, i) => (
+                      <div key={i} className="flex items-center gap-2 bg-gray-800/60 border border-gray-700 rounded-lg px-3 py-2">
+                        <span className="flex-1 text-sm text-gray-300 font-mono truncate">
+                          {"•".repeat(Math.max(0, k.length - 6))}{k.slice(-6)}
+                        </span>
+                        {currentKeys.length > 1 && (
+                          <span className="text-[10px] text-indigo-400 font-bold mr-1">
+                            {i === 0 ? "active" : `#${i + 1}`}
+                          </span>
+                        )}
+                        <button
+                          onClick={() => removeProviderKey(aiProvider, i)}
+                          className="shrink-0 text-gray-600 hover:text-red-400 transition-colors"
+                          title="Remove key"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                    {/* Add new key */}
+                    <div className="flex gap-2">
+                      <input
+                        type="password"
+                        placeholder={`Add ${aiProvider} API key...`}
+                        value={newKeyInput}
+                        onChange={(e) => setNewKeyInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && newKeyInput.trim()) {
+                            addProviderKey(aiProvider, newKeyInput.trim());
+                            setNewKeyInput("");
+                          }
+                        }}
+                        className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-indigo-500 transition-colors"
+                      />
+                      <button
+                        onClick={() => {
+                          if (newKeyInput.trim()) {
+                            addProviderKey(aiProvider, newKeyInput.trim());
+                            setNewKeyInput("");
+                          }
+                        }}
+                        className="px-3 py-2 bg-indigo-500 hover:bg-indigo-600 rounded-lg text-sm font-medium text-white transition-all"
+                      >
+                        Add
+                      </button>
+                    </div>
+                    {currentKeys.length > 1 && (
+                      <p className="text-[10px] text-gray-500">
+                        {currentKeys.length} keys — rotates automatically on rate limit
+                      </p>
+                    )}
                   </div>
                 )}
                 {g && (
@@ -2361,6 +2419,35 @@ const ChatInputBar = React.memo(function ChatInputBar({
   );
 });
 
+const ChatMessages = React.memo(function ChatMessages({
+  messages,
+  containerRef,
+}: {
+  messages: Array<{ role: string; text: string }>;
+  containerRef: React.RefObject<HTMLDivElement>;
+}) {
+  return (
+    <div ref={containerRef} className="flex-1 overflow-y-auto p-3 space-y-2">
+      {messages.length === 0 && (
+        <p className="text-[11px] text-gray-600 text-center mt-8 leading-relaxed px-2">
+          Describe changes or ask the AI to fix errors.
+        </p>
+      )}
+      {messages.map((msg, i) => (
+        <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+          <div className={`max-w-[88%] px-3 py-2 rounded-xl text-[11px] leading-relaxed ${
+            msg.role === "user"
+              ? "bg-indigo-600 text-white"
+              : msg.text.startsWith("⚠️")
+                ? "bg-red-900/30 text-red-300 border border-red-800/40"
+                : "bg-gray-800 text-gray-300 border border-gray-700/60"
+          }`}>{msg.text}</div>
+        </div>
+      ))}
+    </div>
+  );
+});
+
 // ── LAUNCH MODAL ──────────────────────────────────────────────────────────────
 
 function LaunchModal({
@@ -2406,8 +2493,8 @@ function LaunchModal({
   const [showPlan, setShowPlan] = useState(false);
   const [showJourney, setShowJourney] = useState(false);
   const [messages, setMessages] = useState<{ role: "user" | "ai"; text: string }[]>([]);
-  const desktopChatEndRef = useRef<HTMLDivElement>(null);
-  const mobileChatEndRef = useRef<HTMLDivElement>(null);
+  const desktopChatContainerRef = useRef<HTMLDivElement>(null);
+  const mobileChatContainerRef = useRef<HTMLDivElement>(null);
   const autoRetryRef = useRef(0);
 
   const sendMessageRef = useRef<(msg: string) => void>(() => {});
@@ -2440,8 +2527,14 @@ function LaunchModal({
   useEffect(() => { setLastError(null); autoRetryRef.current = 0; setAutoRetries(0); }, [code]);
 
   useEffect(() => {
-    desktopChatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    mobileChatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const scrollToBottom = (el: HTMLDivElement | null) => {
+      if (!el) return;
+      if (el.scrollHeight - el.scrollTop - el.clientHeight < 80) {
+        el.scrollTop = el.scrollHeight;
+      }
+    };
+    scrollToBottom(desktopChatContainerRef.current);
+    scrollToBottom(mobileChatContainerRef.current);
   }, [messages]);
 
   const sendMessage = async (text: string) => {
@@ -2476,27 +2569,6 @@ function LaunchModal({
     ? suggestion.content.substring(0, 45) + "…"
     : suggestion.content;
 
-  const ChatMessages = ({ endRef }: { endRef: React.RefObject<HTMLDivElement> }) => (
-    <div className="flex-1 overflow-y-auto p-3 space-y-2">
-      {messages.length === 0 && (
-        <p className="text-[11px] text-gray-600 text-center mt-8 leading-relaxed px-2">
-          Describe changes or ask the AI to fix errors.
-        </p>
-      )}
-      {messages.map((msg, i) => (
-        <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-          <div className={`max-w-[88%] px-3 py-2 rounded-xl text-[11px] leading-relaxed ${
-            msg.role === "user"
-              ? "bg-indigo-600 text-white"
-              : msg.text.startsWith("⚠️")
-                ? "bg-red-900/30 text-red-300 border border-red-800/40"
-                : "bg-gray-800 text-gray-300 border border-gray-700/60"
-          }`}>{msg.text}</div>
-        </div>
-      ))}
-      <div ref={endRef} />
-    </div>
-  );
 
   return (
     <motion.div
@@ -2780,7 +2852,7 @@ function LaunchModal({
                   <span className="text-[10px] font-black uppercase tracking-[3px] text-white/50">AI Chat</span>
                   {isFixing && <Loader2 className="w-3 h-3 text-indigo-400 animate-spin" />}
                 </div>
-                <ChatMessages endRef={desktopChatEndRef} />
+                <ChatMessages messages={messages} containerRef={desktopChatContainerRef} />
                 <ChatInputBar lastError={lastError} isFixing={isFixing} onSend={sendMessage} />
               </motion.div>
             )}
@@ -2813,7 +2885,7 @@ function LaunchModal({
                 </button>
               </div>
             </div>
-            <ChatMessages endRef={mobileChatEndRef} />
+            <ChatMessages messages={messages} containerRef={mobileChatContainerRef} />
             <ChatInputBar lastError={lastError} isFixing={isFixing} onSend={sendMessage} />
           </motion.div>
         )}

@@ -27,29 +27,39 @@ const DEFAULT_CONFIG: AIConfig & { systemPrompt: string } = {
     "QUALITY BAR: Imagine this app will be seen by thousands of people. Make it worthy of that."
 };
 
+function parseProviderKeys(raw: string | null, legacy: string | null): Record<string, string[]> {
+  const result: Record<string, string[]> = {};
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw);
+      for (const [k, v] of Object.entries(parsed)) {
+        if (Array.isArray(v)) result[k] = (v as string[]).filter(Boolean);
+        else if (typeof v === 'string' && v) result[k] = [v];
+      }
+    } catch { /* ignore */ }
+  }
+  if (legacy && !result.google?.length) result.google = [legacy];
+  return result;
+}
+
 export function useAI() {
   const [aiProvider, setAiProvider] = useState<AIProvider>(() => {
     const stored = localStorage.getItem('app_provider') as AIProvider;
-    // First visit (no stored preference): default to free local AI
     return stored || 'web-llm';
   });
   const [selectedModel, setSelectedModel] = useState(() => {
     const stored = localStorage.getItem('app_model');
     if (stored) return stored;
-    // First visit: use the tiny Qwen model (no API key required)
     return localStorage.getItem('app_provider') ? "gemini-3-flash-preview" : "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
   });
-  const [providerKeys, setProviderKeys] = useState<Record<string, string>>(() => {
-    try {
-      const saved = localStorage.getItem('app_hub_keys');
-      const legacy = localStorage.getItem('evolutive_energy_key');
-      const initial = saved ? JSON.parse(saved) : {};
-      if (legacy && !initial.google) initial.google = legacy;
-      return initial;
-    } catch {
-      return {};
-    }
-  });
+  const [providerKeys, setProviderKeys] = useState<Record<string, string[]>>(() =>
+    parseProviderKeys(
+      localStorage.getItem('app_hub_keys'),
+      localStorage.getItem('evolutive_energy_key')
+    )
+  );
+  const keyRotationRef = useRef<Record<string, number>>({});
+
   const [aiConfig, setAiConfig] = useState<AIConfig & { systemPrompt: string }>(() => {
     try {
       const saved = localStorage.getItem('app_ai_config');
@@ -72,14 +82,46 @@ export function useAI() {
   const [webLlmProgress, setWebLlmProgress] = useState("");
   const webLlmEngineRef = useRef<webllm.MLCEngine | null>(null);
 
+  const persistKeys = (keys: Record<string, string[]>) => {
+    localStorage.setItem('app_hub_keys', JSON.stringify(keys));
+    if (keys.google?.length) localStorage.setItem('evolutive_energy_key', keys.google[0]);
+    else localStorage.removeItem('evolutive_energy_key');
+  };
+
+  const addProviderKey = useCallback((provider: string, key: string) => {
+    if (!key.trim()) return;
+    setProviderKeys(prev => {
+      const next = { ...prev, [provider]: [...(prev[provider] || []), key.trim()] };
+      persistKeys(next);
+      return next;
+    });
+  }, []);
+
+  const removeProviderKey = useCallback((provider: string, index: number) => {
+    setProviderKeys(prev => {
+      const arr = (prev[provider] || []).filter((_, i) => i !== index);
+      const next = { ...prev, [provider]: arr };
+      persistKeys(next);
+      return next;
+    });
+  }, []);
+
   const call = useCallback(async (prompt: string): Promise<string> => {
     setAiError(null);
     setActiveProvider(aiProvider);
     try {
+      // Resolve a single key per provider based on current rotation index
+      const resolvedKeys: Record<string, string> = {};
+      for (const [p, arr] of Object.entries(providerKeys)) {
+        if (arr.length) {
+          const idx = (keyRotationRef.current[p] ?? 0) % arr.length;
+          resolvedKeys[p] = arr[idx];
+        }
+      }
       const text = await callAIWithFallback(prompt, {
         provider: aiProvider,
         model: selectedModel,
-        keys: providerKeys,
+        keys: resolvedKeys,
         config: aiConfig,
         customEndpoint,
         forceCloud,
@@ -87,6 +129,11 @@ export function useAI() {
         onRateLimited: (countdown: number) => {
           setIsRateLimited(true);
           setRateLimitCountdown(countdown);
+          // Rotate to next key for the rate-limited provider
+          const arr = providerKeys[aiProvider];
+          if (arr && arr.length > 1) {
+            keyRotationRef.current[aiProvider] = ((keyRotationRef.current[aiProvider] ?? 0) + 1) % arr.length;
+          }
         },
         onRateLimitCleared: () => {
           setIsRateLimited(false);
@@ -103,7 +150,7 @@ export function useAI() {
   }, [aiProvider, selectedModel, providerKeys, aiConfig, customEndpoint, forceCloud]);
 
   const callCloud = useCallback((prompt: string) =>
-    callGeminiCloud(prompt, providerKeys['google']),
+    callGeminiCloud(prompt, providerKeys['google']?.[0]),
     [providerKeys]
   );
 
@@ -111,6 +158,7 @@ export function useAI() {
     aiProvider, setAiProvider,
     selectedModel, setSelectedModel,
     providerKeys, setProviderKeys,
+    addProviderKey, removeProviderKey,
     aiConfig, setAiConfig,
     customEndpoint, setCustomEndpoint,
     forceCloud, setForceCloud,
