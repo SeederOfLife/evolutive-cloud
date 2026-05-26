@@ -11,7 +11,7 @@ import { motion, AnimatePresence } from "motion/react";
 import {
   ChevronUp, X, Search, Zap, Play, Sparkles, Loader2,
   Settings, Activity, Trash2, LogOut, Globe, Cpu, ChevronDown, User,
-  MessageSquare, ArrowRight, GitFork, Layers, Wrench, Share2, Lock
+  MessageSquare, ArrowRight, GitFork, Layers, Wrench, Share2, Lock, Droplets
 } from "lucide-react";
 import OpenAI from "openai";
 import {
@@ -36,6 +36,10 @@ import { NetworkPanel } from "./components/NetworkPanel";
 import { JoinModal } from "./components/JoinModal";
 import { ShareMenu } from "./components/ShareMenu";
 import { getLinkedAccounts, LinkedAccount } from "./services/invites";
+import WaterDialog from "./components/WaterDialog";
+import DiffViewer from "./components/DiffViewer";
+import { waterApp, type FocusId, type DepthId } from "./services/watering";
+import type { AppEvolution } from "./types";
 
 async function checkWebGPUSupport(): Promise<boolean> {
   if (typeof navigator === 'undefined' || !('gpu' in navigator)) return false;
@@ -166,6 +170,9 @@ export default function App() {
   });
   // userId → short display name for linked accounts
   const [linkedUserMap, setLinkedUserMap] = useState<Map<string, string>>(new Map());
+  const [wateringId, setWateringId] = useState<string | null>(null);
+  const [showWaterDialog, setShowWaterDialog] = useState(false);
+  const [pendingEvolution, setPendingEvolution] = useState<AppEvolution | null>(null);
 
   const userApiKey = useMemo(() => providerKeys[aiProvider] || "", [providerKeys, aiProvider]);
 
@@ -515,6 +522,37 @@ export default function App() {
       setLaunchTarget(prev => prev ? { ...prev, visibility: newVis } : null);
     } catch (e) {
       console.error("Visibility update failed:", e);
+    }
+  };
+
+  const handleWaterApp = async (focus: FocusId, depth: DepthId, note: string) => {
+    if (!launchTarget || launchTarget.id.startsWith('seed_')) return;
+    const isFreeProvider = activeProvider === 'webllm';
+    setWateringId(launchTarget.id);
+    try {
+      const evolution = await waterApp(launchTarget, focus, depth, note, callUnifiedAI);
+      // Cap history at 20 evolutions
+      const prevEvolutions = launchTarget.evolutions ?? [];
+      const evolutions: AppEvolution[] = [evolution, ...prevEvolutions].slice(0, 20);
+      await updateDoc(doc(db, "suggestions", launchTarget.id), {
+        built_code: evolution.code,
+        evolutions,
+      });
+      setLaunchTarget(prev => prev ? { ...prev, built_code: evolution.code, evolutions } : null);
+      if (!isFreeProvider) {
+        const depthCost = (['gentle', 'balanced', 'wild'] as DepthId[]);
+        const costs: Record<DepthId, number> = { gentle: 10, balanced: 20, wild: 35 };
+        consumeQuota(costs[depth]);
+      }
+      setPendingEvolution(evolution);
+      // Browser notification
+      if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+        new Notification(`${launchTarget.content} evolved`, { body: evolution.summary });
+      }
+    } catch (e) {
+      console.error("Watering failed:", e);
+    } finally {
+      setWateringId(null);
     }
   };
 
@@ -981,6 +1019,8 @@ Critical rules:
                   suggestion={s}
                   onRun={(sg) => setLaunchTarget(sg)}
                   linkedFromLabel={s.user_id && linkedUserMap.has(s.user_id) ? linkedUserMap.get(s.user_id) : undefined}
+                  isWatering={wateringId === s.id}
+                  forkCount={suggestions.filter(f => f.parent_id === s.id).length}
                 />
               ))}
             <OrbitControls
@@ -1336,6 +1376,14 @@ Critical rules:
             onVote={handleVote}
             onFork={() => { setForkTarget(launchTarget); setLaunchTarget(null); }}
             onToggleVisibility={handleToggleVisibility}
+            onWater={user?.uid === launchTarget.user_id && !launchTarget.id.startsWith('seed_') ? handleWaterApp : undefined}
+            isWatering={wateringId === launchTarget.id}
+            isFreeProvider={activeProvider === 'webllm'}
+            quota={apiQuota}
+            pendingEvolution={pendingEvolution}
+            onClearEvolution={() => setPendingEvolution(null)}
+            showWaterDialog={showWaterDialog}
+            setShowWaterDialog={setShowWaterDialog}
             onRefine={async (message: string, currentCode: string) => {
               const isTruncated = message.includes("incomplete") || message.includes("truncated");
               const isFix = message.startsWith("Fix this error:") || isTruncated;
@@ -2264,6 +2312,14 @@ function LaunchModal({
   onVote,
   onFork,
   onToggleVisibility,
+  onWater,
+  isWatering,
+  isFreeProvider,
+  quota,
+  pendingEvolution,
+  onClearEvolution,
+  showWaterDialog,
+  setShowWaterDialog,
   onRefine,
 }: {
   suggestion: Suggestion;
@@ -2272,6 +2328,14 @@ function LaunchModal({
   onVote: (id: string, votes: number) => void;
   onFork?: () => void;
   onToggleVisibility?: (vis: 'public' | 'private') => void;
+  onWater?: (focus: FocusId, depth: DepthId, note: string) => void;
+  isWatering?: boolean;
+  isFreeProvider?: boolean;
+  quota?: number;
+  pendingEvolution?: AppEvolution | null;
+  onClearEvolution?: () => void;
+  showWaterDialog?: boolean;
+  setShowWaterDialog?: (v: boolean) => void;
   onRefine?: (message: string, code: string) => Promise<string>;
 }) {
   const [code, setCode] = useState(suggestion.built_code || "");
@@ -2449,6 +2513,23 @@ function LaunchModal({
               ? <Globe className="w-3.5 h-3.5 text-emerald-400" />
               : <Lock className="w-3.5 h-3.5" />
             }
+          </button>
+        )}
+
+        {/* Water — owner only, not seeds */}
+        {onWater && setShowWaterDialog && (
+          <button
+            onClick={() => setShowWaterDialog(true)}
+            title="Water this app — evolve it with AI"
+            disabled={isWatering}
+            className={`flex items-center gap-1.5 px-3 h-8 rounded-lg text-xs font-bold transition-all shrink-0 ${
+              isWatering
+                ? 'bg-cyan-500/20 text-cyan-400 animate-pulse cursor-wait'
+                : 'bg-gray-800 text-cyan-400 hover:bg-cyan-500/20 hover:text-cyan-300'
+            }`}
+          >
+            <Droplets className="w-3.5 h-3.5" />
+            {isWatering ? 'Evolving…' : 'Water'}
           </button>
         )}
 
@@ -2710,6 +2791,60 @@ function LaunchModal({
             </div>
             <ChatMessages endRef={mobileChatEndRef} />
             <ChatInput />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Water dialog */}
+      <AnimatePresence>
+        {showWaterDialog && onWater && setShowWaterDialog && (
+          <WaterDialog
+            suggestion={suggestion}
+            quota={quota ?? 100}
+            isFree={isFreeProvider ?? false}
+            onWater={(focus, depth, note) => {
+              setShowWaterDialog(false);
+              onWater(focus, depth, note);
+            }}
+            onClose={() => setShowWaterDialog(false)}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Diff viewer after evolution */}
+      <AnimatePresence>
+        {pendingEvolution && (
+          <motion.div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <motion.div
+              className="bg-gray-950 border border-white/10 rounded-2xl w-full max-w-xl h-[70vh] flex flex-col overflow-hidden shadow-2xl"
+              initial={{ scale: 0.92, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.92, y: 20 }}
+            >
+              <DiffViewer
+                evolution={pendingEvolution}
+                onApply={() => { onClearEvolution?.(); }}
+                onRevert={async () => {
+                  if (pendingEvolution.prevCode) {
+                    await onWater?.(
+                      'ux' as FocusId,
+                      'gentle' as DepthId,
+                      'Revert to previous version'
+                    );
+                  }
+                  onClearEvolution?.();
+                }}
+                onRetry={() => {
+                  onClearEvolution?.();
+                  setShowWaterDialog?.(true);
+                }}
+              />
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>

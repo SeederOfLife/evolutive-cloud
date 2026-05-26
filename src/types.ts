@@ -15,6 +15,16 @@ export interface EvolutionVersion {
   prompt?: string;
 }
 
+export interface AppEvolution {
+  timestamp: string;
+  focus: string;
+  depth: string;
+  summary: string;
+  code: string;
+  prevCode: string;
+  energyUsed: number;
+}
+
 export interface Suggestion {
   id: string;
   content: string;
@@ -36,6 +46,8 @@ export interface Suggestion {
   refinement_questions?: { question: string; priority: string; why: string }[];
   refinement_answers?: Record<number, string>;
   visibility?: 'public' | 'private';
+  evolutions?: AppEvolution[];
+  autoWater?: 'off' | 'hourly' | 'daily' | 'weekly';
 }
 
 export interface AIConfig {

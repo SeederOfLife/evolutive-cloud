@@ -160,27 +160,41 @@ export function EvolutiveSeed({ onClick, isOpen }: { onClick: () => void, isOpen
   );
 }
 
-export function ModuleNode({ suggestion, onRun, linkedFromLabel }: {
+export function ModuleNode({ suggestion, onRun, linkedFromLabel, isWatering, forkCount }: {
   suggestion: Suggestion;
   onRun: (s: Suggestion) => void;
   linkedFromLabel?: string;
+  isWatering?: boolean;
+  forkCount?: number;
 }) {
   const meshRef = useRef<THREE.Mesh>(null!);
+  const moonRef = useRef<THREE.Mesh>(null!);
   const timeRef = useRef(0);
   const [hovered, setHovered] = useState(false);
 
-  const { radius, speed, offset, yOffset, color } = useMemo(() => {
+  const evolutionCount = suggestion.evolutions?.length ?? 0;
+  const lastEvolved = suggestion.evolutions?.[0]?.timestamp;
+  const msSinceWater = lastEvolved ? Date.now() - new Date(lastEvolved).getTime() : Infinity;
+  const isRecent = msSinceWater < 60 * 60 * 1000; // < 1 hour
+  const isNeglected = msSinceWater > 30 * 24 * 60 * 60 * 1000; // > 30 days
+
+  const { radius, speed, offset, yOffset, color, nodeSize } = useMemo(() => {
     const colors = ["#ff006e", "#3a86ff", "#fb5607", "#ffbe0b", "#8338ec", "#00f5d4"];
     const id = suggestion.id;
+    // Size grows with evolution count: base 0.15, +0.025 per evolution, cap at 0.4
+    const nodeSize = Math.min(0.15 + evolutionCount * 0.025, 0.4);
     return {
+      nodeSize,
       radius: 3.5 + (1 - (suggestion.energy || 0) / 100) * 4,
       speed: 0.1 + seededRand(id, 0) * 0.2,
       offset: seededRand(id, 1) * Math.PI * 2,
       yOffset: (seededRand(id, 2) - 0.5) * 2,
-      // Linked apps glow emerald-teal so they're visually distinct
       color: linkedFromLabel ? "#34d399" : colors[Math.floor(seededRand(id, 3) * colors.length)]
     };
-  }, [suggestion.id, suggestion.energy, linkedFromLabel]);
+  }, [suggestion.id, suggestion.energy, linkedFromLabel, evolutionCount]);
+
+  // Glow: bright if recent, dim if neglected, pulse if watering
+  const baseGlow = isWatering ? 3.5 : isRecent ? 2.8 : isNeglected ? 0.5 : 1.5;
 
   useFrame((state, delta) => {
     if (!meshRef.current) return;
@@ -191,11 +205,29 @@ export function ModuleNode({ suggestion, onRun, linkedFromLabel }: {
     meshRef.current.position.z = Math.sin(t) * radius;
     meshRef.current.position.y = yOffset + Math.sin(t * 2) * 0.5;
     meshRef.current.rotation.y += 0.01;
+
+    // Pulse scale when watering
+    if (isWatering) {
+      const pulse = 1 + Math.sin(time * 6) * 0.15;
+      meshRef.current.scale.setScalar(pulse);
+    } else {
+      meshRef.current.scale.setScalar(1);
+    }
+
+    // Orbit moon around parent node
+    if (moonRef.current && forkCount && forkCount > 0) {
+      const mt = time * 1.8;
+      moonRef.current.position.x = Math.cos(mt) * (nodeSize * 3);
+      moonRef.current.position.z = Math.sin(mt) * (nodeSize * 3);
+      moonRef.current.position.y = 0;
+    }
   });
 
   const label = suggestion.content.length > 28
     ? suggestion.content.substring(0, 28) + "…"
     : suggestion.content;
+
+  const opacity = isNeglected ? 0.4 : 0.9;
 
   return (
     <mesh
@@ -204,18 +236,31 @@ export function ModuleNode({ suggestion, onRun, linkedFromLabel }: {
       onPointerOver={() => { setHovered(true); document.body.style.cursor = "pointer"; }}
       onPointerOut={() => { setHovered(false); document.body.style.cursor = "default"; }}
     >
-      <sphereGeometry args={[0.15, 32, 32]} />
+      <sphereGeometry args={[nodeSize, 32, 32]} />
       <meshStandardMaterial
         color={hovered ? "#fff" : color}
         emissive={hovered ? "#fff" : color}
-        emissiveIntensity={hovered ? 2 : 1.5}
+        emissiveIntensity={hovered ? 2 : baseGlow}
         metalness={0.9}
         roughness={0.1}
         transparent
-        opacity={0.9}
+        opacity={opacity}
       />
+      {/* Moon for forked apps */}
+      {forkCount && forkCount > 0 && (
+        <mesh ref={moonRef}>
+          <sphereGeometry args={[nodeSize * 0.35, 16, 16]} />
+          <meshStandardMaterial
+            color="#a5b4fc"
+            emissive="#a5b4fc"
+            emissiveIntensity={1}
+            transparent
+            opacity={0.7}
+          />
+        </mesh>
+      )}
       {hovered && (
-        <Html center position={[0, 0.38, 0]} zIndexRange={[100, 0]}>
+        <Html center position={[0, nodeSize + 0.25, 0]} zIndexRange={[100, 0]}>
           <div style={{
             background: "rgba(9,9,11,0.92)",
             border: `1px solid ${linkedFromLabel ? "rgba(52,211,153,0.4)" : "rgba(99,102,241,0.4)"}`,
@@ -230,6 +275,11 @@ export function ModuleNode({ suggestion, onRun, linkedFromLabel }: {
             boxShadow: "0 4px 16px rgba(0,0,0,0.6)",
           }}>
             {label}
+            {evolutionCount > 0 && (
+              <span style={{ display: "block", fontSize: "9px", fontWeight: "600", color: "#67e8f9", marginTop: "2px", opacity: 0.9 }}>
+                gen {evolutionCount + 1} · {isRecent ? "just watered" : isNeglected ? "needs water" : "growing"}
+              </span>
+            )}
             {linkedFromLabel && (
               <span style={{ display: "block", fontSize: "9px", fontWeight: "600", color: "#34d399", marginTop: "2px", opacity: 0.9 }}>
                 from @{linkedFromLabel}
