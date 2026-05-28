@@ -4,7 +4,7 @@ import * as webllm from "@mlc-ai/web-llm";
 import type { RefObject } from "react";
 import { AIConfig } from "../types";
 
-export type AIProvider = 'google' | 'openai' | 'anthropic' | 'custom' | 'web-llm' | 'gemini-nano' | 'mlc-mobile' | 'ollama';
+export type AIProvider = 'google' | 'openai' | 'anthropic' | 'custom' | 'web-llm' | 'gemini-nano' | 'mlc-mobile' | 'ollama' | 'openrouter';
 
 export interface AICallOptions {
   provider: AIProvider;
@@ -82,6 +82,37 @@ async function callGeminiNano(prompt: string): Promise<string> {
   throw new Error("Gemini Nano not available in this browser.");
 }
 
+const OPENROUTER_FREE_MODELS = [
+  'google/gemini-2.0-flash-exp:free',
+  'meta-llama/llama-3.2-3b-instruct:free',
+  'mistralai/mistral-7b-instruct:free',
+] as const;
+
+async function callOpenRouter(prompt: string, model: string, apiKey: string): Promise<string> {
+  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+      'HTTP-Referer': 'https://evolutive-cloud.vercel.app',
+      'X-Title': 'Evolutive Cloud',
+    },
+    body: JSON.stringify({
+      model,
+      messages: [{ role: 'user', content: prompt }],
+    }),
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    const msg = err.error?.message || response.statusText;
+    throw new Error(`OpenRouter ${response.status}: ${msg}`);
+  }
+  const data = await response.json();
+  const text = data.choices?.[0]?.message?.content;
+  if (!text) throw new Error('OpenRouter returned empty response.');
+  return text;
+}
+
 async function callOllama(prompt: string, model = 'gemma2:2b', endpoint = 'http://localhost:11434'): Promise<string> {
   let response: Response;
   try {
@@ -125,9 +156,10 @@ export async function callAIWithFallback(prompt: string, options: FallbackOption
 
   // 2. Other cloud providers with stored keys (skip the already-tried one)
   const cloudProviders: Array<{ provider: AIProvider; model: string; label: string }> = [
-    { provider: 'google', model: 'gemini-3-flash-preview', label: 'Google Gemini' },
-    { provider: 'openai', model: 'gpt-4o-mini', label: 'OpenAI' },
-    { provider: 'anthropic', model: 'claude-haiku-4-5-20251001', label: 'Anthropic' },
+    { provider: 'google',      model: 'gemini-3-flash-preview',        label: 'Google Gemini' },
+    { provider: 'openai',      model: 'gpt-4o-mini',                   label: 'OpenAI' },
+    { provider: 'anthropic',   model: 'claude-haiku-4-5-20251001',     label: 'Anthropic' },
+    { provider: 'openrouter',  model: 'google/gemini-2.0-flash-exp:free', label: 'OpenRouter' },
   ];
 
   for (const cp of cloudProviders) {
@@ -137,6 +169,17 @@ export async function callAIWithFallback(prompt: string, options: FallbackOption
       callAI(prompt, { ...options, provider: cp.provider, model: cp.model })
     );
     if (result !== null) return result;
+  }
+
+  // 2.5 OpenRouter free model cascade (when primary WAS openrouter, try the other free models)
+  if (options.provider === 'openrouter' && keys['openrouter']) {
+    for (const freeModel of OPENROUTER_FREE_MODELS) {
+      if (freeModel === options.model) continue; // already tried
+      const result = await attempt(`OpenRouter/${freeModel.split('/')[1]}`, () =>
+        callOpenRouter(prompt, freeModel, keys['openrouter'])
+      );
+      if (result !== null) return result;
+    }
   }
 
   // 3. Platform cloud relay (no user key needed)
@@ -255,8 +298,12 @@ export async function callAI(prompt: string, options: AICallOptions): Promise<st
       }
 
       if (!googleKey && provider === 'google') throw new Error("No Google API Key Found.");
-      if (!activeKey && (provider === 'openai' || provider === 'anthropic' || provider === 'custom')) {
-        if (provider !== 'custom') throw new Error(`No ${provider.toUpperCase()} Key Found.`);
+      if (!activeKey && (provider === 'openai' || provider === 'anthropic' || provider === 'custom' || provider === 'openrouter')) {
+        if (provider !== 'custom') throw new Error(`No ${provider.toUpperCase()} key found. Add one in Settings.`);
+      }
+
+      if (provider === 'openrouter') {
+        return callOpenRouter(prompt, model, activeKey);
       }
 
       if (provider === 'google') {

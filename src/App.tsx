@@ -52,11 +52,12 @@ async function checkWebGPUSupport(): Promise<boolean> {
 }
 
 const MANIFEST_PROVIDERS = [
-  { id: "google",    label: "Google Gemini", Icon: Globe,    model: "gemini-3-flash-preview" },
-  { id: "openai",    label: "OpenAI GPT-4",  Icon: Zap,      model: "gpt-4o" },
-  { id: "anthropic", label: "Claude",         Icon: Sparkles, model: "claude-sonnet-4-20250514" },
-  { id: "web-llm",   label: "Free Local AI",  Icon: Cpu,      model: "Qwen2.5-0.5B-Instruct-q4f16_1-MLC" },
-  { id: "ollama",    label: "Ollama",         Icon: Server,   model: "gemma2:2b" },
+  { id: "google",      label: "Google Gemini", Icon: Globe,    model: "gemini-3-flash-preview" },
+  { id: "openai",      label: "OpenAI GPT-4",  Icon: Zap,      model: "gpt-4o" },
+  { id: "anthropic",   label: "Claude",         Icon: Sparkles, model: "claude-sonnet-4-20250514" },
+  { id: "openrouter",  label: "OpenRouter",     Icon: Layers,   model: "google/gemini-2.0-flash-exp:free" },
+  { id: "web-llm",     label: "Free Local AI",  Icon: Cpu,      model: "Qwen2.5-0.5B-Instruct-q4f16_1-MLC" },
+  { id: "ollama",      label: "Ollama",         Icon: Server,   model: "gemma2:2b" },
 ] as const;
 
 const HERO_PHRASES = [
@@ -471,6 +472,12 @@ export default function App() {
       } else if (provider === "gemini-nano") {
         const w = window as any;
         if (!(w.ai && w.ai.assistant)) throw new Error("No Gemini Nano");
+      } else if (provider === "openrouter") {
+        if (!key) throw new Error("No key");
+        const res = await fetch("https://openrouter.ai/api/v1/models", {
+          headers: { Authorization: `Bearer ${key}` },
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
       } else if (provider === "custom") {
         await fetch(customEndpoint + "/models", { mode: "no-cors" });
       }
@@ -1904,6 +1911,14 @@ const MODELS: Record<string, { value: string; label: string }[]> = {
     { value: "Llama-3-8B-Instruct-q4f32_1-MLC", label: "Llama 3 8B (GPU recommended)" },
   ],
   "gemini-nano": [{ value: "gemini-nano", label: "Gemini Nano" }],
+  openrouter: [
+    { value: "google/gemini-2.0-flash-exp:free",       label: "Gemini 2.0 Flash (free)" },
+    { value: "meta-llama/llama-3.2-3b-instruct:free",  label: "Llama 3.2 3B (free)" },
+    { value: "mistralai/mistral-7b-instruct:free",     label: "Mistral 7B (free)" },
+    { value: "deepseek/deepseek-chat",                 label: "DeepSeek Chat (cheap)" },
+    { value: "openai/gpt-4o-mini",                     label: "GPT-4o Mini (cheap)" },
+    { value: "anthropic/claude-3.5-sonnet",            label: "Claude 3.5 Sonnet (best)" },
+  ],
   ollama: [
     { value: "gemma2:2b",       label: "Gemma 2 2B (small, fast)" },
     { value: "gemma2:9b",       label: "Gemma 2 9B (balanced)" },
@@ -1927,6 +1942,7 @@ const PROVIDER_GUIDANCE: Record<string, ProviderGuidance> = {
   'web-llm':     { badge: 'NO KEY NEEDED', hint: 'Free & private — runs locally in your browser. Requires a good GPU. No API key needed.' },
   'gemini-nano': { badge: 'NO KEY NEEDED', hint: 'Free — built into Chrome. Enable at chrome://flags/#prompt-api-for-gemini-nano' },
   custom:        { badge: 'FREE',          hint: 'Custom OpenAI-compatible endpoint. Provide a base URL below and an optional API key.' },
+  openrouter:    { badge: 'FREE',          hint: 'Many models through one key — free tier included. No separate signups.',                              link: 'https://openrouter.ai/keys' },
   ollama:        { badge: 'FREE',          hint: 'Free & unlimited local AI. Install at ollama.com, then run: ollama serve && ollama pull gemma2:2b' },
 };
 
@@ -1943,7 +1959,7 @@ function SettingsModal({
   const [newKeyInput, setNewKeyInput] = useState("");
   const [ollamaTestResult, setOllamaTestResult] = useState<string | null>(null);
   const [ollamaTestLoading, setOllamaTestLoading] = useState(false);
-  const providers = ["google", "openai", "anthropic", "custom", "web-llm", "ollama"] as const;
+  const providers = ["google", "openai", "anthropic", "openrouter", "custom", "web-llm", "ollama"] as const;
   const providerModels = MODELS[aiProvider] || [];
   const currentKeys = providerKeysMap[aiProvider] || [];
 
@@ -2040,6 +2056,11 @@ function SettingsModal({
                   {g && (
                     <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${badgeCls}`}>
                       {g.badge}
+                    </span>
+                  )}
+                  {aiProvider === 'openrouter' && (
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border bg-cyan-900/40 text-cyan-400 border-cyan-800/50">
+                      MANY MODELS
                     </span>
                   )}
                   {aiProvider === 'web-llm' && (
