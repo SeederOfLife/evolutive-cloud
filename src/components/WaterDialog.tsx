@@ -7,7 +7,7 @@ import type { Suggestion } from '../types';
 interface Props {
   suggestion: Suggestion;
   quota: number;
-  isFree: boolean; // true when WebLLM active
+  isFree: boolean;
   onWater: (focus: FocusId, depth: DepthId, note: string) => void;
   onClose: () => void;
   onAutoWaterChange?: (val: Suggestion['autoWater']) => void;
@@ -24,47 +24,55 @@ export default function WaterDialog({ suggestion, quota, isFree, onWater, onClos
 
   return (
     <motion.div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+      className="fixed inset-0 z-50 bg-gray-900 sm:bg-black/70 sm:backdrop-blur-sm sm:flex sm:items-center sm:justify-center sm:p-4"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >
       <motion.div
-        className="bg-gray-900 border border-white/10 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden"
-        initial={{ scale: 0.92, y: 20 }}
-        animate={{ scale: 1, y: 0 }}
-        exit={{ scale: 0.92, y: 20 }}
+        className="flex flex-col h-full sm:h-auto sm:max-h-[90vh] w-full sm:max-w-lg bg-gray-900 sm:border sm:border-white/10 sm:rounded-2xl shadow-2xl overflow-hidden"
+        initial={{ y: "100%" }}
+        animate={{ y: 0 }}
+        exit={{ y: "100%" }}
+        transition={{ type: "spring", damping: 30, stiffness: 320 }}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
-          <div className="flex items-center gap-2">
-            <Droplets size={18} className="text-cyan-400" />
-            <span className="font-semibold text-white">Water App</span>
-            <span className="text-xs text-gray-400 ml-1">gen {(suggestion.evolutions?.length ?? 0) + 1}</span>
+        {/* Sticky Header */}
+        <div className="flex-none bg-gray-900 border-b border-white/10">
+          {/* Mobile drag handle */}
+          <div className="flex justify-center pt-2 pb-1 sm:hidden">
+            <div className="w-10 h-1 bg-gray-700 rounded-full" />
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors">
-            <X size={18} />
-          </button>
+          <div className="flex items-center justify-between px-5 py-3 sm:py-4">
+            <div className="flex items-center gap-2">
+              <Droplets size={18} className="text-cyan-400" />
+              <span className="font-semibold text-white">Water App</span>
+              <span className="text-xs text-gray-400 ml-1">gen {(suggestion.evolutions?.length ?? 0) + 1}</span>
+            </div>
+            <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors p-1">
+              <X size={18} />
+            </button>
+          </div>
         </div>
 
-        <div className="p-5 space-y-5">
-          {/* Focus area */}
+        {/* Scrollable Body */}
+        <div className="flex-1 overflow-y-auto p-5 space-y-5">
+          {/* Focus area - 2-col grid on mobile, 2-col on desktop */}
           <div>
-            <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">Evolution Focus</p>
+            <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">Evolution Focus</p>
             <div className="grid grid-cols-2 gap-2">
               {FOCUS_AREAS.map(f => (
                 <button
                   key={f.id}
                   onClick={() => setFocus(f.id as FocusId)}
-                  className={`flex items-start gap-2 p-3 rounded-xl border text-left transition-all ${
+                  className={`flex items-start gap-2 p-3 rounded-xl border text-left transition-all min-h-[56px] ${
                     focus === f.id
                       ? 'border-cyan-500 bg-cyan-500/10 text-white'
                       : 'border-white/10 bg-white/5 text-gray-300 hover:bg-white/10'
                   }`}
                 >
-                  <span className="text-lg leading-none mt-0.5">{f.icon}</span>
-                  <div>
+                  <span className="text-lg leading-none mt-0.5 shrink-0">{f.icon}</span>
+                  <div className="min-w-0">
                     <div className="text-sm font-medium leading-tight">{f.label}</div>
                     <div className="text-xs text-gray-400 mt-0.5 leading-snug">{f.description}</div>
                   </div>
@@ -73,15 +81,15 @@ export default function WaterDialog({ suggestion, quota, isFree, onWater, onClos
             </div>
           </div>
 
-          {/* Depth */}
+          {/* Depth - horizontal scrollable pills */}
           <div>
-            <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">Depth</p>
-            <div className="flex gap-2">
+            <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">Depth</p>
+            <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
               {DEPTH_OPTIONS.map(d => (
                 <button
                   key={d.id}
                   onClick={() => setDepth(d.id as DepthId)}
-                  className={`flex-1 p-3 rounded-xl border text-center transition-all ${
+                  className={`flex-1 min-w-[96px] p-3 rounded-xl border text-center transition-all shrink-0 ${
                     depth === d.id
                       ? 'border-indigo-500 bg-indigo-500/10 text-white'
                       : 'border-white/10 bg-white/5 text-gray-300 hover:bg-white/10'
@@ -97,19 +105,21 @@ export default function WaterDialog({ suggestion, quota, isFree, onWater, onClos
             </div>
           </div>
 
-          {/* Note */}
+          {/* Note - full width */}
           <div>
-            <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">Creator Note <span className="normal-case text-gray-500">(optional)</span></p>
+            <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">
+              Creator Note <span className="normal-case text-gray-500">(optional)</span>
+            </p>
             <textarea
               value={note}
               onChange={e => setNote(e.target.value)}
               placeholder="Anything specific you want changed or preserved…"
-              rows={2}
-              className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-gray-500 resize-none outline-none focus:border-white/30 transition-colors"
+              rows={3}
+              className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-500 resize-none outline-none focus:border-white/30 transition-colors"
             />
           </div>
 
-          {/* Auto-water (v2 prep) */}
+          {/* Auto-water */}
           {onAutoWaterChange && (
             <div className="flex items-center justify-between py-2 border-t border-white/10">
               <div>
@@ -130,8 +140,11 @@ export default function WaterDialog({ suggestion, quota, isFree, onWater, onClos
           )}
         </div>
 
-        {/* Footer */}
-        <div className="px-5 pb-5 flex items-center justify-between">
+        {/* Sticky Footer */}
+        <div
+          className="flex-none bg-gray-900 px-5 pt-4 border-t border-white/10 flex items-center justify-between"
+          style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 16px)' }}
+        >
           <div className="flex items-center gap-1.5 text-sm">
             <Zap size={14} className={isFree ? 'text-green-400' : 'text-yellow-400'} />
             {isFree ? (

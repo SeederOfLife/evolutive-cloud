@@ -4,7 +4,7 @@ import * as webllm from "@mlc-ai/web-llm";
 import type { RefObject } from "react";
 import { AIConfig } from "../types";
 
-export type AIProvider = 'google' | 'openai' | 'anthropic' | 'custom' | 'web-llm' | 'gemini-nano' | 'mlc-mobile';
+export type AIProvider = 'google' | 'openai' | 'anthropic' | 'custom' | 'web-llm' | 'gemini-nano' | 'mlc-mobile' | 'ollama';
 
 export interface AICallOptions {
   provider: AIProvider;
@@ -12,6 +12,7 @@ export interface AICallOptions {
   keys: Record<string, string>;
   config: AIConfig;
   customEndpoint?: string;
+  ollamaEndpoint?: string;
   forceCloud?: boolean;
   onProgress?: (msg: string) => void;
   onRateLimited?: (countdown: number) => void;
@@ -79,6 +80,23 @@ async function callGeminiNano(prompt: string): Promise<string> {
     return await session.prompt(prompt);
   }
   throw new Error("Gemini Nano not available in this browser.");
+}
+
+async function callOllama(prompt: string, model = 'gemma2:2b', endpoint = 'http://localhost:11434'): Promise<string> {
+  let response: Response;
+  try {
+    response = await fetch(`${endpoint}/api/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model, prompt, stream: false }),
+    });
+  } catch (err: any) {
+    throw new Error(`Ollama connection failed. Is 'ollama serve' running? (${err.message})`);
+  }
+  if (!response.ok) throw new Error(`Ollama error ${response.status}. Is 'ollama serve' running?`);
+  const data = await response.json();
+  if (!data.response) throw new Error("Ollama returned empty response.");
+  return data.response;
 }
 
 export interface FallbackOptions extends AICallOptions {
@@ -156,6 +174,7 @@ export async function callAI(prompt: string, options: AICallOptions): Promise<st
     keys,
     config,
     customEndpoint,
+    ollamaEndpoint,
     forceCloud,
     onProgress,
     onRateLimited,
@@ -178,6 +197,10 @@ export async function callAI(prompt: string, options: AICallOptions): Promise<st
       const activeKey = keys[provider] || "";
       const googleKey = (typeof process !== 'undefined' && process.env?.GEMINI_API_KEY) || keys['google'];
 
+      if (provider === 'ollama') {
+        return callOllama(prompt, model, ollamaEndpoint || 'http://localhost:11434');
+      }
+
       if (provider === 'gemini-nano') {
         try {
           const w = window as any;
@@ -195,10 +218,14 @@ export async function callAI(prompt: string, options: AICallOptions): Promise<st
           if (!webLlmEngineRef?.current) {
             const w = window as any;
             if (!w.navigator.gpu) throw new Error("WebGPU is not supported or enabled in this browser. Local AI requires WebGPU.");
-            onProgress?.("Wakeing AI Engine...");
+            onProgress?.("Waking AI Engine...");
             const engine = new webllm.MLCEngine();
             engine.setInitProgressCallback((report) => onProgress?.(report.text));
-            await engine.reload(model || "Llama-3-8B-Instruct-v0.1-q4f32_1-MLC");
+            const loadPromise = engine.reload(model || "Llama-3-8B-Instruct-v0.1-q4f32_1-MLC");
+            const timeoutPromise = new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error("WEBLLM_TIMEOUT: Local AI took too long to load. Add a free Gemini key in Settings for instant AI.")), 30000)
+            );
+            await Promise.race([loadPromise, timeoutPromise]);
             if (webLlmEngineRef) webLlmEngineRef.current = engine;
           }
           const response = await webLlmEngineRef!.current!.chat.completions.create({

@@ -71,6 +71,13 @@ export function useAI() {
   const [customEndpoint, setCustomEndpoint] = useState(() =>
     localStorage.getItem('app_custom_endpoint') || ""
   );
+  const [ollamaEndpoint, setOllamaEndpointState] = useState(() =>
+    localStorage.getItem('app_ollama_endpoint') || "http://localhost:11434"
+  );
+  const setOllamaEndpoint = useCallback((v: string) => {
+    setOllamaEndpointState(v);
+    localStorage.setItem('app_ollama_endpoint', v);
+  }, []);
   const [forceCloud, setForceCloud] = useState(() => {
     try { return localStorage.getItem('app_force_cloud') === 'true'; }
     catch { return false; }
@@ -124,6 +131,7 @@ export function useAI() {
         keys: resolvedKeys,
         config: aiConfig,
         customEndpoint,
+        ollamaEndpoint,
         forceCloud,
         onProgress: setWebLlmProgress,
         onRateLimited: (countdown: number) => {
@@ -161,6 +169,7 @@ export function useAI() {
     addProviderKey, removeProviderKey,
     aiConfig, setAiConfig,
     customEndpoint, setCustomEndpoint,
+    ollamaEndpoint, setOllamaEndpoint,
     forceCloud, setForceCloud,
     aiError, setAiError,
     activeProvider,

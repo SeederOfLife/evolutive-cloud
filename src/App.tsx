@@ -11,7 +11,7 @@ import { motion, AnimatePresence } from "motion/react";
 import {
   ChevronUp, X, Search, Zap, Play, Sparkles, Loader2,
   Settings, Activity, Trash2, LogOut, Globe, Cpu, ChevronDown, User,
-  MessageSquare, ArrowRight, GitFork, Layers, Wrench, Share2, Lock, Droplets
+  MessageSquare, ArrowRight, GitFork, Layers, Wrench, Share2, Lock, Droplets, Server
 } from "lucide-react";
 import OpenAI from "openai";
 import {
@@ -56,6 +56,7 @@ const MANIFEST_PROVIDERS = [
   { id: "openai",    label: "OpenAI GPT-4",  Icon: Zap,      model: "gpt-4o" },
   { id: "anthropic", label: "Claude",         Icon: Sparkles, model: "claude-sonnet-4-20250514" },
   { id: "web-llm",   label: "Free Local AI",  Icon: Cpu,      model: "Qwen2.5-0.5B-Instruct-q4f16_1-MLC" },
+  { id: "ollama",    label: "Ollama",         Icon: Server,   model: "gemma2:2b" },
 ] as const;
 
 const HERO_PHRASES = [
@@ -107,6 +108,7 @@ export default function App() {
     addProviderKey, removeProviderKey,
     aiConfig, setAiConfig,
     customEndpoint, setCustomEndpoint,
+    ollamaEndpoint, setOllamaEndpoint,
     forceCloud, setForceCloud,
     aiError, setAiError,
     activeProvider,
@@ -115,6 +117,11 @@ export default function App() {
     webLlmProgress,
     call: callUnifiedAI,
   } = useAI();
+
+  const isIOS = useMemo(() =>
+    /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream,
+    []
+  );
   const { suggestions, deleteSuggestion, voteSuggestion } = useSuggestions();
 
   // View / modal state
@@ -739,7 +746,7 @@ Critical rules:
   // ─── RENDER ──────────────────────────────────────────────────────────────────
 
   return (
-    <div className="h-screen w-full bg-gray-950 text-white flex flex-col overflow-hidden">
+    <div className="w-full bg-gray-950 text-white flex flex-col overflow-hidden" style={{ height: '100dvh' }}>
 
       {/* Loading screen */}
       <AnimatePresence>
@@ -998,6 +1005,33 @@ Critical rules:
         )}
       </AnimatePresence>
 
+      {/* iOS + WebLLM banner */}
+      <AnimatePresence>
+        {isIOS && aiProvider === 'web-llm' && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="flex-none bg-orange-950/60 border-b border-orange-700/30 px-4 py-2.5 overflow-hidden"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <Cpu className="w-4 h-4 text-orange-400 shrink-0" />
+                <p className="text-sm text-orange-200 leading-snug min-w-0">
+                  Local AI is not supported on iOS Safari. Add a free Gemini key or connect Ollama from your computer.
+                </p>
+              </div>
+              <button
+                onClick={() => setShowSettings(true)}
+                className="shrink-0 px-3 py-1.5 bg-orange-600 hover:bg-orange-500 text-white text-xs font-black uppercase tracking-widest rounded-lg transition-all whitespace-nowrap"
+              >
+                Settings
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* ── MAIN AREA ───────────────────────────────────────────────────────── */}
       <main className="flex-1 overflow-hidden relative">
 
@@ -1173,8 +1207,11 @@ Critical rules:
       </main>
 
       {/* ── BOTTOM BAR ──────────────────────────────────────────────────────── */}
-      {/* Mobile: 2 rows (pills row + input row). Desktop: single row via flex-wrap trick. */}
-      <footer className="flex-none bg-gray-900 border-t border-gray-800 flex flex-wrap items-center px-3 sm:px-4 py-2 sm:h-[72px] gap-2">
+      {/* Fixed so it floats above all views on all devices, including iOS notch */}
+      <footer
+        className="fixed bottom-0 left-0 right-0 z-[100] bg-gray-900 border-t border-gray-800 flex flex-wrap items-center px-3 sm:px-4 py-2 sm:h-[72px] gap-2"
+        style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 8px)' }}
+      >
 
         {/* Row 1 on mobile: scrollable type pills + provider icon */}
         <div className="flex items-center gap-2 basis-full sm:basis-auto sm:flex-none order-1">
@@ -1344,6 +1381,8 @@ Critical rules:
             removeProviderKey={removeProviderKey}
             customEndpoint={customEndpoint}
             setCustomEndpoint={setCustomEndpoint}
+            ollamaEndpoint={ollamaEndpoint}
+            setOllamaEndpoint={setOllamaEndpoint}
             forceCloud={forceCloud}
             setForceCloud={setForceCloud}
             aiConfig={aiConfig}
@@ -1829,6 +1868,8 @@ interface SettingsModalProps {
   removeProviderKey: (provider: string, index: number) => void;
   customEndpoint: string;
   setCustomEndpoint: (e: string) => void;
+  ollamaEndpoint: string;
+  setOllamaEndpoint: (e: string) => void;
   forceCloud: boolean;
   setForceCloud: (v: boolean) => void;
   aiConfig: any;
@@ -1868,6 +1909,15 @@ const MODELS: Record<string, { value: string; label: string }[]> = {
     { value: "Llama-3-8B-Instruct-q4f32_1-MLC", label: "Llama 3 8B (GPU recommended)" },
   ],
   "gemini-nano": [{ value: "gemini-nano", label: "Gemini Nano" }],
+  ollama: [
+    { value: "gemma2:2b",       label: "Gemma 2 2B (small, fast)" },
+    { value: "gemma2:9b",       label: "Gemma 2 9B (balanced)" },
+    { value: "gemma3:27b",      label: "Gemma 3 27B (capable)" },
+    { value: "llama3.2",        label: "Llama 3.2" },
+    { value: "qwen2.5",         label: "Qwen 2.5" },
+    { value: "mistral",         label: "Mistral" },
+    { value: "deepseek-coder",  label: "DeepSeek Coder" },
+  ],
 };
 
 interface ProviderGuidance {
@@ -1882,19 +1932,22 @@ const PROVIDER_GUIDANCE: Record<string, ProviderGuidance> = {
   'web-llm':     { badge: 'NO KEY NEEDED', hint: 'Free & private — runs locally in your browser. Requires a good GPU. No API key needed.' },
   'gemini-nano': { badge: 'NO KEY NEEDED', hint: 'Free — built into Chrome. Enable at chrome://flags/#prompt-api-for-gemini-nano' },
   custom:        { badge: 'FREE',          hint: 'Custom OpenAI-compatible endpoint. Provide a base URL below and an optional API key.' },
+  ollama:        { badge: 'FREE',          hint: 'Free & unlimited local AI. Install at ollama.com, then run: ollama serve && ollama pull gemma2:2b' },
 };
 
 function SettingsModal({
   onClose, aiProvider, setAiProvider, selectedModel, setSelectedModel,
   userApiKey, saveApiKeyToAccount, providerKeysMap, addProviderKey, removeProviderKey,
-  customEndpoint, setCustomEndpoint,
+  customEndpoint, setCustomEndpoint, ollamaEndpoint, setOllamaEndpoint,
   forceCloud, setForceCloud, aiConfig, setAiConfig, providerHealth,
   checkHealth, isTestingAI, testResponse, handleTestNeuralLink, setTestResponse,
   settingsMessage, setSettingsMessage, webGPUSupported, user, onLinkedAccountsChange,
 }: SettingsModalProps) {
   const [tab, setTab] = useState<"ai" | "network">("ai");
   const [newKeyInput, setNewKeyInput] = useState("");
-  const providers = ["google", "openai", "anthropic", "custom", "web-llm"] as const;
+  const [ollamaTestResult, setOllamaTestResult] = useState<string | null>(null);
+  const [ollamaTestLoading, setOllamaTestLoading] = useState(false);
+  const providers = ["google", "openai", "anthropic", "custom", "web-llm", "ollama"] as const;
   const providerModels = MODELS[aiProvider] || [];
   const currentKeys = providerKeysMap[aiProvider] || [];
 
@@ -1976,7 +2029,7 @@ function SettingsModal({
           {/* API Key & Provider Guidance */}
           {(() => {
             const g = PROVIDER_GUIDANCE[aiProvider];
-            const needsKey = !["web-llm", "gemini-nano"].includes(aiProvider);
+            const needsKey = !["web-llm", "gemini-nano", "ollama"].includes(aiProvider);
             const badgeCls = g?.badge === 'NO KEY NEEDED'
               ? 'bg-violet-900/40 text-violet-400 border-violet-800/50'
               : g?.badge === 'PAID'
@@ -2092,6 +2145,57 @@ function SettingsModal({
                 placeholder="http://localhost:11434/v1"
                 className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-indigo-500 transition-colors"
               />
+            </section>
+          )}
+
+          {/* Ollama endpoint + helpers */}
+          {aiProvider === "ollama" && (
+            <section className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">
+                  Ollama Endpoint
+                </label>
+                <input
+                  type="text"
+                  value={ollamaEndpoint}
+                  onChange={(e) => setOllamaEndpoint(e.target.value)}
+                  placeholder="http://localhost:11434"
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-indigo-500 transition-colors"
+                />
+              </div>
+              <div className="flex gap-2">
+                <button
+                  disabled={ollamaTestLoading}
+                  onClick={async () => {
+                    setOllamaTestLoading(true);
+                    setOllamaTestResult(null);
+                    try {
+                      const res = await fetch(`${ollamaEndpoint}/api/tags`);
+                      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                      const data = await res.json();
+                      const models = (data.models || []).map((m: any) => m.name).join(', ');
+                      setOllamaTestResult(`Connected ✓ — Models: ${models || 'none pulled yet'}`);
+                    } catch (e: any) {
+                      setOllamaTestResult(`Error: ${e.message}`);
+                    } finally {
+                      setOllamaTestLoading(false);
+                    }
+                  }}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 disabled:opacity-40 rounded-lg text-sm font-medium text-white transition-all"
+                >
+                  {ollamaTestLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Activity className="w-4 h-4" />}
+                  Test Ollama
+                </button>
+              </div>
+              {ollamaTestResult && (
+                <div className={`flex items-center justify-between p-3 rounded-lg text-xs ${ollamaTestResult.startsWith('Error') ? 'bg-red-900/30 border border-red-800 text-red-300' : 'bg-green-900/30 border border-green-800 text-green-300'}`}>
+                  <span className="leading-relaxed">{ollamaTestResult}</span>
+                  <button onClick={() => setOllamaTestResult(null)} className="ml-2 opacity-50 hover:opacity-100 shrink-0"><X className="w-3 h-3" /></button>
+                </div>
+              )}
+              <div className="p-3 bg-amber-900/20 border border-amber-700/30 rounded-lg text-xs text-amber-300/80 leading-relaxed">
+                <span className="font-semibold text-amber-300">CORS on Windows:</span> Set <code className="bg-black/30 px-1 rounded">OLLAMA_ORIGINS=*</code> then restart Ollama Desktop.
+              </div>
             </section>
           )}
 
