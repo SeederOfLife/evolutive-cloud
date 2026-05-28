@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import * as webllm from "@mlc-ai/web-llm";
 import { callAIWithFallback, callGeminiCloud, AIProvider } from "../services/ai.service";
 import { AIConfig } from "../types";
@@ -27,6 +27,16 @@ const DEFAULT_CONFIG: AIConfig & { systemPrompt: string } = {
     "QUALITY BAR: Imagine this app will be seen by thousands of people. Make it worthy of that."
 };
 
+// Default model per provider (used when auto-switching)
+const PROVIDER_DEFAULT_MODELS: Partial<Record<AIProvider, string>> = {
+  google:      'gemini-3-flash-preview',
+  openai:      'gpt-4o-mini',
+  anthropic:   'claude-haiku-4-5-20251001',
+  openrouter:  'google/gemini-2.0-flash-exp:free',
+  ollama:      'gemma2:2b',
+  'web-llm':   'Qwen2.5-0.5B-Instruct-q4f16_1-MLC',
+};
+
 function parseProviderKeys(raw: string | null, legacy: string | null): Record<string, string[]> {
   const result: Record<string, string[]> = {};
   if (raw) {
@@ -42,15 +52,52 @@ function parseProviderKeys(raw: string | null, legacy: string | null): Record<st
   return result;
 }
 
+async function detectViableProviders(
+  keys: Record<string, string[]>,
+  ollamaEndpoint: string,
+): Promise<AIProvider[]> {
+  const viable: AIProvider[] = [];
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+
+  // Cloud providers with stored keys (fastest check — no network needed)
+  if (keys.google?.length)      viable.push('google');
+  if (keys.openrouter?.length)  viable.push('openrouter');
+  if (keys.openai?.length)      viable.push('openai');
+  if (keys.anthropic?.length)   viable.push('anthropic');
+
+  // Ollama — quick 2s reachability check
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 2000);
+    const r = await fetch(`${ollamaEndpoint}/api/tags`, { signal: ctrl.signal });
+    clearTimeout(t);
+    if (r.ok) viable.push('ollama');
+  } catch { /* not reachable */ }
+
+  // WebLLM — WebGPU adapter check (skip on iOS entirely)
+  if (!isIOS && (navigator as any).gpu) {
+    try {
+      const adapter = await Promise.race([
+        (navigator as any).gpu.requestAdapter(),
+        new Promise<null>((_, r) => setTimeout(() => r(new Error()), 2000)),
+      ]);
+      if (adapter) viable.push('web-llm');
+    } catch { /* no WebGPU */ }
+  }
+
+  return viable;
+}
+
 export function useAI() {
   const [aiProvider, setAiProvider] = useState<AIProvider>(() => {
     const stored = localStorage.getItem('app_provider') as AIProvider;
-    return stored || 'web-llm';
+    // Never default new users to web-llm — will be corrected after viability check
+    return stored || 'google';
   });
   const [selectedModel, setSelectedModel] = useState(() => {
     const stored = localStorage.getItem('app_model');
     if (stored) return stored;
-    return localStorage.getItem('app_provider') ? "gemini-3-flash-preview" : "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
+    return 'gemini-3-flash-preview';
   });
   const [providerKeys, setProviderKeys] = useState<Record<string, string[]>>(() =>
     parseProviderKeys(
@@ -59,14 +106,13 @@ export function useAI() {
     )
   );
   const keyRotationRef = useRef<Record<string, number>>({});
+  const sessionSuccessRef = useRef<AIProvider | null>(null);
 
   const [aiConfig, setAiConfig] = useState<AIConfig & { systemPrompt: string }>(() => {
     try {
       const saved = localStorage.getItem('app_ai_config');
       return saved ? JSON.parse(saved) : DEFAULT_CONFIG;
-    } catch {
-      return DEFAULT_CONFIG;
-    }
+    } catch { return DEFAULT_CONFIG; }
   });
   const [customEndpoint, setCustomEndpoint] = useState(() =>
     localStorage.getItem('app_custom_endpoint') || ""
@@ -82,12 +128,54 @@ export function useAI() {
     try { return localStorage.getItem('app_force_cloud') === 'true'; }
     catch { return false; }
   });
+
   const [aiError, setAiError] = useState<string | null>(null);
   const [activeProvider, setActiveProvider] = useState<string>(aiProvider);
   const [isRateLimited, setIsRateLimited] = useState(false);
   const [rateLimitCountdown, setRateLimitCountdown] = useState(0);
   const [webLlmProgress, setWebLlmProgress] = useState("");
+
+  // Viable providers (populated after mount-time checks)
+  const [viableProviders, setViableProviders] = useState<AIProvider[]>([]);
+  const [viableCheckDone, setViableCheckDone] = useState(false);
+
+  // Non-blocking fallback toast
+  const [fallbackToast, setFallbackToast] = useState<string | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showFallbackToast = useCallback((msg: string) => {
+    setFallbackToast(msg);
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => setFallbackToast(null), 4000);
+  }, []);
+
   const webLlmEngineRef = useRef<webllm.MLCEngine | null>(null);
+
+  // On mount: detect viable providers, then auto-select the best one
+  useEffect(() => {
+    const init = async () => {
+      const keys = parseProviderKeys(
+        localStorage.getItem('app_hub_keys'),
+        localStorage.getItem('evolutive_energy_key')
+      );
+      const endpoint = localStorage.getItem('app_ollama_endpoint') || 'http://localhost:11434';
+      const viable = await detectViableProviders(keys, endpoint);
+      setViableProviders(viable);
+      setViableCheckDone(true);
+
+      const stored = localStorage.getItem('app_provider') as AIProvider | null;
+      // If no explicit choice, or chosen provider is not viable, switch to best viable option
+      if (!stored || !viable.includes(stored)) {
+        if (viable.length > 0) {
+          const best = viable[0];
+          setAiProvider(best);
+          const defaultModel = PROVIDER_DEFAULT_MODELS[best];
+          if (defaultModel) setSelectedModel(defaultModel);
+          // Don't persist — this is an auto-selection, not a user choice
+        }
+      }
+    };
+    init();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const persistKeys = (keys: Record<string, string[]>) => {
     localStorage.setItem('app_hub_keys', JSON.stringify(keys));
@@ -115,9 +203,16 @@ export function useAI() {
 
   const call = useCallback(async (prompt: string): Promise<string> => {
     setAiError(null);
-    setActiveProvider(aiProvider);
+
+    // If we remembered a working provider this session, prefer it
+    const effectiveProvider = sessionSuccessRef.current ?? aiProvider;
+    const effectiveModel = sessionSuccessRef.current && sessionSuccessRef.current !== aiProvider
+      ? (PROVIDER_DEFAULT_MODELS[sessionSuccessRef.current] ?? selectedModel)
+      : selectedModel;
+
+    setActiveProvider(effectiveProvider);
+
     try {
-      // Resolve a single key per provider based on current rotation index
       const resolvedKeys: Record<string, string> = {};
       for (const [p, arr] of Object.entries(providerKeys)) {
         if (arr.length) {
@@ -125,9 +220,11 @@ export function useAI() {
           resolvedKeys[p] = arr[idx];
         }
       }
+
+      let firstLabel = '';
       const text = await callAIWithFallback(prompt, {
-        provider: aiProvider,
-        model: selectedModel,
+        provider: effectiveProvider,
+        model: effectiveModel,
         keys: resolvedKeys,
         config: aiConfig,
         customEndpoint,
@@ -137,10 +234,9 @@ export function useAI() {
         onRateLimited: (countdown: number) => {
           setIsRateLimited(true);
           setRateLimitCountdown(countdown);
-          // Rotate to next key for the rate-limited provider
-          const arr = providerKeys[aiProvider];
+          const arr = providerKeys[effectiveProvider];
           if (arr && arr.length > 1) {
-            keyRotationRef.current[aiProvider] = ((keyRotationRef.current[aiProvider] ?? 0) + 1) % arr.length;
+            keyRotationRef.current[effectiveProvider] = ((keyRotationRef.current[effectiveProvider] ?? 0) + 1) % arr.length;
           }
         },
         onRateLimitCleared: () => {
@@ -148,14 +244,24 @@ export function useAI() {
           setRateLimitCountdown(0);
         },
         webLlmEngineRef,
-        onProviderSwitch: (provider) => setActiveProvider(provider),
+        onProviderSwitch: (label) => {
+          if (!firstLabel) {
+            firstLabel = label;
+          } else if (label !== firstLabel) {
+            showFallbackToast(`${firstLabel} unavailable — trying ${label}…`);
+          }
+          setActiveProvider(label);
+        },
       });
+
+      // Remember this successful provider for the rest of the session
+      sessionSuccessRef.current = effectiveProvider;
       return text;
     } catch (err: any) {
       setAiError(err.message);
       throw err;
     }
-  }, [aiProvider, selectedModel, providerKeys, aiConfig, customEndpoint, forceCloud]);
+  }, [aiProvider, selectedModel, providerKeys, aiConfig, customEndpoint, ollamaEndpoint, forceCloud, showFallbackToast]);
 
   const callCloud = useCallback((prompt: string) =>
     callGeminiCloud(prompt, providerKeys['google']?.[0]),
@@ -177,6 +283,9 @@ export function useAI() {
     rateLimitCountdown, setRateLimitCountdown,
     webLlmProgress, setWebLlmProgress,
     webLlmEngineRef,
+    viableProviders,
+    viableCheckDone,
+    fallbackToast,
     call,
     callCloud,
   };

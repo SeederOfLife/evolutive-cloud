@@ -134,14 +134,24 @@ export interface FallbackOptions extends AICallOptions {
   onProviderSwitch?: (provider: string, label: string) => void;
 }
 
+const withTimeout = <T>(p: Promise<T>, ms: number, label: string): Promise<T> =>
+  Promise.race([
+    p,
+    new Promise<never>((_, r) => setTimeout(() => r(new Error(`${label} timed out after ${ms / 1000}s`)), ms)),
+  ]);
+
 export async function callAIWithFallback(prompt: string, options: FallbackOptions): Promise<string> {
   const { onProviderSwitch, webLlmEngineRef, keys } = options;
   const errors: string[] = [];
 
-  const attempt = async (label: string, fn: () => Promise<string>): Promise<string | null> => {
+  const attempt = async (
+    label: string,
+    fn: () => Promise<string>,
+    timeoutMs = 30000,
+  ): Promise<string | null> => {
     try {
       onProviderSwitch?.(label, label);
-      const result = await fn();
+      const result = await withTimeout(fn(), timeoutMs, label);
       return result;
     } catch (err: any) {
       errors.push(`[${label}] ${err.message || err}`);
@@ -192,7 +202,7 @@ export async function callAIWithFallback(prompt: string, options: FallbackOption
   const nano = await attempt('Gemini Nano', () => callGeminiNano(prompt));
   if (nano !== null) return nano;
 
-  // 5. WebLLM (local, requires WebGPU)
+  // 5. WebLLM (local, requires WebGPU) — 60s timeout to cover model download
   if ((navigator as any).gpu) {
     const local = await attempt('WebLLM (local)', () =>
       callAI(prompt, {
@@ -200,7 +210,8 @@ export async function callAIWithFallback(prompt: string, options: FallbackOption
         provider: 'web-llm',
         model: 'Llama-3.2-1B-Instruct-q4f32_1-MLC',
         webLlmEngineRef,
-      })
+      }),
+      60000
     );
     if (local !== null) return local;
   }

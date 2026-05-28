@@ -118,6 +118,9 @@ export default function App() {
     isRateLimited,
     rateLimitCountdown,
     webLlmProgress,
+    viableProviders,
+    viableCheckDone,
+    fallbackToast,
     call: callUnifiedAI,
   } = useAI();
 
@@ -199,20 +202,15 @@ export default function App() {
 
   const userApiKey = useMemo(() => providerKeys[aiProvider]?.[0] || "", [providerKeys, aiProvider]);
 
-  // Detect WebGPU on mount — if unsupported and no explicit provider stored, fall back to Google
+  // Detect WebGPU for the Settings modal warning (display only)
   useEffect(() => {
-    checkWebGPUSupport().then(supported => {
-      setWebGPUSupported(supported);
-      if (!supported) {
-        const stored = localStorage.getItem('app_provider');
-        if (!stored || stored === 'web-llm') {
-          setAiProvider('google' as any);
-          setSelectedModel('gemini-3-flash-preview');
-          setShowNoGPUBanner(true);
-        }
-      }
-    });
+    checkWebGPUSupport().then(supported => setWebGPUSupported(supported));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Show "no providers" banner once viability check completes
+  useEffect(() => {
+    if (viableCheckDone && viableProviders.length === 0) setShowNoGPUBanner(true);
+  }, [viableCheckDone, viableProviders.length]);
 
   // Track the peak countdown value for progress bar
   useEffect(() => {
@@ -1050,7 +1048,7 @@ ROADMAP: {"now":["what works today 1","what works today 2"],"next":["next wateri
               <div className="flex items-center gap-2.5 min-w-0">
                 <Cpu className="w-4 h-4 text-indigo-400 shrink-0" />
                 <p className="text-sm text-indigo-200 leading-snug min-w-0">
-                  Local AI unavailable on this device. Add a free Google Gemini key to start.
+                  Add a free Google Gemini key to start — 30 seconds, no credit card needed.
                 </p>
               </div>
               <div className="flex items-center gap-2 shrink-0">
@@ -1637,6 +1635,20 @@ ROADMAP: {"now":["what works today 1","what works today 2"],"next":["next wateri
                 </div>
               </motion.div>
             </AnimatePresence>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Non-blocking fallback toast — appears above fixed footer */}
+      <AnimatePresence>
+        {fallbackToast && (
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 12 }}
+            className="fixed bottom-[calc(max(env(safe-area-inset-bottom),8px)+90px)] left-1/2 -translate-x-1/2 z-[9999] bg-gray-800 border border-gray-600 rounded-full px-4 py-2 text-xs text-gray-300 shadow-xl pointer-events-none whitespace-nowrap"
+          >
+            {fallbackToast}
           </motion.div>
         )}
       </AnimatePresence>
