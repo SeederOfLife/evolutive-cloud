@@ -7,6 +7,7 @@ export interface GoalPlan {
   interactions: string[];
   visualStyle: string;
   successCriteria: string;
+  scope?: 'small' | 'medium' | 'large';
 }
 
 export interface EvolutionVersion {
@@ -47,7 +48,8 @@ export interface Suggestion {
   refinement_answers?: Record<number, string>;
   visibility?: 'public' | 'private';
   evolutions?: AppEvolution[];
-  autoWater?: 'off' | 'hourly' | 'daily' | 'weekly';
+  autoWater?: 'off' | 'daily' | 'every-2-days' | 'every-3-days' | 'weekly' | 'monthly';
+  roadmap?: { now: string[]; next: string[]; future: string[] };
 }
 
 export interface AIConfig {

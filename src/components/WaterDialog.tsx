@@ -121,20 +121,22 @@ export default function WaterDialog({ suggestion, quota, isFree, onWater, onClos
 
           {/* Auto-water */}
           {onAutoWaterChange && (
-            <div className="flex items-center justify-between py-2 border-t border-white/10">
+            <div className="flex items-start justify-between gap-3 py-2 border-t border-white/10">
               <div>
                 <p className="text-sm text-gray-300">Auto-water</p>
-                <p className="text-xs text-gray-500">Let the app evolve on a schedule</p>
+                <p className="text-xs text-gray-500 mt-0.5 leading-snug">Like watering a plant — slower growth is fine.</p>
               </div>
               <select
                 value={suggestion.autoWater ?? 'off'}
                 onChange={e => onAutoWaterChange(e.target.value as Suggestion['autoWater'])}
-                className="bg-gray-800 border border-white/10 text-sm text-gray-300 rounded-lg px-3 py-1.5 outline-none"
+                className="bg-gray-800 border border-white/10 text-sm text-gray-300 rounded-lg px-3 py-1.5 outline-none shrink-0"
               >
                 <option value="off">Off</option>
-                <option value="hourly">Hourly</option>
                 <option value="daily">Daily</option>
+                <option value="every-2-days">Every 2 days</option>
+                <option value="every-3-days">Every 3 days</option>
                 <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
               </select>
             </div>
           )}
