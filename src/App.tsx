@@ -11,7 +11,8 @@ import { motion, AnimatePresence } from "motion/react";
 import {
   ChevronUp, X, Search, Zap, Play, Sparkles, Loader2,
   Settings, Activity, Trash2, LogOut, Globe, Cpu, ChevronDown, User,
-  MessageSquare, ArrowRight, GitFork, Layers, Wrench, Share2, Lock, Droplets, Server
+  MessageSquare, ArrowRight, GitFork, Layers, Wrench, Share2, Lock, Droplets, Server,
+  Plus, ChevronRight, ChevronLeft
 } from "lucide-react";
 import OpenAI from "openai";
 import {
@@ -1443,6 +1444,13 @@ Critical rules:
             onClearEvolution={() => setPendingEvolution(null)}
             showWaterDialog={showWaterDialog}
             setShowWaterDialog={setShowWaterDialog}
+            chatProvider={aiProvider}
+            chatProviderOptions={MANIFEST_PROVIDERS.map(p => ({ id: p.id, label: p.label }))}
+            onChatProviderSwitch={(id) => {
+              setAiProvider(id as any);
+              const p = MANIFEST_PROVIDERS.find(mp => mp.id === id);
+              if (p) setSelectedModel(p.model);
+            }}
             onRefine={async (message: string, currentCode: string) => {
               const isTruncated = message.includes("incomplete") || message.includes("truncated");
               const isFix = message.startsWith("Fix this error:") || isTruncated;
@@ -2511,27 +2519,125 @@ function AuthModal({
 }
 
 // ── CHAT INPUT BAR (defined OUTSIDE LaunchModal so component identity is stable) ──
-// If defined inside LaunchModal, React sees a new type every keystroke → unmount/remount → focus lost.
+
+interface AttachmentItem {
+  id: string;
+  name: string;
+  size: number;
+  content: string; // text content (empty for images)
+  kind: 'text' | 'image';
+}
+
+const CHAT_SKILLS = [
+  { id: 'phone',    label: '📱 Phone'    },
+  { id: 'desktop',  label: '🖥️ Desktop'  },
+  { id: 'game',     label: '🎮 Game'     },
+  { id: 'terminal', label: '⌨️ Terminal' },
+  { id: 'music',    label: '🎵 Music'    },
+  { id: 'art',      label: '🎨 Art'      },
+] as const;
+
 const ChatInputBar = React.memo(function ChatInputBar({
   lastError,
   isFixing,
   onSend,
+  aiProvider,
+  providerOptions,
+  onProviderSwitch,
 }: {
   lastError: string | null;
   isFixing: boolean;
   onSend: (text: string) => void;
+  aiProvider?: string;
+  providerOptions?: { id: string; label: string }[];
+  onProviderSwitch?: (id: string) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [attachments, setAttachments] = useState<AttachmentItem[]>([]);
+  const [showMenu, setShowMenu] = useState(false);
+  const [menuSection, setMenuSection] = useState<null | 'skill' | 'provider'>(null);
+
+  // Close on click-outside
+  useEffect(() => {
+    if (!showMenu) return;
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setShowMenu(false);
+        setMenuSection(null);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showMenu]);
+
+  const formatSize = (bytes: number) =>
+    bytes < 1024 ? `${bytes} B` : `${(bytes / 1024).toFixed(1)} KB`;
+
+  const handleFiles = (files: FileList | null, kind: 'text' | 'image') => {
+    if (!files) return;
+    Array.from(files).forEach(file => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        setAttachments(prev => [...prev, {
+          id: Math.random().toString(36).slice(2),
+          name: file.name,
+          size: file.size,
+          content: kind === 'text' ? (reader.result as string) : '',
+          kind,
+        }]);
+      };
+      if (kind === 'image') reader.readAsDataURL(file);
+      else reader.readAsText(file);
+    });
+    // Reset so the same file can be re-selected
+    if (fileInputRef.current)  fileInputRef.current.value  = '';
+    if (imageInputRef.current) imageInputRef.current.value = '';
+  };
+
+  const removeAttachment = (id: string) =>
+    setAttachments(prev => prev.filter(a => a.id !== id));
 
   const submit = () => {
-    const text = inputRef.current?.value.trim() ?? "";
-    if (!text || isFixing) return;
-    onSend(text);
+    const rawText = inputRef.current?.value.trim() ?? "";
+    if (isFixing || (!rawText && attachments.length === 0)) return;
+
+    const userText = rawText || `Use the attached ${attachments.length === 1 ? 'file' : 'files'} as reference.`;
+    const MAX_CHARS = 4000;
+    let totalChars = 0;
+    const ctxParts: string[] = [];
+
+    for (const att of attachments) {
+      if (att.kind === 'image') {
+        ctxParts.push(`[Reference image attached: ${att.name}]`);
+        continue;
+      }
+      const remaining = MAX_CHARS - totalChars;
+      if (remaining <= 0) {
+        ctxParts.push(`[${att.name}: omitted — 4000-char context limit reached]`);
+        continue;
+      }
+      const snippet = att.content.length > remaining
+        ? att.content.slice(0, remaining) + '\n[... truncated]'
+        : att.content;
+      ctxParts.push(`REFERENCE FILE (${att.name}):\n${snippet}`);
+      totalChars += snippet.length;
+    }
+
+    const fullMessage = ctxParts.length > 0
+      ? `${ctxParts.join('\n\n')}\n\n${userText}`
+      : userText;
+
+    onSend(fullMessage.trim());
     if (inputRef.current) inputRef.current.value = "";
+    setAttachments([]);
   };
 
   return (
     <div className="flex-none p-3 border-t border-gray-800 space-y-2">
+      {/* Fix Error button */}
       {lastError && !isFixing && (
         <button
           onClick={() => onSend(`Fix this error: ${lastError}`)}
@@ -2540,12 +2646,145 @@ const ChatInputBar = React.memo(function ChatInputBar({
           <Wrench className="w-3 h-3" /> Fix Error
         </button>
       )}
-      <div className="flex gap-2">
+
+      {/* Attachment chips */}
+      {attachments.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {attachments.map(att => (
+            <div key={att.id} className="flex items-center gap-1 pl-2 pr-1 py-0.5 bg-indigo-950/60 border border-indigo-700/50 rounded-full text-[10px] text-indigo-300 max-w-[180px]">
+              <span className="shrink-0">{att.kind === 'image' ? '🖼️' : '📎'}</span>
+              <span className="truncate">{att.name}</span>
+              <span className="text-indigo-500 shrink-0 ml-0.5">({formatSize(att.size)})</span>
+              <button
+                onClick={() => removeAttachment(att.id)}
+                className="shrink-0 ml-0.5 w-3.5 h-3.5 rounded-full bg-indigo-800/50 hover:bg-red-700/60 flex items-center justify-center transition-colors"
+              >
+                <X className="w-2 h-2" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Input row */}
+      <div className="flex gap-1.5">
+        {/* "+" button + popup (self-contained with ref for click-outside) */}
+        <div className="relative shrink-0" ref={menuRef}>
+          {/* Hidden file pickers */}
+          <input ref={fileInputRef}  type="file" accept=".txt,.csv,.json,.md" multiple className="hidden"
+            onChange={e => { handleFiles(e.target.files, 'text');  setShowMenu(false); }} />
+          <input ref={imageInputRef} type="file" accept="image/*" multiple className="hidden"
+            onChange={e => { handleFiles(e.target.files, 'image'); setShowMenu(false); }} />
+
+          {/* "+" button */}
+          <button
+            type="button"
+            onClick={() => { setMenuSection(null); setShowMenu(s => !s); }}
+            disabled={isFixing}
+            className={`w-8 h-8 rounded-full border flex items-center justify-center transition-all disabled:opacity-40 ${
+              showMenu
+                ? 'bg-indigo-600 border-indigo-500 text-white'
+                : 'bg-gray-800 border-gray-700 text-gray-400 hover:text-white hover:bg-gray-700'
+            }`}
+            title="Attach files or switch options"
+          >
+            <Plus className="w-3.5 h-3.5" />
+          </button>
+
+          {/* Popup menu */}
+          <AnimatePresence>
+            {showMenu && (
+              <motion.div
+                initial={{ opacity: 0, y: 6, scale: 0.96 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 6, scale: 0.96 }}
+                transition={{ duration: 0.1 }}
+                className="absolute bottom-full left-0 mb-2 w-52 bg-gray-900 border border-gray-700 rounded-xl shadow-2xl overflow-hidden z-[300]"
+              >
+                {/* ── Main menu ── */}
+                {menuSection === null && (
+                  <div className="py-1">
+                    <button className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-[11px] text-gray-300 hover:bg-gray-800 hover:text-white transition-colors text-left" onClick={() => { fileInputRef.current?.click(); }}>
+                      <span className="text-base leading-none">📎</span>
+                      <span className="flex-1">Attach file</span>
+                      <span className="text-[9px] text-gray-600">.txt .csv .json .md</span>
+                    </button>
+                    <button className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-[11px] text-gray-300 hover:bg-gray-800 hover:text-white transition-colors text-left" onClick={() => { imageInputRef.current?.click(); }}>
+                      <span className="text-base leading-none">🖼️</span>
+                      <span className="flex-1">Attach image</span>
+                    </button>
+                    <div className="h-px bg-gray-800 mx-3 my-1" />
+                    <button className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-[11px] text-gray-300 hover:bg-gray-800 hover:text-white transition-colors text-left" onClick={() => setMenuSection('skill')}>
+                      <span className="text-base leading-none">🎯</span>
+                      <span className="flex-1">Choose skill</span>
+                      <ChevronRight className="w-3 h-3 opacity-40" />
+                    </button>
+                    {providerOptions && providerOptions.length > 0 && (
+                      <button className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-[11px] text-gray-300 hover:bg-gray-800 hover:text-white transition-colors text-left" onClick={() => setMenuSection('provider')}>
+                        <span className="text-base leading-none">⚙️</span>
+                        <span className="flex-1">AI provider</span>
+                        <ChevronRight className="w-3 h-3 opacity-40" />
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {/* ── Skill submenu ── */}
+                {menuSection === 'skill' && (
+                  <div className="py-1">
+                    <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-800">
+                      <button onClick={() => setMenuSection(null)} className="text-gray-500 hover:text-gray-300 transition-colors">
+                        <ChevronLeft className="w-3.5 h-3.5" />
+                      </button>
+                      <span className="text-[9px] font-black uppercase tracking-[3px] text-gray-500">Choose Skill</span>
+                    </div>
+                    {CHAT_SKILLS.map(skill => (
+                      <button key={skill.id} className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-[11px] text-gray-300 hover:bg-gray-800 hover:text-white transition-colors text-left" onClick={() => {
+                        const msg = `Rebuild this as a ${skill.id} type app — adapt design, layout, and interactions for ${skill.id}.`;
+                        if (inputRef.current) { inputRef.current.value = msg; inputRef.current.focus(); }
+                        setShowMenu(false); setMenuSection(null);
+                      }}>
+                        <span className="text-base leading-none">{skill.label.split(' ')[0]}</span>
+                        <span>{skill.label.split(' ').slice(1).join(' ')}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* ── Provider submenu ── */}
+                {menuSection === 'provider' && (
+                  <div className="py-1">
+                    <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-800">
+                      <button onClick={() => setMenuSection(null)} className="text-gray-500 hover:text-gray-300 transition-colors">
+                        <ChevronLeft className="w-3.5 h-3.5" />
+                      </button>
+                      <span className="text-[9px] font-black uppercase tracking-[3px] text-gray-500">AI Provider</span>
+                    </div>
+                    {(providerOptions || []).map(p => (
+                      <button key={p.id}
+                        className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 text-[11px] transition-colors text-left ${aiProvider === p.id ? 'text-indigo-300 bg-indigo-500/10' : 'text-gray-300 hover:bg-gray-800 hover:text-white'}`}
+                        onClick={() => { onProviderSwitch?.(p.id); setShowMenu(false); setMenuSection(null); }}
+                      >
+                        {aiProvider === p.id
+                          ? <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 shrink-0 mt-0.5" />
+                          : <span className="w-1.5 h-1.5 shrink-0" />
+                        }
+                        <span className="flex-1">{p.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        {/* Text input */}
         <input
           ref={inputRef}
           type="text"
           onKeyDown={e => e.key === "Enter" && !e.shiftKey && submit()}
-          placeholder="Improve or change this app..."
+          placeholder={attachments.length > 0 ? "What to do with these files?" : "Improve or change this app..."}
           disabled={isFixing}
           autoComplete="off"
           autoCorrect="off"
@@ -2554,6 +2793,8 @@ const ChatInputBar = React.memo(function ChatInputBar({
           name="chat-message"
           className="flex-1 min-w-0 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-[11px] text-white placeholder:text-gray-500 focus:outline-none focus:border-indigo-500 transition-colors disabled:opacity-40"
         />
+
+        {/* Send button */}
         <button
           onClick={submit}
           disabled={isFixing}
@@ -2613,6 +2854,9 @@ function LaunchModal({
   showWaterDialog,
   setShowWaterDialog,
   onRefine,
+  chatProvider,
+  chatProviderOptions,
+  onChatProviderSwitch,
 }: {
   suggestion: Suggestion;
   currentUserId?: string;
@@ -2629,6 +2873,9 @@ function LaunchModal({
   showWaterDialog?: boolean;
   setShowWaterDialog?: (v: boolean) => void;
   onRefine?: (message: string, code: string) => Promise<string>;
+  chatProvider?: string;
+  chatProviderOptions?: { id: string; label: string }[];
+  onChatProviderSwitch?: (id: string) => void;
 }) {
   const [code, setCode] = useState(suggestion.built_code || "");
   const [lastError, setLastError] = useState<string | null>(null);
@@ -3013,7 +3260,8 @@ function LaunchModal({
                   {isFixing && <Loader2 className="w-3 h-3 text-indigo-400 animate-spin" />}
                 </div>
                 <ChatMessages messages={messages} containerRef={desktopChatContainerRef} />
-                <ChatInputBar lastError={lastError} isFixing={isFixing} onSend={sendMessage} />
+                <ChatInputBar lastError={lastError} isFixing={isFixing} onSend={sendMessage}
+                  aiProvider={chatProvider} providerOptions={chatProviderOptions} onProviderSwitch={onChatProviderSwitch} />
               </motion.div>
             )}
           </AnimatePresence>
@@ -3051,7 +3299,8 @@ function LaunchModal({
               </div>
             </div>
             <ChatMessages messages={messages} containerRef={mobileChatContainerRef} />
-            <ChatInputBar lastError={lastError} isFixing={isFixing} onSend={sendMessage} />
+            <ChatInputBar lastError={lastError} isFixing={isFixing} onSend={sendMessage}
+              aiProvider={chatProvider} providerOptions={chatProviderOptions} onProviderSwitch={onChatProviderSwitch} />
           </motion.div>
         )}
       </AnimatePresence>
