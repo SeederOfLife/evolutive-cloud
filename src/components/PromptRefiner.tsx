@@ -8,6 +8,16 @@ import {
   generateMoreSuggestions,
   generateMoreQuestions,
 } from "../services/refiner";
+import type { AppType } from "../services/agentSkills";
+
+const APP_TYPE_OPTIONS: { id: AppType; label: string }[] = [
+  { id: 'phone',    label: '📱 Phone'    },
+  { id: 'desktop',  label: '🖥️ Desktop'  },
+  { id: 'game',     label: '🎮 Game'     },
+  { id: 'terminal', label: '⌨️ Terminal' },
+  { id: 'music',    label: '🎵 Music'    },
+  { id: 'art',      label: '🎨 Art'      },
+];
 
 const MAX_QUESTIONS = 9;
 
@@ -15,20 +25,27 @@ interface Props {
   idea: string;
   title: string;
   questions: RefinementQuestion[];
+  appType?: AppType;
+  onTypeChange?: (type: AppType) => void;
   onBuild: (answers: Record<number, string>, editedTitle: string) => void;
   onSkip: (editedTitle: string) => void;
   callAI: (prompt: string) => Promise<string>;
 }
 
-export function PromptRefiner({ idea, title: initialTitle, questions: initialQs, onBuild, onSkip, callAI }: Props) {
-  // answers: comma-joined selected strings per question index
+export function PromptRefiner({ idea, title: initialTitle, questions: initialQs, appType, onTypeChange, onBuild, onSkip, callAI }: Props) {
   const [selections, setSelections] = useState<Record<number, string[]>>({});
   const [customInputs, setCustomInputs] = useState<Record<number, string>>({});
   const [editingTitle, setEditingTitle] = useState(false);
   const [title, setTitle] = useState(initialTitle);
   const [questions, setQuestions] = useState<RefinementQuestion[]>(initialQs);
+  const [localType, setLocalType] = useState<AppType>(appType ?? 'desktop');
   const [loadingMoreQs, setLoadingMoreQs] = useState(false);
   const titleInputRef = useRef<HTMLInputElement>(null);
+
+  const handleTypeChange = (t: AppType) => {
+    setLocalType(t);
+    onTypeChange?.(t);
+  };
 
   // Merge selections + custom input into a final answer string per question
   const buildAnswer = (idx: number): string => {
@@ -113,6 +130,26 @@ export function PromptRefiner({ idea, title: initialTitle, questions: initialQs,
           {idea !== title && (
             <p className="text-[9px] font-mono text-white/25 mt-1 truncate">from: {idea}</p>
           )}
+
+          {/* Skill type picker */}
+          <div className="mt-3">
+            <p className="text-[8px] font-black uppercase tracking-[3px] text-white/25 mb-1.5">App Type</p>
+            <div className="flex gap-1.5 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+              {APP_TYPE_OPTIONS.map(opt => (
+                <button
+                  key={opt.id}
+                  onClick={() => handleTypeChange(opt.id)}
+                  className={`px-2.5 py-1 rounded-lg text-[10px] font-bold shrink-0 transition-all ${
+                    localType === opt.id
+                      ? 'bg-indigo-500 text-white'
+                      : 'bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
 
           {/* Progress dots — dynamic based on total question count */}
           <div className="flex items-center gap-2 mt-3">
@@ -296,6 +333,11 @@ function QuestionCard({
           value={customInput}
           onChange={e => onCustomInput(e.target.value)}
           placeholder="Or type your own..."
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="off"
+          spellCheck={false}
+          name="custom-option"
           className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-[11px] text-white placeholder:text-gray-600 focus:outline-none focus:border-indigo-500 transition-colors"
         />
       </div>

@@ -20,9 +20,11 @@ interface Props {
   stage: AIStageIndex;
   error?: string | null;
   retrying?: boolean;
+  label?: string;
+  highZ?: boolean;
 }
 
-export function AIProgress({ stage, error, retrying }: Props) {
+export function AIProgress({ stage, error, retrying, label, highZ }: Props) {
   const [displayed, setDisplayed] = useState<AIStageIndex>(stage);
 
   // Auto-advance displayed stage every 2s up to the real stage
@@ -44,7 +46,7 @@ export function AIProgress({ stage, error, retrying }: Props) {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[90] bg-gray-950/92 backdrop-blur-sm flex flex-col items-center justify-center p-6"
+      className={`fixed inset-0 ${highZ ? 'z-[9999]' : 'z-[90]'} bg-gray-950/92 backdrop-blur-sm flex flex-col items-center justify-center p-6`}
     >
       <style>{`
         @keyframes evo-flow-down {
@@ -87,7 +89,7 @@ export function AIProgress({ stage, error, retrying }: Props) {
         {/* Title */}
         <div className="text-center mb-8">
           <p className="text-[9px] font-black uppercase tracking-[5px] text-indigo-400 mb-2">
-            {retrying ? "Retrying" : "Building"}
+            {retrying ? "Retrying" : (label ?? "Building")}
           </p>
           <AnimatePresence mode="wait">
             <motion.p
