@@ -2936,7 +2936,6 @@ function LaunchModal({
   const [lastError, setLastError] = useState<string | null>(null);
   const [isFixing, setIsFixing] = useState(false);
   const [fixStage, setFixStage] = useState<AIStageIndex>(0);
-  const [autoRetries, setAutoRetries] = useState(0);
   const [voted, setVoted] = useState(false);
   const [showVotePop, setShowVotePop] = useState(false);
   const [showChat, setShowChat] = useState(false);
@@ -2946,8 +2945,6 @@ function LaunchModal({
   const [messages, setMessages] = useState<{ role: "user" | "ai"; text: string }[]>([]);
   const desktopChatContainerRef = useRef<HTMLDivElement>(null);
   const mobileChatContainerRef = useRef<HTMLDivElement>(null);
-  const autoRetryRef = useRef(0);
-
   const sendMessageRef = useRef<(msg: string) => void>(() => {});
 
   const handleCodeError = (msg: string) => {
@@ -2956,15 +2953,8 @@ function LaunchModal({
       if (prev.at(-1)?.text.startsWith("⚠️")) return prev;
       return [...prev, { role: "ai", text: `⚠️ ${msg}` }];
     });
-    // Auto-retry truncated code up to 3 times
-    if ((msg.includes("incomplete") || msg.includes("truncated")) && onRefine) {
-      if (autoRetryRef.current < 3) {
-        autoRetryRef.current += 1;
-        setAutoRetries(autoRetryRef.current);
-        const retryMsg = "The previous code was truncated. Generate a COMPLETE working version that fits in your response. Simplify if needed - working simple beats broken complex.";
-        setTimeout(() => sendMessageRef.current(retryMsg), 800);
-      }
-    }
+    // Open chat so the Fix Error button is immediately visible
+    setShowChat(true);
   };
 
   useEffect(() => {
@@ -2975,7 +2965,7 @@ function LaunchModal({
     return () => window.removeEventListener("message", handler);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => { setLastError(null); autoRetryRef.current = 0; setAutoRetries(0); }, [code]);
+  useEffect(() => { setLastError(null); }, [code]);
 
   useEffect(() => {
     const scrollToBottom = (el: HTMLDivElement | null) => {
@@ -3330,7 +3320,7 @@ function LaunchModal({
                     className="pointer-events-auto flex items-center gap-2 px-4 py-2.5 bg-red-500 hover:bg-red-600 rounded-xl text-sm font-bold text-white shadow-xl transition-all active:scale-95"
                   >
                     <Wrench className="w-4 h-4" />
-                    {autoRetries > 0 ? `Fix with AI (retry ${autoRetries}/3)` : "Fix with AI"}
+                    Fix with AI
                   </button>
                 </motion.div>
               </>
