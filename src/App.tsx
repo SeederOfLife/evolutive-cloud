@@ -12,7 +12,7 @@ import {
   ChevronUp, X, Search, Zap, Play, Sparkles, Loader2,
   Settings, Activity, Trash2, LogOut, Globe, Cpu, ChevronDown, User,
   MessageSquare, ArrowRight, GitFork, Layers, Wrench, Share2, Lock, Droplets, Server,
-  Plus, ChevronRight, ChevronLeft
+  Plus, ChevronRight, ChevronLeft, Maximize2
 } from "lucide-react";
 import { AuthModal } from "./components/AuthModal";
 import { SettingsModal } from "./components/SettingsModal";
@@ -148,7 +148,8 @@ export default function App() {
   });
   // userId → short display name for linked accounts
   const [linkedUserMap, setLinkedUserMap] = useState<Map<string, string>>(new Map());
-  const nodePositionsRef = useRef(new Map<string, THREE.Vector3>());
+  const nodePositionsRef   = useRef(new Map<string, THREE.Vector3>());
+  const orbitControlsRef  = useRef<any>(null);
   const [wateringId, setWateringId] = useState<string | null>(null);
   const [showWaterDialog, setShowWaterDialog] = useState(false);
   const [pendingEvolution, setPendingEvolution] = useState<AppEvolution | null>(null);
@@ -1054,7 +1055,16 @@ ROADMAP: {"now":["what works today 1","what works today 2"],"next":["next wateri
         <div
           style={{ display: view === "galaxy" ? "block" : "none" }}
           className="absolute inset-0"
+          onDoubleClick={() => orbitControlsRef.current?.reset()}
         >
+          {/* Camera reset button — top-right of the 3D view */}
+          <button
+            onClick={() => orbitControlsRef.current?.reset()}
+            title="Reset view"
+            className="absolute top-3 right-3 z-10 flex items-center gap-1.5 px-2.5 py-1.5 bg-black/40 hover:bg-black/60 backdrop-blur-sm border border-white/10 rounded-full text-white/50 hover:text-white transition-all active:scale-90"
+          >
+            <Maximize2 className="w-3.5 h-3.5" />
+          </button>
           <Canvas
             shadows
             camera={{ position: [0, 0, 10], fov: 75 }}
@@ -1090,8 +1100,11 @@ ROADMAP: {"now":["what works today 1","what works today 2"],"next":["next wateri
               posRef={nodePositionsRef}
             />
             <OrbitControls
-              enableZoom={false}
+              ref={orbitControlsRef}
               enablePan={false}
+              enableZoom
+              minDistance={3}
+              maxDistance={25}
               maxPolarAngle={Math.PI / 1.5}
               minPolarAngle={Math.PI / 3}
             />
