@@ -19,6 +19,10 @@ import {
 } from "lucide-react";
 import { Suggestion, AppEvolution, EvolutionVersion } from "../types";
 import { isCodeBalanced, findAppFunctionEnd } from "../utils/sandboxUtils";
+import { AIProgress } from "./AIProgress";
+import type { FixStageIndex } from "./AIProgress";
+
+const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
 
 function timeAgo(ts: string): string {
   const diff = Date.now() - new Date(ts).getTime();
@@ -71,6 +75,9 @@ export function ModulePlayer({
   const [runtimeStatus, setRuntimeStatus] = useState("Initializing...");
   const [lastError, setLastError] = useState<string | null>(null);
   const [isRestoring, setIsRestoring] = useState(false);
+  const [isFixing,    setIsFixing]    = useState(false);
+  const [fixStage,    setFixStage]    = useState<FixStageIndex>(0);
+  const [fixError,    setFixError]    = useState<string | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   useEffect(() => {
@@ -132,10 +139,96 @@ export function ModulePlayer({
 
   const isTruncated = useMemo(() => cleanCode ? !isCodeBalanced(cleanCode) : false, [cleanCode]);
 
-  const handleFixTruncated = () => {
-    handleRefine(
-      `The previous code was incomplete or truncated. Generate a COMPLETE working version of: "${suggestion.content}". Make sure all braces and functions are properly closed. Simplify if needed — a working simple app is better than a broken complex one. Return ONLY the complete App function, no imports, no markdown.`
-    );
+  const handleSmartFix = async (runtimeErr?: string) => {
+    if (!onRefine || isFixing || isRefining) return;
+    const currentCode = code;
+
+    setIsFixing(true);
+    setFixError(null);
+
+    try {
+      // Stage 0: Reading Code
+      setFixStage(0);
+      await sleep(600);
+
+      // Stage 1: Detecting Errors — run local diagnostics
+      setFixStage(1);
+      const diagnosis: string[] = [];
+      if (!isCodeBalanced(currentCode)) diagnosis.push('unbalanced braces/brackets');
+      const endPos = findAppFunctionEnd(currentCode);
+      if (endPos === currentCode.length && !currentCode.includes('export default')) {
+        diagnosis.push('App function appears truncated or missing closing brace');
+      }
+      if (!currentCode.includes('return (') && !currentCode.includes('return(')) {
+        diagnosis.push('missing return statement in App');
+      }
+      if (currentCode.length < 200) diagnosis.push('code too short — likely severely truncated');
+      if (runtimeErr) diagnosis.push(`runtime error: ${runtimeErr}`);
+      await sleep(500);
+
+      // Stage 2: Root Cause
+      setFixStage(2);
+      await sleep(400);
+
+      // Stage 3: Surgical Fix — call AI with rich diagnostic prompt
+      setFixStage(3);
+      const prompt = `The following React app has issues that need fixing.
+
+DETECTED PROBLEMS:
+${diagnosis.length
+  ? diagnosis.map((d, i) => `${i + 1}. ${d}`).join('\n')
+  : 'Runtime error — code may be structurally complete but has a logic bug'}
+
+CURRENT CODE:
+${currentCode}
+
+TASK: Rewrite the complete, working version of this app fixing the detected problems.
+Rules:
+- Keep all existing features and design
+- Do NOT truncate — write the full complete code
+- Must have a valid App function with a return statement
+- Must end with: export default App;
+- All braces must be balanced`;
+
+      const result = await onRefine(prompt);
+
+      // Stage 4: Validating — check result before injecting
+      setFixStage(4);
+      const clean = result
+        .replace(/^import\b.*$/gm, '')
+        .replace(/^export\s+default\s+function/gm, 'function')
+        .replace(/^export\s+default\s+/gm, '')
+        .replace(/^export\s+/gm, '')
+        .trim();
+
+      await sleep(300);
+
+      if (!isCodeBalanced(clean)) {
+        setFixError('Fix produced invalid code (unbalanced braces) — try again');
+        await sleep(2500);
+        return;
+      }
+      const fixEnd = findAppFunctionEnd(clean);
+      if (fixEnd === clean.length && !result.includes('export default')) {
+        setFixError('Fix produced truncated code — try again');
+        await sleep(2500);
+        return;
+      }
+
+      // Stage 5: Done — inject code
+      setFixStage(5);
+      setCode(result);
+      await onSave?.(result);
+      setChatMessages(prev => [...prev, { role: 'assistant' as const, content: '✓ Fix applied successfully.' }]);
+      await sleep(1500);
+    } catch (err: any) {
+      setFixError(err.message || 'Fix failed');
+      await sleep(2500);
+    } finally {
+      setIsFixing(false);
+      setFixStage(0);
+      setFixError(null);
+    }
   };
 
   const handleSave = async () => {
@@ -146,7 +239,7 @@ export function ModulePlayer({
 
   const handleRefine = async (overrideInput?: string) => {
     const prompt = overrideInput ?? refineInput;
-    if (!onRefine || !prompt.trim()) return;
+    if (!onRefine || !prompt.trim() || isFixing) return;
     setIsRefining(true);
     setChatMessages((prev) => [...prev, { role: "user", content: prompt }]);
     if (!overrideInput) setRefineInput("");
@@ -405,11 +498,11 @@ body{background:#050508;color:#fff;margin:0;min-height:100vh;display:flex;flex-d
                           Code was truncated — the app is incomplete.
                         </p>
                         <button
-                          onClick={handleFixTruncated}
-                          disabled={isRefining}
+                          onClick={() => handleSmartFix()}
+                          disabled={isRefining || isFixing}
                           className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 disabled:cursor-not-allowed text-black text-[10px] font-black uppercase tracking-wider rounded-lg transition-all active:scale-95"
                         >
-                          {isRefining ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
+                          {isFixing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
                           Fix with AI
                         </button>
                       </div>
@@ -570,18 +663,18 @@ body{background:#050508;color:#fff;margin:0;min-height:100vh;display:flex;flex-d
                   className="absolute bottom-16 left-0 right-0 flex justify-center z-20"
                 >
                   <button
-                    onClick={handleFixTruncated}
-                    disabled={isRefining}
+                    onClick={() => handleSmartFix()}
+                    disabled={isRefining || isFixing}
                     className="flex items-center gap-2 px-4 py-2.5 bg-indigo-500 hover:bg-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl text-sm font-bold text-white shadow-xl transition-all active:scale-95"
                   >
-                    {isRefining ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+                    {isFixing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
                     Fix with AI
                   </button>
                 </motion.div>
               )}
             </AnimatePresence>
             <AnimatePresence>
-              {lastError && onRefine && !isRefining && (
+              {lastError && onRefine && !isRefining && !isFixing && (
                 <motion.div
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -589,7 +682,7 @@ body{background:#050508;color:#fff;margin:0;min-height:100vh;display:flex;flex-d
                   className="absolute bottom-16 left-0 right-0 flex justify-center z-20"
                 >
                   <button
-                    onClick={() => handleRefine(`[AUTO-FIX] Build error: ${lastError} — fix the code so it renders correctly without errors`)}
+                    onClick={() => handleSmartFix(lastError ?? undefined)}
                     className="flex items-center gap-2 px-4 py-2.5 bg-red-500 hover:bg-red-600 rounded-xl text-sm font-bold text-white shadow-xl transition-all active:scale-95"
                   >
                     <Zap className="w-4 h-4" />
@@ -602,6 +695,18 @@ body{background:#050508;color:#fff;margin:0;min-height:100vh;display:flex;flex-d
           </div>
         </div>
       </div>
+
+      {/* Fix-with-AI progress overlay — amber theme, 6 diagnostic stages */}
+      <AnimatePresence>
+        {isFixing && (
+          <AIProgress
+            mode="fix"
+            stage={fixStage as import("./AIProgress").AIStageIndex}
+            error={fixError}
+            highZ
+          />
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }

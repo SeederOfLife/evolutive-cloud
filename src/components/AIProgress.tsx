@@ -12,19 +12,35 @@ export const AI_STAGES = [
   { label: "Done",       desc: "Your app is ready!"             },
 ] as const;
 
-export type AIStageIndex = 0 | 1 | 2 | 3 | 4 | 5 | 6;
+export const FIX_STAGES = [
+  { label: "Reading Code",     desc: "Scanning current code for issues..."       },
+  { label: "Detecting Errors", desc: "Checking braces, App function, imports..." },
+  { label: "Root Cause",       desc: "Identifying what broke..."                 },
+  { label: "Surgical Fix",     desc: "Rewriting only what's broken..."           },
+  { label: "Validating",       desc: "Verifying code balance and structure..."   },
+  { label: "Done",             desc: "Fix applied!"                              },
+] as const;
 
-const STAGE_PROGRESS = [0, 15, 30, 45, 75, 85, 95, 100];
+export type AIStageIndex  = 0 | 1 | 2 | 3 | 4 | 5 | 6;
+export type FixStageIndex = 0 | 1 | 2 | 3 | 4 | 5;
+
+const STAGE_PROGRESS: number[] = [0, 15, 30, 45, 75, 85, 95, 100];
+const FIX_PROGRESS:   number[] = [0, 20, 40, 60, 85, 96, 100, 100];
 
 interface Props {
-  stage: AIStageIndex;
-  error?: string | null;
+  stage:     AIStageIndex;
+  error?:    string | null;
   retrying?: boolean;
-  label?: string;
-  highZ?: boolean;
+  label?:    string;
+  highZ?:    boolean;
+  mode?:     'generate' | 'fix';
 }
 
-export function AIProgress({ stage, error, retrying, label, highZ }: Props) {
+export function AIProgress({ stage, error, retrying, label, highZ, mode = 'generate' }: Props) {
+  const isFix   = mode === 'fix';
+  const stages  = isFix ? FIX_STAGES : AI_STAGES;
+  const progMap = isFix ? FIX_PROGRESS : STAGE_PROGRESS;
+
   const [displayed, setDisplayed] = useState<AIStageIndex>(stage);
 
   // Auto-advance displayed stage every 2s up to the real stage
@@ -39,7 +55,8 @@ export function AIProgress({ stage, error, retrying, label, highZ }: Props) {
     if (stage > displayed) setDisplayed(stage);
   }, [stage]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const progressPct = STAGE_PROGRESS[displayed];
+  const safeIdx    = Math.min(displayed, stages.length - 1);
+  const progressPct = progMap[safeIdx];
 
   return (
     <motion.div
@@ -57,6 +74,10 @@ export function AIProgress({ stage, error, retrying, label, highZ }: Props) {
           0%, 100% { box-shadow: 0 0 0 0 rgba(99,102,241,0); }
           50%       { box-shadow: 0 0 0 8px rgba(99,102,241,0.22); }
         }
+        @keyframes evo-halo-amber {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(245,158,11,0); }
+          50%       { box-shadow: 0 0 0 8px rgba(245,158,11,0.22); }
+        }
       `}</style>
 
       <div className="w-full max-w-xs relative overflow-hidden rounded-2xl">
@@ -64,7 +85,9 @@ export function AIProgress({ stage, error, retrying, label, highZ }: Props) {
         <motion.div
           className="absolute inset-0 pointer-events-none rounded-2xl"
           style={{
-            background: 'linear-gradient(105deg, transparent 25%, rgba(99,102,241,0.055) 50%, transparent 75%)',
+            background: isFix
+              ? 'linear-gradient(105deg, transparent 25%, rgba(245,158,11,0.055) 50%, transparent 75%)'
+              : 'linear-gradient(105deg, transparent 25%, rgba(99,102,241,0.055) 50%, transparent 75%)',
           }}
           animate={{ x: ['-110%', '110%'] }}
           transition={{ duration: 4, repeat: Infinity, ease: 'linear' }}
@@ -79,7 +102,7 @@ export function AIProgress({ stage, error, retrying, label, highZ }: Props) {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.25 }}
-              className="text-[10px] font-black tabular-nums text-indigo-400/50"
+              className={`text-[10px] font-black tabular-nums ${isFix ? 'text-amber-400/50' : 'text-indigo-400/50'}`}
             >
               {progressPct}%
             </motion.span>
@@ -88,19 +111,19 @@ export function AIProgress({ stage, error, retrying, label, highZ }: Props) {
 
         {/* Title */}
         <div className="text-center mb-8">
-          <p className="text-[9px] font-black uppercase tracking-[5px] text-indigo-400 mb-2">
-            {retrying ? "Retrying" : (label ?? "Building")}
+          <p className={`text-[9px] font-black uppercase tracking-[5px] mb-2 ${isFix ? 'text-amber-400' : 'text-indigo-400'}`}>
+            {retrying ? "Retrying" : (label ?? (isFix ? "Fixing" : "Building"))}
           </p>
           <AnimatePresence mode="wait">
             <motion.p
-              key={displayed}
+              key={safeIdx}
               initial={{ opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -4 }}
               transition={{ duration: 0.2 }}
               className="text-base font-semibold text-white"
             >
-              {AI_STAGES[displayed].desc}
+              {stages[safeIdx].desc}
             </motion.p>
           </AnimatePresence>
           {retrying && (
@@ -110,14 +133,14 @@ export function AIProgress({ stage, error, retrying, label, highZ }: Props) {
 
         {/* Timeline */}
         <div className="relative flex flex-col gap-0">
-          {AI_STAGES.map((s, i) => {
-            const isDone = i < displayed;
-            const isCurrent = i === displayed;
+          {stages.map((s, i) => {
+            const isDone      = i < safeIdx;
+            const isCurrent   = i === safeIdx;
             const isErrorStep = isCurrent && !!error;
 
             return (
               <div key={s.label} className="flex items-start gap-4">
-                {/* Left: circle + connector */}
+                {/* Circle + connector */}
                 <div className="flex flex-col items-center">
                   <div
                     className={`relative w-7 h-7 rounded-full flex items-center justify-center shrink-0 border-2 transition-all duration-500 ${
@@ -126,10 +149,14 @@ export function AIProgress({ stage, error, retrying, label, highZ }: Props) {
                         : isDone
                         ? "border-emerald-500 bg-emerald-500/15"
                         : isCurrent
-                        ? "border-indigo-400 bg-indigo-500/15"
+                        ? isFix
+                          ? "border-amber-400 bg-amber-500/15"
+                          : "border-indigo-400 bg-indigo-500/15"
                         : "border-gray-700 bg-transparent"
                     }`}
-                    style={isCurrent && !isErrorStep ? { animation: 'evo-halo 2s ease-in-out infinite' } : undefined}
+                    style={isCurrent && !isErrorStep
+                      ? { animation: `${isFix ? 'evo-halo-amber' : 'evo-halo'} 2s ease-in-out infinite` }
+                      : undefined}
                   >
                     {isErrorStep ? (
                       <AlertCircle className="w-3.5 h-3.5 text-red-400" />
@@ -145,14 +172,14 @@ export function AIProgress({ stage, error, retrying, label, highZ }: Props) {
                       <motion.div
                         animate={{ scale: [1, 1.3, 1] }}
                         transition={{ duration: 1.2, repeat: Infinity }}
-                        className="w-2.5 h-2.5 rounded-full bg-indigo-400"
+                        className={`w-2.5 h-2.5 rounded-full ${isFix ? 'bg-amber-400' : 'bg-indigo-400'}`}
                       />
                     ) : (
                       <div className="w-2 h-2 rounded-full bg-gray-700" />
                     )}
                   </div>
 
-                  {i < AI_STAGES.length - 1 && (
+                  {i < stages.length - 1 && (
                     <div
                       className="w-0.5 h-6 overflow-hidden relative"
                       style={{ background: isDone ? 'rgba(52,211,153,0.4)' : 'rgb(31,41,55)' }}
@@ -161,11 +188,11 @@ export function AIProgress({ stage, error, retrying, label, highZ }: Props) {
                         <div
                           style={{
                             position: 'absolute',
-                            top: 0,
-                            left: 0,
-                            width: '100%',
-                            height: '200%',
-                            background: 'linear-gradient(to bottom, transparent, rgba(99,102,241,0.85), transparent)',
+                            top: 0, left: 0,
+                            width: '100%', height: '200%',
+                            background: isFix
+                              ? 'linear-gradient(to bottom, transparent, rgba(245,158,11,0.85), transparent)'
+                              : 'linear-gradient(to bottom, transparent, rgba(99,102,241,0.85), transparent)',
                             animation: 'evo-flow-down 1.4s linear infinite',
                           }}
                         />
@@ -174,13 +201,13 @@ export function AIProgress({ stage, error, retrying, label, highZ }: Props) {
                   )}
                 </div>
 
-                {/* Right: label + desc */}
+                {/* Label + desc */}
                 <div className="pb-6 min-w-0 flex-1">
                   <p className={`text-xs font-bold transition-colors duration-300 ${
                     isErrorStep ? "text-red-400"
-                    : isDone ? "text-emerald-400"
-                    : isCurrent ? "text-white"
-                    : "text-gray-600"
+                    : isDone     ? "text-emerald-400"
+                    : isCurrent  ? "text-white"
+                    :              "text-gray-600"
                   }`}>
                     {s.label}
                   </p>
@@ -204,7 +231,7 @@ export function AIProgress({ stage, error, retrying, label, highZ }: Props) {
         {/* Bottom progress bar */}
         <div className="mt-2 h-px w-full bg-gray-800 rounded-full overflow-hidden">
           <motion.div
-            className="h-full bg-gradient-to-r from-indigo-600 to-indigo-400 rounded-full"
+            className={`h-full bg-gradient-to-r rounded-full ${isFix ? 'from-amber-600 to-amber-400' : 'from-indigo-600 to-indigo-400'}`}
             animate={{ width: `${progressPct}%` }}
             transition={{ duration: 0.7, ease: "easeOut" }}
           />
