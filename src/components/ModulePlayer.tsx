@@ -77,6 +77,14 @@ export function ModulePlayer({
     return sanitizeCode(code);
   }, [code]);
 
+  const isTruncated = useMemo(() => cleanCode ? !isCodeBalanced(cleanCode) : false, [cleanCode]);
+
+  const handleFixTruncated = () => {
+    handleRefine(
+      `The previous code was incomplete or truncated. Generate a COMPLETE working version of: "${suggestion.content}". Make sure all braces and functions are properly closed. Simplify if needed — a working simple app is better than a broken complex one. Return ONLY the complete App function, no imports, no markdown.`
+    );
+  };
+
   const handleSave = async () => {
     if (!onSave) return;
     setIsSaving(true);
@@ -338,6 +346,21 @@ body{background:#050508;color:#fff;margin:0;min-height:100vh;display:flex;flex-d
 
                 {activeSideTab === "chat" && (
                   <div className="h-full flex flex-col p-4">
+                    {isTruncated && onRefine && (
+                      <div className="mb-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl flex flex-col gap-2">
+                        <p className="text-[10px] text-amber-300 font-semibold leading-snug">
+                          Code was truncated — the app is incomplete.
+                        </p>
+                        <button
+                          onClick={handleFixTruncated}
+                          disabled={isRefining}
+                          className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 disabled:cursor-not-allowed text-black text-[10px] font-black uppercase tracking-wider rounded-lg transition-all active:scale-95"
+                        >
+                          {isRefining ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
+                          Fix with AI
+                        </button>
+                      </div>
+                    )}
                     <div className="flex-1 overflow-y-auto space-y-6 mb-4 pr-2">
                       {chatMessages.map((msg, i) => (
                         <div key={i} className={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"}`}>
@@ -467,6 +490,25 @@ body{background:#050508;color:#fff;margin:0;min-height:100vh;display:flex;flex-d
                 <RefreshCw className="w-5 h-5" />
               </button>
             </div>
+            <AnimatePresence>
+              {isTruncated && onRefine && (
+                <motion.div
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 8 }}
+                  className="absolute bottom-16 left-0 right-0 flex justify-center z-20"
+                >
+                  <button
+                    onClick={handleFixTruncated}
+                    disabled={isRefining}
+                    className="flex items-center gap-2 px-4 py-2.5 bg-indigo-500 hover:bg-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl text-sm font-bold text-white shadow-xl transition-all active:scale-95"
+                  >
+                    {isRefining ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+                    Fix with AI
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
             <AnimatePresence>
               {lastError && onRefine && !isRefining && (
                 <motion.div
