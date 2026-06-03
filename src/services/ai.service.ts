@@ -3,6 +3,9 @@ import OpenAI from "openai";
 import * as webllm from "@mlc-ai/web-llm";
 import type { RefObject } from "react";
 import { AIConfig } from "../types";
+import { callGeminiCloud, callGeminiNano } from "./providers/google";
+import { callOpenRouter, OPENROUTER_FREE_MODELS } from "./providers/openrouter";
+import { callOllama } from "./providers/ollama";
 
 export type AIProvider = 'google' | 'openai' | 'anthropic' | 'custom' | 'web-llm' | 'gemini-nano' | 'mlc-mobile' | 'ollama' | 'openrouter';
 
@@ -20,115 +23,7 @@ export interface AICallOptions {
   webLlmEngineRef?: RefObject<webllm.MLCEngine | null>;
 }
 
-export async function callGeminiCloud(
-  prompt: string,
-  userGoogleKey?: string
-): Promise<string> {
-  // If we have a user key, skip the relay entirely and call Google directly
-  if (userGoogleKey) {
-    const ai = new GoogleGenAI({ apiKey: userGoogleKey });
-    const result = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: prompt
-    });
-    const text = result.text;
-    if (!text) throw new Error("Google AI returned an empty response.");
-    return text;
-  }
-
-  // No user key — try the platform relay
-  try {
-    const response = await fetch("/api/neural-link", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt, model: "gemini-3-flash-preview" })
-    });
-
-    // The relay may return non-JSON (404/405 in local dev without a backend)
-    let data: any = {};
-    try { data = await response.json(); } catch { /* non-JSON body */ }
-
-    if (!response.ok) {
-      if (response.status === 404 || response.status === 405) {
-        throw new Error("Cloud relay not deployed. Add a Google API key in Settings to use Gemini directly.");
-      }
-      if (response.status === 429) {
-        throw new Error("NEURAL_QUOTA_EXHAUSTED: Platform cloud limit reached. Add your own Google API key in Settings.");
-      }
-      throw new Error(data.message || `Cloud relay error (HTTP ${response.status}).`);
-    }
-
-    if (!data.text) throw new Error("Cloud relay returned an empty response.");
-    return data.text;
-  } catch (err: any) {
-    console.error("Cloud Fallback Failure:", err);
-    const msg = err.message || String(err);
-    throw new Error(msg.length > 500 ? msg.substring(0, 500) + "..." : msg);
-  }
-}
-
-async function callGeminiNano(prompt: string): Promise<string> {
-  const w = window as any;
-  // Chrome 127+ Prompt API
-  if (w.ai?.languageModel) {
-    const session = await w.ai.languageModel.create();
-    return await session.prompt(prompt);
-  }
-  // Older Chrome Origin Trial API
-  if (w.ai?.assistant) {
-    const session = await w.ai.assistant.create();
-    return await session.prompt(prompt);
-  }
-  throw new Error("Gemini Nano not available in this browser.");
-}
-
-const OPENROUTER_FREE_MODELS = [
-  'google/gemini-2.0-flash-exp:free',
-  'meta-llama/llama-3.2-3b-instruct:free',
-  'mistralai/mistral-7b-instruct:free',
-] as const;
-
-async function callOpenRouter(prompt: string, model: string, apiKey: string): Promise<string> {
-  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-      'HTTP-Referer': 'https://evolutive-cloud.vercel.app',
-      'X-Title': 'Evolutive Cloud',
-    },
-    body: JSON.stringify({
-      model,
-      messages: [{ role: 'user', content: prompt }],
-    }),
-  });
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    const msg = err.error?.message || response.statusText;
-    throw new Error(`OpenRouter ${response.status}: ${msg}`);
-  }
-  const data = await response.json();
-  const text = data.choices?.[0]?.message?.content;
-  if (!text) throw new Error('OpenRouter returned empty response.');
-  return text;
-}
-
-async function callOllama(prompt: string, model = 'gemma2:2b', endpoint = 'http://localhost:11434'): Promise<string> {
-  let response: Response;
-  try {
-    response = await fetch(`${endpoint}/api/generate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model, prompt, stream: false }),
-    });
-  } catch (err: any) {
-    throw new Error(`Ollama connection failed. Is 'ollama serve' running? (${err.message})`);
-  }
-  if (!response.ok) throw new Error(`Ollama error ${response.status}. Is 'ollama serve' running?`);
-  const data = await response.json();
-  if (!data.response) throw new Error("Ollama returned empty response.");
-  return data.response;
-}
+export { callGeminiCloud } from "./providers/google";
 
 export interface FallbackOptions extends AICallOptions {
   onProviderSwitch?: (provider: string, label: string) => void;
