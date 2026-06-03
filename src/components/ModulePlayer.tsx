@@ -17,8 +17,28 @@ import {
   Monitor,
   Zap,
 } from "lucide-react";
-import { Suggestion } from "../types";
+import { Suggestion, AppEvolution, EvolutionVersion } from "../types";
 import { isCodeBalanced, findAppFunctionEnd } from "../utils/sandboxUtils";
+
+function timeAgo(ts: string): string {
+  const diff = Date.now() - new Date(ts).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return "just now";
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  if (d < 30) return `${d}d ago`;
+  return `${Math.floor(d / 30)}mo ago`;
+}
+
+type CombinedEntry = {
+  timestamp: string;
+  code: string;
+  label: string;
+  summary?: string;
+  source: 'evolution' | 'refinement';
+};
 
 export function ModulePlayer({
   suggestion,
@@ -50,6 +70,7 @@ export function ModulePlayer({
   );
   const [runtimeStatus, setRuntimeStatus] = useState("Initializing...");
   const [lastError, setLastError] = useState<string | null>(null);
+  const [isRestoring, setIsRestoring] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   useEffect(() => {
@@ -65,6 +86,38 @@ export function ModulePlayer({
   }, []);
 
   useEffect(() => { setLastError(null); }, [code]);
+
+  const combinedHistory = useMemo<CombinedEntry[]>(() => {
+    const entries: CombinedEntry[] = [];
+    for (const e of (suggestion.evolutions ?? []) as AppEvolution[]) {
+      entries.push({
+        timestamp: e.timestamp,
+        code: e.prevCode,
+        label: [e.focus, e.depth].filter(Boolean).join(' · '),
+        summary: e.summary,
+        source: 'evolution',
+      });
+    }
+    for (const v of (suggestion.history ?? []) as EvolutionVersion[]) {
+      entries.push({
+        timestamp: v.timestamp,
+        code: v.code,
+        label: v.prompt ? v.prompt.substring(0, 60) : 'Manual edit',
+        source: 'refinement',
+      });
+    }
+    return entries.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  }, [suggestion.evolutions, suggestion.history]);
+
+  const handleRestore = async (entry: CombinedEntry) => {
+    setIsRestoring(true);
+    try {
+      setCode(entry.code);
+      await onSave?.(entry.code);
+    } finally {
+      setIsRestoring(false);
+    }
+  };
 
   const cleanCode = useMemo(() => {
     if (!code) return "";
@@ -391,20 +444,38 @@ body{background:#050508;color:#fff;margin:0;min-height:100vh;display:flex;flex-d
                 )}
 
                 {activeSideTab === "history" && (
-                  <div className="px-4 space-y-4">
-                    {suggestion.history?.map((v, i) => (
-                      <div key={i} className="bg-white/5 border border-white/5 rounded-xl p-4 space-y-3 hover:border-indigo-500/30 transition-all">
-                        <div className="flex justify-between items-center text-[8px] font-black text-white/30 uppercase tracking-widest">
-                          <span>GEN_{suggestion.history!.length - i}</span>
-                          <span>{new Date(v.timestamp).toLocaleTimeString()}</span>
+                  <div className="px-3 py-2 space-y-2">
+                    {combinedHistory.length === 0 ? (
+                      <p className="text-[10px] text-white/20 text-center py-8 uppercase tracking-widest">No history yet</p>
+                    ) : combinedHistory.map((entry, i) => {
+                      const vNum = combinedHistory.length - i;
+                      const isEvo = entry.source === 'evolution';
+                      return (
+                        <div key={i} className="bg-white/5 border border-white/5 rounded-xl p-3 space-y-2 hover:border-indigo-500/25 transition-all">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className={`text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded ${isEvo ? 'bg-cyan-500/15 text-cyan-400' : 'bg-indigo-500/15 text-indigo-400'}`}>
+                              {isEvo ? '💧 Watered' : '✏️ Refined'}
+                            </span>
+                            <span className="text-[8px] font-mono text-white/25 shrink-0">
+                              v{vNum} · {timeAgo(entry.timestamp)}
+                            </span>
+                          </div>
+                          {(entry.summary || entry.label) && (
+                            <p className="text-[10px] text-white/50 leading-snug line-clamp-2">
+                              {entry.summary || entry.label}
+                            </p>
+                          )}
+                          <button
+                            onClick={() => handleRestore(entry)}
+                            disabled={isRestoring}
+                            className="w-full py-1.5 border border-white/10 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-white hover:text-black disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-1.5"
+                          >
+                            {isRestoring ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                            Restore this version
+                          </button>
                         </div>
-                        <p className="text-[10px] text-white/60 line-clamp-2 italic">"{v.prompt || "Manual Edit"}"</p>
-                        <button onClick={() => setCode(v.code)}
-                          className="w-full py-2 border border-white/10 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-white hover:text-black transition-all">
-                          Restore
-                        </button>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
