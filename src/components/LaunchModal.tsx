@@ -34,6 +34,7 @@ interface LaunchModalProps {
   showWaterDialog?: boolean;
   setShowWaterDialog?: (v: boolean) => void;
   onRefine?: (message: string, code: string, onProviderSwitch?: (label: string) => void) => Promise<string>;
+  onOpenSettings?: () => void;
   chatProvider?: string;
   chatProviderOptions?: { id: string; label: string }[];
   onChatProviderSwitch?: (id: string) => void;
@@ -42,7 +43,7 @@ interface LaunchModalProps {
 export function LaunchModal({
   suggestion, currentUserId, onClose, onVote, onFork, onToggleVisibility,
   onWater, onAutoWaterChange, isWatering, isFreeProvider, quota, pendingEvolution, onClearEvolution,
-  showWaterDialog, setShowWaterDialog, onRefine,
+  showWaterDialog, setShowWaterDialog, onRefine, onOpenSettings,
   chatProvider, chatProviderOptions, onChatProviderSwitch,
 }: LaunchModalProps) {
   const [code, setCode] = useState(suggestion.built_code || "");
@@ -138,6 +139,8 @@ export function LaunchModal({
       clearTimeout(t1); clearTimeout(t2); clearTimeout(t3);
       if (e.message?.includes('All AI providers exhausted')) {
         setAllProvidersFailed(true);
+        setMessages(prev => [...prev, { role: "ai", text: "⚡ No AI available — add a free Groq or Google key in Settings and try again." }]);
+        setShowChat(true);
       } else {
         setMessages(prev => [...prev, { role: "ai", text: "Error: " + e.message }]);
       }
@@ -423,6 +426,7 @@ export function LaunchModal({
             attempts={providerAttempts}
             allFailed={allProvidersFailed}
             onDismiss={() => setAllProvidersFailed(false)}
+            onOpenSettings={onOpenSettings}
           />
         )}
       </AnimatePresence>

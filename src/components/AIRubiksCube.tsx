@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ExternalLink, X } from 'lucide-react';
+import { ExternalLink, X, Settings } from 'lucide-react';
 
 export interface ProviderAttempt {
   name: string;
@@ -39,6 +39,7 @@ interface Props {
   attempts: ProviderAttempt[];
   allFailed?: boolean;
   onDismiss?: () => void;
+  onOpenSettings?: () => void;
 }
 
 function matchFace(name: string, keys: string[]): boolean {
@@ -46,12 +47,12 @@ function matchFace(name: string, keys: string[]): boolean {
   return keys.some(k => l.includes(k));
 }
 
-export default function AIRubiksCube({ currentProvider, attempts, allFailed, onDismiss }: Props) {
+export default function AIRubiksCube({ currentProvider, attempts, allFailed, onDismiss, onOpenSettings }: Props) {
   return (
     <motion.div
       drag
       dragMomentum={false}
-      className="fixed top-4 right-16 z-[9999] cursor-grab active:cursor-grabbing select-none"
+      className="fixed bottom-20 right-4 z-[9999] cursor-grab active:cursor-grabbing select-none"
       initial={{ opacity: 0, scale: 0.8, y: -8 }}
       animate={{ opacity: 1, scale: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.8, y: -8 }}
@@ -98,6 +99,12 @@ export default function AIRubiksCube({ currentProvider, attempts, allFailed, onD
                   </a>
                 ))}
               </div>
+              {onOpenSettings && (
+                <button onClick={onOpenSettings}
+                  className="w-full mt-3 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-indigo-500 hover:bg-indigo-400 text-white text-[11px] font-bold transition-colors">
+                  <Settings className="w-3 h-3" />Add key in Settings
+                </button>
+              )}
             </motion.div>
           ) : (
             <motion.div key="cube" initial={{ opacity: 0 }} animate={{ opacity: 1 }}

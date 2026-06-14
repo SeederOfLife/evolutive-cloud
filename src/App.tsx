@@ -1454,6 +1454,7 @@ ROADMAP: {"now":["what works today 1","what works today 2"],"next":["next wateri
             suggestion={launchTarget}
             currentUserId={user?.uid}
             onClose={() => setLaunchTarget(null)}
+            onOpenSettings={() => setShowSettings(true)}
             onVote={handleVote}
             onFork={() => { setForkTarget(launchTarget); setLaunchTarget(null); }}
             onToggleVisibility={handleToggleVisibility}
