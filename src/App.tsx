@@ -515,6 +515,20 @@ export default function App() {
     }
   };
 
+  const handleAutoWaterChange = async (enabled: boolean, interval: number, times: number, focus: string, note: string) => {
+    if (!launchTarget || launchTarget.id.startsWith('seed_')) return;
+    const update = {
+      autoWaterEnabled: enabled,
+      autoWaterInterval: interval,
+      autoWaterTimes: times,
+      autoWaterFocus: focus,
+      autoWaterNote: note,
+      autoWater: (enabled ? (interval <= 60 ? 'hourly' : 'daily') : 'off') as 'off' | 'hourly' | 'daily',
+    };
+    await updateDoc(doc(db, "suggestions", launchTarget.id), update);
+    setLaunchTarget(prev => prev ? { ...prev, ...update } : null);
+  };
+
   const handleWaterApp = async (focus: FocusId, depth: DepthId, note: string) => {
     if (!launchTarget || launchTarget.id.startsWith('seed_')) return;
     const isFreeProvider = activeProvider === 'webllm';
@@ -1444,6 +1458,7 @@ ROADMAP: {"now":["what works today 1","what works today 2"],"next":["next wateri
             onFork={() => { setForkTarget(launchTarget); setLaunchTarget(null); }}
             onToggleVisibility={handleToggleVisibility}
             onWater={user?.uid === launchTarget.user_id && !launchTarget.id.startsWith('seed_') ? handleWaterApp : undefined}
+            onAutoWaterChange={user?.uid === launchTarget.user_id && !launchTarget.id.startsWith('seed_') ? handleAutoWaterChange : undefined}
             isWatering={wateringId === launchTarget.id}
             isFreeProvider={activeProvider === 'webllm'}
             quota={apiQuota}

@@ -16,13 +16,15 @@ CRITICAL REQUIREMENTS:
 - Game must be fully functional without imports - use window.Phaser, window.React, window.Tailwind
 
 SANDBOX GLOBALS AVAILABLE:
-- React 18 (useState, useEffect, useRef, useMemo, useCallback)
+- React 19 (useState, useEffect, useRef, useMemo, useCallback)
 - ReactDOM.createRoot
 - Tailwind CSS classes (use class names directly — there is no window.Tailwind)
 - window.Phaser (v3) — fully loaded via CDN, includes Scene, Physics, Input, Display, Math
 - Canvas 2D API (2D context) — available natively, no import needed
 - Lucide icons as window globals (Play, Pause, Trophy, Volume2, RotateCcw, etc.)
 - IMPORTANT: NO localStorage (sandbox restriction), NO imports of any kind
+
+SEED-FIRST: Build a small, complete, PLAYABLE core with ONE fun mechanic. Mark expansion points with // GROWTH: comments (e.g., // GROWTH: add power-ups). Working simple beats broken complex.
 
 PHASER 3 IS AVAILABLE: You may use \`new Phaser.Game(config)\` directly. No import needed.
 Choose between Phaser 3 (physics, sprites, scenes) or Canvas 2D (manual drawing, maximum control).
@@ -99,6 +101,8 @@ export default function App() {
   const gs = useRef({ score: 0, lives: 3, phase: 'start', x: 200, y: 300, vx: 0, vy: 0 });
   // React state only for driving JSX re-renders (score display, screen transitions)
   const [display, setDisplay] = useState({ score: 0, lives: 3, phase: 'start' });
+  // syncRef tracks what was last pushed to setDisplay — avoids reading stale display state inside loop
+  const syncRef = useRef({ score: -1, lives: -1, phase: '' });
   const keysRef = useRef({});
 
   useEffect(() => {
@@ -117,7 +121,9 @@ export default function App() {
 
       if (g.phase === 'playing') {
         // --- update logic here using g.x, g.y, keysRef.current ---
-        if (g.score !== display.score || g.phase !== display.phase) {
+        // Compare against syncRef (a ref) NOT display (stale useState inside loop)
+        if (g.score !== syncRef.current.score || g.phase !== syncRef.current.phase || g.lives !== syncRef.current.lives) {
+          Object.assign(syncRef.current, { score: g.score, lives: g.lives, phase: g.phase });
           setDisplay({ score: g.score, lives: g.lives, phase: g.phase });
         }
       }
@@ -182,23 +188,25 @@ RESET ON PLAY AGAIN:
 `;
 
 export const SKILL_GAME_STATE_STRUCTURE = `
-RECOMMENDED STATE:
-const [score, setScore] = useState(0);           // Primary game metric
-const [lives, setLives] = useState(3);           // Remaining attempts
-const [gameOver, setGameOver] = useState(false); // Prevent updates after end
-const [gameStarted, setGameStarted] = useState(false); // Control game init
-const [wave, setWave] = useState(1);             // Level progression
-const [message, setMessage] = useState('');      // Temp feedback "Combo x3!"
+CORRECT PATTERN — gameStateRef + syncRef + display:
+const gs = useRef({ score: 0, lives: 3, phase: 'start' }); // ALL mutable game data (loop reads this)
+const syncRef = useRef({ score: -1, lives: -1, phase: '' }); // Last-synced display values
+const [display, setDisplay] = useState({ score: 0, lives: 3, phase: 'start' }); // JSX rendering
 
-PASS TO PHASER VIA CLOSURE:
-useEffect(() => {
-  const game = new Phaser.Game({
-    callbacks: {
-      preListen: () => {
-        // Phaser callbacks can access score, lives via closure
-        if (score > 1000) setWave(2);
-      }
-    }
-  });
-}, [score, lives, gameOver]);
+In loop (inside useEffect):
+  const g = gs.current;
+  // Mutate g.score, g.lives, g.phase freely
+  if (g.score !== syncRef.current.score || g.phase !== syncRef.current.phase) {
+    Object.assign(syncRef.current, { score: g.score, lives: g.lives, phase: g.phase });
+    setDisplay({ score: g.score, lives: g.lives, phase: g.phase }); // triggers React re-render
+  }
+
+On restart (outside useEffect):
+  Object.assign(gs.current, { score: 0, lives: 3, phase: 'playing' });
+  Object.assign(syncRef.current, { score: -1, lives: -1, phase: '' }); // force next sync
+  setDisplay({ score: 0, lives: 3, phase: 'playing' });
+
+❌ NEVER DO:
+  useEffect(() => { new Phaser.Game(...) }, [score, lives]); // recreates game on every score change!
+  if (gameOver) return; // gameOver from useState is stale inside the loop
 `;

@@ -33,7 +33,13 @@ const MODELS: Record<string, { value: string; label: string }[]> = {
     { value: "openai/gpt-4o-mini",                     label: "GPT-4o Mini (cheap)" },
     { value: "anthropic/claude-3.5-sonnet",            label: "Claude 3.5 Sonnet (best)" },
   ],
+  groq: [
+    { value: "llama3-8b-8192",       label: "Llama 3 8B (fast, free)" },
+    { value: "llama3-70b-8192",      label: "Llama 3 70B (smart, free)" },
+    { value: "mixtral-8x7b-32768",   label: "Mixtral 8x7B (free)" },
+  ],
   ollama: [
+    { value: "phi3:mini",       label: "Phi-3 Mini (small, fast)" },
     { value: "gemma2:2b",       label: "Gemma 2 2B (small, fast)" },
     { value: "gemma2:9b",       label: "Gemma 2 9B (balanced)" },
     { value: "gemma3:27b",      label: "Gemma 3 27B (capable)" },
@@ -57,6 +63,7 @@ const PROVIDER_GUIDANCE: Record<string, ProviderGuidance> = {
   'gemini-nano': { badge: 'NO KEY NEEDED', hint: 'Free — built into Chrome. Enable at chrome://flags/#prompt-api-for-gemini-nano' },
   custom:        { badge: 'FREE',          hint: 'Custom OpenAI-compatible endpoint. Provide a base URL below and an optional API key.' },
   openrouter:    { badge: 'FREE',          hint: 'Many models through one key — free tier included. No separate signups.',                      link: 'https://openrouter.ai/keys' },
+  groq:          { badge: 'FREE',          hint: 'Extremely fast inference — free tier with generous limits. Get your key at console.groq.com.', link: 'https://console.groq.com/keys' },
   ollama:        { badge: 'FREE',          hint: 'Free & unlimited local AI. Install at ollama.com, then run: ollama serve && ollama pull gemma2:2b' },
 };
 
@@ -107,7 +114,7 @@ export function SettingsModal({
   const [newKeyInput, setNewKeyInput] = useState("");
   const [ollamaTestResult, setOllamaTestResult] = useState<string | null>(null);
   const [ollamaTestLoading, setOllamaTestLoading] = useState(false);
-  const providers = ["google", "openai", "anthropic", "openrouter", "custom", "web-llm", "ollama"] as const;
+  const providers = ["google", "openai", "anthropic", "openrouter", "groq", "custom", "web-llm", "ollama"] as const;
   const providerModels = MODELS[aiProvider] || [];
   const currentKeys = providerKeysMap[aiProvider] || [];
 

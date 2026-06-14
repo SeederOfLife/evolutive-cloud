@@ -15,13 +15,15 @@ CRITICAL REQUIREMENTS:
 - Every piece must feel alive — static screenshots are not acceptable
 
 SANDBOX GLOBALS AVAILABLE:
-- React 18 (useState, useEffect, useRef, useCallback)
+- React 19 (useState, useEffect, useRef, useCallback)
 - ReactDOM.createRoot
 - Canvas 2D API (ctx.fillRect, ctx.arc, ctx.beginPath, ctx.bezierCurveTo, ctx.createRadialGradient, etc.)
 - Tailwind CSS classes
 - SVG elements via React JSX
 - Math (sin, cos, PI, random, abs, sqrt, atan2, hypot)
 - Framer Motion (motion.div, AnimatePresence)
+
+SEED-FIRST: Build ONE compelling visual system that runs at 60fps and responds to mouse. Mark expansion points with // GROWTH: comments (e.g., // GROWTH: add palette switcher). Beautiful and alive beats feature-rich and janky.
 
 COMPOSITION LAYERS (think in layers):
 1. Background: gradient fill or fading trail (\`fillRect with low alpha for motion blur\`)

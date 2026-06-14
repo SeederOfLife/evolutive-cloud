@@ -5,6 +5,7 @@ export const MANIFEST_PROVIDERS = [
   { id: "openai",      label: "OpenAI GPT-4",  Icon: Zap,      model: "gpt-4o" },
   { id: "anthropic",   label: "Claude",         Icon: Sparkles, model: "claude-sonnet-4-20250514" },
   { id: "openrouter",  label: "OpenRouter",     Icon: Layers,   model: "google/gemini-2.0-flash-exp:free" },
+  { id: "groq",        label: "Groq (Free)",    Icon: Zap,      model: "llama3-8b-8192" },
   { id: "web-llm",     label: "Free Local AI",  Icon: Cpu,      model: "Qwen2.5-0.5B-Instruct-q4f16_1-MLC" },
   { id: "ollama",      label: "Ollama",         Icon: Server,   model: "gemma2:2b" },
 ] as const;

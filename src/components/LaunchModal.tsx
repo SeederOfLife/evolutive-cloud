@@ -1,12 +1,14 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   ChevronUp, X, Globe, Lock, MessageSquare, Activity, Layers,
-  GitFork, Loader2, Droplets, Wrench,
+  GitFork, Loader2, Droplets, Zap, Timer,
 } from "lucide-react";
+import { useAutoWater } from "../hooks/useAutoWater";
 import { AppSandbox } from "./AppSandbox";
 import { AIProgress } from "./AIProgress";
 import type { AIStageIndex } from "./AIProgress";
+import { isCodeBalanced } from "../utils/sandboxUtils";
 import WaterDialog from "./WaterDialog";
 import DiffViewer from "./DiffViewer";
 import { ShareMenu } from "./ShareMenu";
@@ -22,6 +24,7 @@ interface LaunchModalProps {
   onFork?: () => void;
   onToggleVisibility?: (vis: 'public' | 'private') => void;
   onWater?: (focus: FocusId, depth: DepthId, note: string) => void;
+  onAutoWaterChange?: (enabled: boolean, interval: number, times: number, focus: string, note: string) => void;
   isWatering?: boolean;
   isFreeProvider?: boolean;
   quota?: number;
@@ -37,14 +40,25 @@ interface LaunchModalProps {
 
 export function LaunchModal({
   suggestion, currentUserId, onClose, onVote, onFork, onToggleVisibility,
-  onWater, isWatering, isFreeProvider, quota, pendingEvolution, onClearEvolution,
+  onWater, onAutoWaterChange, isWatering, isFreeProvider, quota, pendingEvolution, onClearEvolution,
   showWaterDialog, setShowWaterDialog, onRefine,
   chatProvider, chatProviderOptions, onChatProviderSwitch,
 }: LaunchModalProps) {
   const [code, setCode] = useState(suggestion.built_code || "");
   const [lastError, setLastError] = useState<string | null>(null);
   const [isFixing, setIsFixing] = useState(false);
+
+  const isTruncated = useMemo(() => {
+    if (!code) return false;
+    const cleaned = code
+      .replace(/^\s*import\b[^;]*?(?:from\s+['"][^'"]+['"])?\s*;?\s*$/gm, '')
+      .trim();
+    return !isCodeBalanced(cleaned);
+  }, [code]);
   const [fixStage, setFixStage] = useState<AIStageIndex>(0);
+
+  const { countdown, done: awDone, isRunning: awRunning, stop: awStop } = useAutoWater(suggestion, onWater);
+
   const [voted, setVoted] = useState(false);
   const [showVotePop, setShowVotePop] = useState(false);
   const [showChat, setShowChat] = useState(false);
@@ -73,8 +87,6 @@ export function LaunchModal({
     return () => window.removeEventListener("message", handler);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => { setLastError(null); }, [code]);
-
   useEffect(() => {
     const scrollToBottom = (el: HTMLDivElement | null) => {
       if (!el) return;
@@ -98,6 +110,7 @@ export function LaunchModal({
       setFixStage(4);
       if (newCode) {
         setCode(newCode);
+        setLastError(null);
         await new Promise(r => setTimeout(r, 300));
         setFixStage(5);
         await new Promise(r => setTimeout(r, 300));
@@ -214,6 +227,27 @@ export function LaunchModal({
         )}
       </div>
 
+      {/* Auto-water countdown bar */}
+      <AnimatePresence>
+        {awRunning && countdown !== null && (
+          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
+            className="flex-none overflow-hidden">
+            <div className="h-8 bg-cyan-950/60 border-b border-cyan-500/20 flex items-center px-4 gap-2 text-xs">
+              <Timer className="w-3 h-3 text-cyan-400 shrink-0" />
+              <span className="text-cyan-400">
+                Next watering in {Math.floor(countdown / 60)}:{String(countdown % 60).padStart(2, '0')}
+              </span>
+              {(suggestion.autoWaterTimes ?? 0) > 0 && (
+                <span className="text-gray-500">· {awDone}/{suggestion.autoWaterTimes} done</span>
+              )}
+              <button onClick={awStop} className="ml-auto text-gray-600 hover:text-gray-400 transition-colors" title="Stop auto-water">
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Plan panel */}
       <AnimatePresence>
         {showPlan && suggestion.plan && (
@@ -291,31 +325,40 @@ export function LaunchModal({
         <div className="flex-1 relative min-w-0">
           <AppSandbox code={code} appType={suggestion.app_type} className="absolute inset-0 w-full h-full" onError={handleCodeError} />
 
-          {/* Fix with AI buttons */}
+          {/* Truncation overlay — amber, prominent, centered */}
           <AnimatePresence>
-            {lastError && !isFixing && (
-              <>
-                <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }}
-                  className="sm:hidden absolute z-[9999] pointer-events-none" style={{ bottom: '88px', left: '16px' }}>
+            {isTruncated && !isFixing && (
+              <motion.div
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                className="absolute inset-0 flex flex-col items-center justify-center z-[500] bg-black/50 backdrop-blur-sm pointer-events-none"
+              >
+                <div className="flex flex-col items-center gap-3 pointer-events-auto px-6 text-center">
+                  <p className="text-xs font-bold text-amber-300 max-w-[220px] leading-snug">
+                    Code was truncated — app is incomplete
+                  </p>
                   <button
-                    onClick={() => sendMessage(lastError.includes("incomplete") || lastError.includes("truncated")
-                      ? `This code is broken with error: ${lastError}. Generate a COMPLETE working version. Simplify if needed.`
-                      : `Fix this error: ${lastError}`)}
-                    className="pointer-events-auto w-14 h-14 bg-red-500 hover:bg-red-600 rounded-full shadow-xl flex items-center justify-center text-white active:scale-90 transition-all" title="Fix with AI">
-                    <Wrench className="w-6 h-6" />
+                    onClick={() => sendMessage("The generated code was truncated (incomplete). Please generate a COMPLETE working version. Simplify the design if needed to fit within your response limit.")}
+                    className="flex items-center gap-2 px-5 py-3 bg-amber-500 hover:bg-amber-400 rounded-xl text-sm font-bold text-black shadow-2xl transition-all active:scale-95"
+                  >
+                    <Zap className="w-4 h-4" />
+                    Fix with AI
                   </button>
-                </motion.div>
-                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }}
-                  className="hidden sm:flex absolute bottom-4 left-0 right-0 justify-center z-[9999] pointer-events-none">
-                  <button
-                    onClick={() => sendMessage(lastError.includes("incomplete") || lastError.includes("truncated")
-                      ? `This code is broken with error: ${lastError}. Generate a COMPLETE working version. Simplify if needed.`
-                      : `Fix this error: ${lastError}`)}
-                    className="pointer-events-auto flex items-center gap-2 px-4 py-2.5 bg-red-500 hover:bg-red-600 rounded-xl text-sm font-bold text-white shadow-xl transition-all active:scale-95">
-                    <Wrench className="w-4 h-4" />Fix with AI
-                  </button>
-                </motion.div>
-              </>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Runtime error button — red, bottom */}
+          <AnimatePresence>
+            {!isTruncated && lastError && !isFixing && (
+              <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }}
+                className="absolute bottom-4 left-0 right-0 flex justify-center z-[9999] pointer-events-none">
+                <button
+                  onClick={() => sendMessage(`Fix this runtime error: ${lastError}`)}
+                  className="pointer-events-auto flex items-center gap-2 px-4 py-2.5 bg-red-500 hover:bg-red-600 rounded-xl text-sm font-bold text-white shadow-xl transition-all active:scale-95">
+                  <Zap className="w-4 h-4" />Fix with AI
+                </button>
+              </motion.div>
             )}
           </AnimatePresence>
 
@@ -381,7 +424,8 @@ export function LaunchModal({
         {showWaterDialog && onWater && setShowWaterDialog && (
           <WaterDialog suggestion={suggestion} quota={quota ?? 100} isFree={isFreeProvider ?? false}
             onWater={(focus, depth, note) => { setShowWaterDialog(false); onWater(focus, depth, note); }}
-            onClose={() => setShowWaterDialog(false)} />
+            onClose={() => setShowWaterDialog(false)}
+            onAutoWaterChange={onAutoWaterChange} />
         )}
       </AnimatePresence>
 
@@ -394,12 +438,20 @@ export function LaunchModal({
               initial={{ scale: 0.92, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.92, y: 20 }}>
               <DiffViewer
                 evolution={pendingEvolution}
-                onApply={() => { onClearEvolution?.(); }}
+                onApply={() => { setCode(pendingEvolution.code); onClearEvolution?.(); }}
                 onRevert={async () => {
                   if (pendingEvolution.prevCode) await onWater?.('ux' as FocusId, 'gentle' as DepthId, 'Revert to previous version');
                   onClearEvolution?.();
                 }}
                 onRetry={() => { onClearEvolution?.(); setShowWaterDialog?.(true); }}
+                onApplyAndFix={() => {
+                  setCode(pendingEvolution.code);
+                  onClearEvolution?.();
+                  // Short delay so code state propagates before sendMessage reads it
+                  setTimeout(() => sendMessageRef.current(
+                    "The generated code was truncated (incomplete). Please generate a COMPLETE working version. Simplify the design if needed."
+                  ), 100);
+                }}
               />
             </motion.div>
           </motion.div>

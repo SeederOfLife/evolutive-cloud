@@ -15,10 +15,12 @@ CRITICAL REQUIREMENTS:
 - Implement at least 8 meaningful commands relevant to the app concept
 
 SANDBOX GLOBALS AVAILABLE:
-- React 18 (useState, useEffect, useRef, useMemo, useCallback)
+- React 19 (useState, useEffect, useRef, useMemo, useCallback)
 - ReactDOM.createRoot
 - Tailwind CSS classes (use font-mono for all terminal text)
 - No external dependencies needed — pure React + DOM
+
+SEED-FIRST: Build 8 meaningful commands that work correctly. Mark expansion points with // GROWTH: comments (e.g., // GROWTH: add file system simulation). A tight set of commands beats a broken long list.
 
 TERMINAL STRUCTURE PATTERN:
 1. State: history (output lines array), input (current command), cmdHistory (past commands), historyIdx

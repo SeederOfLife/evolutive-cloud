@@ -1,13 +1,15 @@
 import React, { useMemo } from 'react';
 import { motion } from 'motion/react';
-import { CheckCircle, RotateCcw, RefreshCw, ChevronRight } from 'lucide-react';
+import { CheckCircle, RotateCcw, RefreshCw, ChevronRight, Zap } from 'lucide-react';
 import type { AppEvolution } from '../types';
+import { isCodeBalanced } from '../utils/sandboxUtils';
 
 interface Props {
   evolution: AppEvolution;
   onApply: () => void;
   onRevert: () => void;
   onRetry: () => void;
+  onApplyAndFix?: () => void;
 }
 
 function computeStats(prev: string, next: string) {
@@ -41,8 +43,15 @@ function DiffLine({ line, type }: { line: string; type: 'added' | 'removed' | 's
   );
 }
 
-export default function DiffViewer({ evolution, onApply, onRevert, onRetry }: Props) {
+export default function DiffViewer({ evolution, onApply, onRevert, onRetry, onApplyAndFix }: Props) {
   const stats = useMemo(() => computeStats(evolution.prevCode, evolution.code), [evolution]);
+
+  const isTruncated = useMemo(() => {
+    const cleaned = evolution.code
+      .replace(/^\s*import\b[^;]*?(?:from\s+['"][^'"]+['"])?\s*;?\s*$/gm, '')
+      .trim();
+    return !isCodeBalanced(cleaned);
+  }, [evolution.code]);
 
   const diffLines = useMemo(() => {
     const prev = new Set(evolution.prevCode.split('\n'));
@@ -86,6 +95,13 @@ export default function DiffViewer({ evolution, onApply, onRevert, onRetry }: Pr
         </div>
       </div>
 
+      {isTruncated && (
+        <div className="flex-shrink-0 flex items-center gap-2 px-4 py-2 bg-amber-500/10 border-b border-amber-500/20">
+          <Zap size={12} className="text-amber-400 shrink-0" />
+          <span className="text-xs text-amber-300">Watered code appears truncated — use Apply &amp; Fix to auto-repair</span>
+        </div>
+      )}
+
       {/* Diff */}
       <div className="flex-1 overflow-y-auto px-2 py-2 space-y-px">
         {diffLines.map((entry, i) => (
@@ -95,27 +111,25 @@ export default function DiffViewer({ evolution, onApply, onRevert, onRetry }: Pr
 
       {/* Actions */}
       <div className="flex-shrink-0 flex items-center gap-2 px-4 py-3 border-t border-white/10 bg-gray-900">
-        <button
-          onClick={onRetry}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 text-gray-300 hover:bg-white/5 text-sm transition-colors"
-        >
-          <RefreshCw size={14} />
-          Retry
+        <button onClick={onRetry}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 text-gray-300 hover:bg-white/5 text-sm transition-colors">
+          <RefreshCw size={14} />Retry
         </button>
-        <button
-          onClick={onRevert}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 text-gray-300 hover:bg-white/5 text-sm transition-colors"
-        >
-          <RotateCcw size={14} />
-          Revert
+        <button onClick={onRevert}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 text-gray-300 hover:bg-white/5 text-sm transition-colors">
+          <RotateCcw size={14} />Revert
         </button>
-        <button
-          onClick={onApply}
-          className="flex items-center gap-1.5 ml-auto px-5 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-white font-semibold text-sm shadow-lg shadow-cyan-500/20 transition-colors"
-        >
-          <CheckCircle size={16} />
-          Apply Evolution
-        </button>
+        {isTruncated && onApplyAndFix ? (
+          <button onClick={onApplyAndFix}
+            className="flex items-center gap-1.5 ml-auto px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-semibold text-sm shadow-lg shadow-amber-500/20 transition-colors">
+            <Zap size={15} />Apply &amp; Fix
+          </button>
+        ) : (
+          <button onClick={onApply}
+            className="flex items-center gap-1.5 ml-auto px-5 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-white font-semibold text-sm shadow-lg shadow-cyan-500/20 transition-colors">
+            <CheckCircle size={16} />Apply Evolution
+          </button>
+        )}
       </div>
     </motion.div>
   );

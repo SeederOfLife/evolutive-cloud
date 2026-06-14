@@ -5,6 +5,7 @@ import { SKILL_DESKTOP_SYSTEM_PROMPT } from './skills/SKILL_DESKTOP';
 import { SKILL_TERMINAL_SYSTEM_PROMPT } from './skills/SKILL_TERMINAL';
 import { SKILL_MUSIC_SYSTEM_PROMPT } from './skills/SKILL_MUSIC';
 import { SKILL_ART_SYSTEM_PROMPT } from './skills/SKILL_ART';
+import { SKILL_PHONE_SYSTEM_PROMPT } from './skills/SKILL_PHONE';
 
 // System prompts enriched with patterns from:
 // - chongdashu/cc-skills-nanobananapro Three.js Builder SKILL.md
@@ -14,21 +15,12 @@ import { SKILL_ART_SYSTEM_PROMPT } from './skills/SKILL_ART';
 // - SKILL_* files: Canvas/Phaser3, Desktop, Terminal, Music, Art
 export const AGENT_SYSTEM_PROMPTS: Record<AppType, string> = {
   phone:
-    "You are a mobile-first app expert. Create touch-optimized apps with: large tap targets (min 44px), bottom navigation, swipe gestures, portrait layout, thumb-friendly buttons. Think Instagram, WhatsApp, TikTok style UI.\n\n" +
-    "SANDBOX GLOBALS AVAILABLE (NO imports — these are already in scope):\n" +
-    "- React 18 hooks: useState, useEffect, useMemo, useRef, useCallback\n" +
-    "- Tailwind CSS classes (use class names directly)\n" +
-    "- Lucide React icons (use any name directly: Heart, Star, Check, X, ArrowLeft, etc.)\n" +
-    "- motion.div, AnimatePresence from Framer Motion\n" +
-    "- Canvas 2D API and requestAnimationFrame if needed for animations\n" +
-    "- IMPORTANT: NO localStorage, NO external fetch, NO imports of any kind\n\n" +
-    "MOBILE PATTERNS:\n" +
-    "- Full-height layout: className='h-screen flex flex-col bg-gray-950 text-white'\n" +
-    "- Scrollable content: className='flex-1 overflow-y-auto'\n" +
-    "- Fixed bottom nav: className='flex-none h-16 bg-gray-900 border-t border-white/10 flex items-center'\n" +
-    "- Card swipe: use onTouchStart/onTouchEnd to detect swipe direction (deltaX > 50 = right swipe)\n" +
-    "- Flip animation (flashcards): use CSS transform rotateY with transition-all via inline style + state toggle\n" +
-    "- All initial data must be hardcoded in state — no fetch, no localStorage",
+    SKILL_PHONE_SYSTEM_PROMPT +
+    "\n\nADDITIONAL PATTERNS: " +
+    "Think Instagram, WhatsApp, TikTok style UI — clean, fast, gesture-driven. " +
+    "Use onTouchStart/onTouchEnd for swipe detection (deltaX > 50 = right swipe). " +
+    "Flip animations: CSS transform rotateY via inline style + state toggle. " +
+    "Pre-populate all lists with 5-10 realistic sample items so the app looks alive on first render.",
 
   desktop:
     SKILL_DESKTOP_SYSTEM_PROMPT + "\n\n" +

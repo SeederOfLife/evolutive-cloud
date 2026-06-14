@@ -6,8 +6,9 @@ import { AIConfig } from "../types";
 import { callGeminiCloud, callGeminiNano } from "./providers/google";
 import { callOpenRouter, OPENROUTER_FREE_MODELS } from "./providers/openrouter";
 import { callOllama } from "./providers/ollama";
+import { callGroq } from "./providers/groq";
 
-export type AIProvider = 'google' | 'openai' | 'anthropic' | 'custom' | 'web-llm' | 'gemini-nano' | 'mlc-mobile' | 'ollama' | 'openrouter';
+export type AIProvider = 'google' | 'openai' | 'anthropic' | 'custom' | 'web-llm' | 'gemini-nano' | 'mlc-mobile' | 'ollama' | 'openrouter' | 'groq';
 
 export interface AICallOptions {
   provider: AIProvider;
@@ -55,8 +56,9 @@ export async function callAIWithFallback(prompt: string, options: FallbackOption
     }
   };
 
-  // 1. Selected provider
-  const primary = await attempt(options.provider, () => callAI(prompt, options));
+  // 1. Selected provider (Ollama gets a longer timeout — CPU inference is slow)
+  const primaryTimeout = options.provider === 'ollama' ? 120_000 : 30_000;
+  const primary = await attempt(options.provider, () => callAI(prompt, options), primaryTimeout);
   if (primary !== null) return primary;
 
   // 2. Other cloud providers with stored keys (skip the already-tried one)
@@ -65,6 +67,7 @@ export async function callAIWithFallback(prompt: string, options: FallbackOption
     { provider: 'openai',      model: 'gpt-4o-mini',                   label: 'OpenAI' },
     { provider: 'anthropic',   model: 'claude-haiku-4-5-20251001',     label: 'Anthropic' },
     { provider: 'openrouter',  model: 'google/gemini-2.0-flash-exp:free', label: 'OpenRouter' },
+    { provider: 'groq',        model: 'llama3-8b-8192',                   label: 'Groq' },
   ];
 
   for (const cp of cloudProviders) {
@@ -210,6 +213,10 @@ export async function callAI(prompt: string, options: AICallOptions): Promise<st
 
       if (provider === 'openrouter') {
         return callOpenRouter(prompt, model, activeKey);
+      }
+
+      if (provider === 'groq') {
+        return callGroq(prompt, activeKey, model);
       }
 
       if (provider === 'google') {

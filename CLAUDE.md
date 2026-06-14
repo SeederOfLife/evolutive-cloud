@@ -1,62 +1,64 @@
-# Evolutive Cloud — Project Memory
+# Evolutive Cloud — Instructions Claude
 
-## What it is
-AI-powered app generator. User describes any app idea → AI generates it as a runnable React component in an iframe sandbox. Apps live in a 3D galaxy and grow over time via "watering" (passive AI improvement passes). Live at evolutive-cloud.vercel.app. Solo project by Maxime (@SeederOfLife). Vision: a living garden of imagination, not a one-shot generator.
+## Ce projet
+App generator IA : l'utilisateur décrit une idée → IA génère un composant React dans un iframe sandbox → les apps vivent dans une galaxie 3D et grandissent via "watering" (passes IA passives). Projet solo de Maxime (@SeederOfLife). Live : evolutive-cloud.vercel.app.
 
-## Stack
-React 19 + TypeScript + Vite, Three.js / React Three Fiber, Firebase auth+Firestore, Tailwind, Framer Motion. Deployed on Vercel. AI providers: Google Gemini, OpenAI, Anthropic, WebLLM (local browser), Ollama (local server), OpenRouter (multi-model aggregator).
+## Les 5 domaines de sens
+| Domaine | Dossier cible | Ce qui y appartient |
+|---|---|---|
+| **Génération** | `src/generation/` | Pipeline IA : providers, decomposer, refiner, skills, agentSkills, useAI |
+| **Sandbox** | `src/sandbox/` | Exécution iframe : AppSandbox, sandboxUtils, LaunchModal, ModulePlayer |
+| **Galaxie** | `src/galaxy/` | Vue 3D : ThreeWorld, seededRand, seedApps |
+| **Évolution** | `src/evolution/` | Amélioration dans le temps : watering, DiffViewer, WaterDialog, EvolutionTree |
+| **Identité** | `src/identity/` | Utilisateur : auth, useAuth, NetworkPanel, HubView, invites, useQuota |
 
-## Architecture map
-- `src/App.tsx` — root, holds main state (suggestions, currentUser, showAuth, isManifesting, viableProviders, etc.). The auth modal trigger is `setShowAuth(true)`. The login/signup component is `AuthModal`.
-- `src/services/skills/` — 9 agent skills (game/phone/desktop/terminal/music/art/esl/card/simulation) + SKILL_DESIGN as a universal polish layer.
-- `src/services/agentSkills.ts` — `getAgentSkill(type)` returns the system prompt for that type.
-- `src/services/ai.service.ts` — generation pipeline; `buildEvolution()` is the main entry. Prepends agent skill + SKILL_DESIGN + GoalPlan + refinement answers.
-- `src/hooks/useAI.ts` — provider selection, key storage, smart fallback chain. `detectViableProviders()` runs on mount. `withTimeout()` wraps every attempt.
-- `src/services/decomposer.ts` — goal decomposition before build, returns GoalPlan { title, coreNeed, features[], roadmap }.
-- `src/services/refiner.ts` — PromptRefiner: generates 3 priority-ranked clarifying questions + clean app title.
-- `src/services/watering.ts` — `waterApp()` evolves existing code with focus + depth + note.
-- `src/components/AppSandbox.tsx` + `ModulePlayer.tsx` — iframe runtime for generated code.
-- `src/components/ThreeWorld.tsx` — galaxy view, ModuleNode renders each app, scales/glows/pulses by evolution count + energy.
-- `src/components/WaterDialog.tsx` + `DiffViewer.tsx` — watering UI + before/after review.
-- `src/components/PromptRefiner.tsx` + `PlanCard.tsx` + `AIProgress.tsx` — generation flow UI.
-- `src/services/seedApps.ts` — 5 hardcoded demo apps shown when galaxy is empty.
+## Règle #1 — Un fichier, une job (NON-NÉGOCIABLE)
+- **Seuil : 300 lignes. Cible : 150–200 lignes.**
+- Un fichier dépasse 300 lignes → le découper AVANT d'ajouter des features.
+- Tout nouveau fichier → dans son dossier domaine (table ci-dessus).
+- Vérifier après chaque série de modifications : `npm run check:sizes`
 
-## Sandbox rules (CRITICAL — generated code MUST follow)
-- NO imports allowed. All deps are globals.
-- Available globals: React 18, ReactDOM, Tailwind CSS classes, Phaser 3, Web Audio API, Canvas 2D, 110+ Lucide icon stubs (Proxy fallback handles unknown names).
-- localStorage is BLOCKED in the sandbox iframe — use React state only.
-- Tailwind is CSS classes, not a JS global — don't `window.Tailwind`.
-- Render injection: use `findAppFunctionEnd()` to find the App function's matching closing brace and inject `ReactDOM.createRoot(...).render(React.createElement(App))` AFTER it. NEVER use `lastIndexOf('}')` — that breaks on inner callbacks.
-- Always validate with `isCodeBalanced()` before injection. If unbalanced, the AI truncated — auto-retry with a "generate COMPLETE working version, simplify if needed" prompt.
-- Phaser games: use `useRef` for game state inside scenes, NOT useState (closure issues in update()).
+## Règle #2 — Direction des dépendances
+- Les services (génération) ne dépendent JAMAIS des composants UI.
+- `App.tsx` orchestre les domaines — il n'implémente pas de logique métier.
+- Pas de dépendances circulaires entre domaines.
 
-## Generation philosophy
-SEED-FIRST. Don't try to build a finished app in one shot. Generate a small, complete, polished CORE that's enjoyable today, with `// GROWTH:` comments marking where future watering will expand. Show the user a roadmap (now / next / future). Watering is how apps grow toward their full vision over days/weeks. Cadence: Off / Hourly / Daily / Every 2 days / Every 3 days / Weekly / Monthly.
+## Règles sandbox (CRITICAL — generated code MUST follow)
+- NO imports. Toutes dépendances sont des globals (React, ReactDOM, Tailwind, Phaser, Lucide via Proxy).
+- `localStorage` BLOQUÉ dans le sandbox iframe — React state uniquement.
+- Injection render : `findAppFunctionEnd()` pour trouver l'accolade fermante de App, injecter APRÈS. JAMAIS `lastIndexOf('}')`.
+- Valider avec `isCodeBalanced()`. Si false → tronqué → auto-retry "generate COMPLETE working version, simplify if needed".
+- Jeux Phaser : `useRef` pour l'état de scène, JAMAIS `useState` (closure issue dans `update()`).
+- Philosophie SEED-FIRST : cœur small+polished + `// GROWTH:` comments + roadmap. Pas d'app complet en un shot.
 
-## AI provider reality
-- WebGPU is NOT available on iOS or many laptops — `detectViableProviders()` excludes WebLLM when unsupported.
-- Gemini free tier: 20 req/min, often 429-limits. Free key from aistudio.google.com/apikey.
-- Ollama runs at localhost:11434. Browser needs `OLLAMA_ORIGINS=*` for CORS, set in env before `ollama serve`.
-- OpenRouter is the multi-model option — one key, many models including free ones.
-- Default provider is `'google'`, NOT `'web-llm'`. WebLLM is opt-in or auto-selected only when WebGPU works.
-- Smart fallback chain auto-tries viable providers in order. Don't break this.
+## Providers IA
+- Provider par défaut : `'google'`. WebLLM opt-in (requiert WebGPU, absent sur iOS/laptops).
+- Fallback chain : `google → openrouter → groq → ollama → cloud relay → gemini-nano → webllm`. Ne pas casser l'ordre.
+- Clés API : Settings UI uniquement, JAMAIS dans le code source.
+- Ollama : `OLLAMA_ORIGINS=*` + `ollama serve` actif. Timeout 120s.
 
-## Conventions
-- Commit style: `feat:` / `fix:` / `docs:` / `refactor:`
-- Always run `npx tsc --noEmit` before commit. Fix all type errors.
-- Git binary: `C:\Users\user palis\AppData\Local\GitHubDesktop\app-3.5.8\resources\app\git\cmd\git.exe`
-- Terminal is Git Bash (configured in VS Code settings).
-- Logged-out users can browse + launch apps. Create/modify actions (Manifest, Fork, Water, Vote) intercept with login modal, preserve intent, continue after auth.
+## Ce qu'on NE fait PAS
+- Pas de nouvel AuthModal — `setShowAuth(true)` suffit (réutilise `AuthModal`).
+- Pas de `localStorage` dans le code sandbox (SecurityError garanti).
+- Pas de titres d'apps verbeux — titre court depuis PromptRefiner/decomposer.
+- Pas de `lastIndexOf('}')` pour l'injection render.
+- Pas de WebLLM par défaut pour les nouveaux utilisateurs.
 
-## What NOT to do
-- Don't add new auth modals — reuse `AuthModal` via `setShowAuth(true)`.
-- Don't put `localStorage` calls in sandbox-generated code — it's blocked, will crash with SecurityError.
-- Don't default new users to WebLLM — many devices can't run it.
-- Don't use `import` statements in generated app code — they're stripped but it's better to not generate them.
-- Don't write verbose AI-generated app titles ("a grid-based arcade application where..."). Use the short title from PromptRefiner / decomposer.
+## Vérifications obligatoires avant chaque commit
+Lance ces 3 commandes après chaque modification importante. Si les 3 sont vertes, l'architecture tient.
 
-## Backlog (discussed, not built)
-- Checklist/roadmap side-panel where each roadmap goal can have an attached drawing/explanation
-- Vocabulary Review tool (EN/ES/FR with SM-2 spaced repetition) — build first as seed app
-- Auto-watering v2 background loop (grow apps while phone open with local LLM)
-- Evolution tree v3 (version nodes as galaxy branches)
+| Commande | 🟢 Vert = tout va bien | 🔴 Rouge = ne pas pousser |
+|---|---|---|
+| `npm run lint` | `Found 0 errors` | erreur TypeScript quelque part |
+| `npm run check:sizes` | `Tous les fichiers src sont sous 300 lignes` | fichier trop gros → découper d'abord |
+| `npm test` | `X passed` | un test échoue → fonction critique cassée |
+
+```bash
+npm run lint && npm run check:sizes && npm test
+```
+
+## Environnement dev
+- Git binary : `C:\Users\user palis\AppData\Local\GitHubDesktop\app-3.5.8\resources\app\git\cmd\git.exe`
+- Terminal : Git Bash. Node/npm en PowerShell : `$env:Path = "C:\Program Files\nodejs;" + $env:Path`
+- Commit style : `feat:` / `fix:` / `docs:` / `refactor:`
+- Utilisateurs non-connectés peuvent browse + launch. Manifest/Fork/Water/Vote → intercepte avec login modal.

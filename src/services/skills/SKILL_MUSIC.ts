@@ -15,13 +15,15 @@ CRITICAL REQUIREMENTS:
 - Visual feedback for every sound: animate keys/pads, show waveform or bars
 
 SANDBOX GLOBALS AVAILABLE:
-- React 18 (useState, useEffect, useRef, useCallback)
+- React 19 (useState, useEffect, useRef, useCallback)
 - ReactDOM.createRoot
 - Tailwind CSS classes
 - Web Audio API — FULLY AVAILABLE: AudioContext, OscillatorNode, GainNode, AnalyserNode, BiquadFilterNode
   (sandbox uses allow-same-origin so Web Audio works; AudioContext still requires a user gesture)
 - Lucide icons (Play, Pause, Volume2, Music, etc.)
 - Framer Motion (motion.div, AnimatePresence)
+
+SEED-FIRST: Build ONE instrument or sound experience that works perfectly. Mark expansion points with // GROWTH: comments (e.g., // GROWTH: add sequencer). Responsive and musical beats feature-bloated and silent.
 
 CORRECT AudioContext PATTERN — copy this exactly:
   const audioCtxRef = useRef(null);

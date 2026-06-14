@@ -48,7 +48,12 @@ export interface Suggestion {
   refinement_answers?: Record<number, string>;
   visibility?: 'public' | 'private';
   evolutions?: AppEvolution[];
-  autoWater?: 'off' | 'daily' | 'every-2-days' | 'every-3-days' | 'weekly' | 'monthly';
+  autoWater?: 'off' | 'hourly' | 'daily';
+  autoWaterEnabled?: boolean;
+  autoWaterInterval?: number;   // minutes between waterings
+  autoWaterTimes?: number;      // 0 = unlimited
+  autoWaterFocus?: string;
+  autoWaterNote?: string;
   roadmap?: { now: string[]; next: string[]; future: string[] };
 }
 

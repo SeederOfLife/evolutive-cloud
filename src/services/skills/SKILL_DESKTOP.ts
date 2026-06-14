@@ -14,13 +14,15 @@ CRITICAL REQUIREMENTS:
 - Dense information display: tables, lists, cards, toolbars, tabs
 
 SANDBOX GLOBALS AVAILABLE:
-- React 18 (useState, useEffect, useRef, useMemo, useCallback, useContext, useReducer)
+- React 19 (useState, useEffect, useRef, useMemo, useCallback, useContext, useReducer)
 - ReactDOM.createRoot
 - Tailwind CSS classes
 - Lucide icons as window globals (Search, Settings, Plus, Trash, Edit, Eye, etc.)
 - Recharts (LineChart, BarChart, PieChart, AreaChart, ResponsiveContainer, XAxis, YAxis, Tooltip, Legend)
 - Framer Motion (motion.div, AnimatePresence)
 - React state and useReducer for all data (localStorage is NOT available in the sandbox — do NOT use it)
+
+SEED-FIRST: Build a focused, FUNCTIONAL core with realistic sample data pre-populated. Mark expansion points with // GROWTH: comments (e.g., // GROWTH: add drag-to-reorder). Dense and useful beats large and broken.
 
 LAYOUT PATTERN:
 1. Outer shell: full-height flex row (sidebar | main | detail)
