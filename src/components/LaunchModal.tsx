@@ -6,6 +6,8 @@ import {
 } from "lucide-react";
 import { useAutoWater } from "../hooks/useAutoWater";
 import { AppSandbox } from "./AppSandbox";
+import { AIProgress } from "./AIProgress";
+import type { AIStageIndex } from "./AIProgress";
 import AIRubiksCube, { type ProviderAttempt } from "./AIRubiksCube";
 import { isCodeBalanced } from "../utils/sandboxUtils";
 import WaterDialog from "./WaterDialog";
@@ -46,6 +48,7 @@ export function LaunchModal({
   const [code, setCode] = useState(suggestion.built_code || "");
   const [lastError, setLastError] = useState<string | null>(null);
   const [isFixing, setIsFixing] = useState(false);
+  const [fixStage, setFixStage] = useState<AIStageIndex>(0);
   const [providerAttempts, setProviderAttempts] = useState<ProviderAttempt[]>([]);
   const [allProvidersFailed, setAllProvidersFailed] = useState(false);
 
@@ -99,9 +102,13 @@ export function LaunchModal({
     if (!text?.trim() || !onRefine || isFixing) return;
     setMessages(prev => [...prev, { role: "user", text }]);
     setIsFixing(true);
+    setFixStage(0);
     setProviderAttempts([]);
     setAllProvidersFailed(false);
     let lastLabel = '';
+    const t1 = setTimeout(() => setFixStage(1), 700);
+    const t2 = setTimeout(() => setFixStage(2), 1800);
+    const t3 = setTimeout(() => setFixStage(3), 3500);
     try {
       const newCode = await onRefine(text, code, (label) => {
         setProviderAttempts(prev => {
@@ -112,16 +119,23 @@ export function LaunchModal({
         });
         lastLabel = label;
       });
+      clearTimeout(t1); clearTimeout(t2); clearTimeout(t3);
+      setFixStage(4);
       setProviderAttempts(prev =>
         prev.map(a => a.name === lastLabel ? { ...a, status: 'ok' as const } : a)
       );
       if (newCode) {
         setCode(newCode);
         setLastError(null);
+        await new Promise(r => setTimeout(r, 300));
+        setFixStage(5);
+        await new Promise(r => setTimeout(r, 300));
+        setFixStage(6);
         await new Promise(r => setTimeout(r, 500));
         setMessages(prev => [...prev, { role: "ai", text: "Done — app updated." }]);
       }
     } catch (e: any) {
+      clearTimeout(t1); clearTimeout(t2); clearTimeout(t3);
       if (e.message?.includes('All AI providers exhausted')) {
         setAllProvidersFailed(true);
       } else {
@@ -396,14 +410,19 @@ export function LaunchModal({
         </div>
       </div>
 
-      {/* AI provider-switching overlay */}
+      {/* AIProgress — main loading overlay */}
       <AnimatePresence>
-        {(isFixing || allProvidersFailed) && (
+        {isFixing && <AIProgress stage={fixStage} label="Fixing" highZ />}
+      </AnimatePresence>
+
+      {/* Rubik's cube popup — only when switching providers or all failed */}
+      <AnimatePresence>
+        {(providerAttempts.length > 1 || allProvidersFailed) && (
           <AIRubiksCube
             currentProvider={providerAttempts.find(a => a.status === 'trying')?.name ?? null}
             attempts={providerAttempts}
             allFailed={allProvidersFailed}
-            onOpenSettings={() => setAllProvidersFailed(false)}
+            onDismiss={() => setAllProvidersFailed(false)}
           />
         )}
       </AnimatePresence>
