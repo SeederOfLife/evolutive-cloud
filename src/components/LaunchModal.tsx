@@ -6,8 +6,7 @@ import {
 } from "lucide-react";
 import { useAutoWater } from "../hooks/useAutoWater";
 import { AppSandbox } from "./AppSandbox";
-import { AIProgress } from "./AIProgress";
-import type { AIStageIndex } from "./AIProgress";
+import AIRubiksCube, { type ProviderAttempt } from "./AIRubiksCube";
 import { isCodeBalanced } from "../utils/sandboxUtils";
 import WaterDialog from "./WaterDialog";
 import DiffViewer from "./DiffViewer";
@@ -32,7 +31,7 @@ interface LaunchModalProps {
   onClearEvolution?: () => void;
   showWaterDialog?: boolean;
   setShowWaterDialog?: (v: boolean) => void;
-  onRefine?: (message: string, code: string) => Promise<string>;
+  onRefine?: (message: string, code: string, onProviderSwitch?: (label: string) => void) => Promise<string>;
   chatProvider?: string;
   chatProviderOptions?: { id: string; label: string }[];
   onChatProviderSwitch?: (id: string) => void;
@@ -47,6 +46,8 @@ export function LaunchModal({
   const [code, setCode] = useState(suggestion.built_code || "");
   const [lastError, setLastError] = useState<string | null>(null);
   const [isFixing, setIsFixing] = useState(false);
+  const [providerAttempts, setProviderAttempts] = useState<ProviderAttempt[]>([]);
+  const [allProvidersFailed, setAllProvidersFailed] = useState(false);
 
   const isTruncated = useMemo(() => {
     if (!code) return false;
@@ -55,8 +56,6 @@ export function LaunchModal({
       .trim();
     return !isCodeBalanced(cleaned);
   }, [code]);
-  const [fixStage, setFixStage] = useState<AIStageIndex>(0);
-
   const { countdown, done: awDone, isRunning: awRunning, stop: awStop } = useAutoWater(suggestion, onWater);
 
   const [voted, setVoted] = useState(false);
@@ -100,27 +99,34 @@ export function LaunchModal({
     if (!text?.trim() || !onRefine || isFixing) return;
     setMessages(prev => [...prev, { role: "user", text }]);
     setIsFixing(true);
-    setFixStage(0);
-    const t1 = setTimeout(() => setFixStage(1), 700);
-    const t2 = setTimeout(() => setFixStage(2), 1800);
-    const t3 = setTimeout(() => setFixStage(3), 3500);
+    setProviderAttempts([]);
+    setAllProvidersFailed(false);
+    let lastLabel = '';
     try {
-      const newCode = await onRefine(text, code);
-      clearTimeout(t1); clearTimeout(t2); clearTimeout(t3);
-      setFixStage(4);
+      const newCode = await onRefine(text, code, (label) => {
+        setProviderAttempts(prev => {
+          const updated = prev.map(a =>
+            a.name === lastLabel ? { ...a, status: 'failed' as const } : a
+          );
+          return [...updated, { name: label, status: 'trying' as const }];
+        });
+        lastLabel = label;
+      });
+      setProviderAttempts(prev =>
+        prev.map(a => a.name === lastLabel ? { ...a, status: 'ok' as const } : a)
+      );
       if (newCode) {
         setCode(newCode);
         setLastError(null);
-        await new Promise(r => setTimeout(r, 300));
-        setFixStage(5);
-        await new Promise(r => setTimeout(r, 300));
-        setFixStage(6);
         await new Promise(r => setTimeout(r, 500));
         setMessages(prev => [...prev, { role: "ai", text: "Done — app updated." }]);
       }
     } catch (e: any) {
-      clearTimeout(t1); clearTimeout(t2); clearTimeout(t3);
-      setMessages(prev => [...prev, { role: "ai", text: "Error: " + e.message }]);
+      if (e.message?.includes('All AI providers exhausted')) {
+        setAllProvidersFailed(true);
+      } else {
+        setMessages(prev => [...prev, { role: "ai", text: "Error: " + e.message }]);
+      }
     } finally {
       setIsFixing(false);
     }
@@ -390,9 +396,16 @@ export function LaunchModal({
         </div>
       </div>
 
-      {/* Fix progress overlay */}
+      {/* AI provider-switching overlay */}
       <AnimatePresence>
-        {isFixing && <AIProgress stage={fixStage} label="Fixing" highZ />}
+        {(isFixing || allProvidersFailed) && (
+          <AIRubiksCube
+            currentProvider={providerAttempts.find(a => a.status === 'trying')?.name ?? null}
+            attempts={providerAttempts}
+            allFailed={allProvidersFailed}
+            onOpenSettings={() => setAllProvidersFailed(false)}
+          />
+        )}
       </AnimatePresence>
 
       {/* Mobile bottom sheet chat */}

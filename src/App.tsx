@@ -1473,7 +1473,7 @@ ROADMAP: {"now":["what works today 1","what works today 2"],"next":["next wateri
               const p = MANIFEST_PROVIDERS.find(mp => mp.id === id);
               if (p) setSelectedModel(p.model);
             }}
-            onRefine={async (message: string, currentCode: string) => {
+            onRefine={async (message: string, currentCode: string, onProviderSwitch?: (label: string) => void) => {
               const isTruncated = message.includes("incomplete") || message.includes("truncated");
               const isFix = message.startsWith("Fix this error:") || isTruncated;
               const systemPrompt = isFix
@@ -1485,7 +1485,7 @@ ROADMAP: {"now":["what works today 1","what works today 2"],"next":["next wateri
                 ? `${message}\n\nReturn ONLY valid JSX with no unterminated strings, no TypeScript syntax, no import statements. The function must be named App.`
                 : `Apply this change: "${message}"\n\nReturn ONLY the complete updated React component — no markdown, no imports, no TypeScript type annotations. The function must be named App and must render valid JSX.`;
               const prompt = `${systemPrompt}\n\nCurrent code:\n${currentCode}\n\n${taskInstr}`.trim();
-              const raw = await callUnifiedAI(prompt);
+              const raw = await callUnifiedAI(prompt, onProviderSwitch);
               const match = raw.match(/```(?:javascript|typescript|tsx|jsx)?\s?([\s\S]*?)```/);
               const fixed = (match ? match[1] : raw).replace(/```[a-z]*\n?/gi, "").replace(/```/g, "").trim();
               if (fixed && launchTarget) {

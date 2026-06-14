@@ -212,7 +212,7 @@ export function useAI() {
     });
   }, []);
 
-  const call = useCallback(async (prompt: string): Promise<string> => {
+  const call = useCallback(async (prompt: string, onExternalProviderSwitch?: (label: string) => void): Promise<string> => {
     setAiError(null);
 
     // If we remembered a working provider this session, prefer it
@@ -262,6 +262,7 @@ export function useAI() {
             showFallbackToast(`${firstLabel} unavailable — trying ${label}…`);
           }
           setActiveProvider(label);
+          onExternalProviderSwitch?.(label);
         },
       });
 
