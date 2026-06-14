@@ -29,9 +29,12 @@ const MODELS: Record<string, { value: string; label: string }[]> = {
     { value: "google/gemini-2.0-flash-exp:free",       label: "Gemini 2.0 Flash (free)" },
     { value: "meta-llama/llama-3.2-3b-instruct:free",  label: "Llama 3.2 3B (free)" },
     { value: "mistralai/mistral-7b-instruct:free",     label: "Mistral 7B (free)" },
-    { value: "deepseek/deepseek-chat",                 label: "DeepSeek Chat (cheap)" },
+    { value: "deepseek/deepseek-chat-v3-0324:free",     label: "DeepSeek V3 (free)" },
     { value: "openai/gpt-4o-mini",                     label: "GPT-4o Mini (cheap)" },
+    { value: "anthropic/claude-3-haiku",               label: "Claude 3 Haiku (cheapest)" },
+    { value: "anthropic/claude-3.5-haiku",             label: "Claude 3.5 Haiku (cheap)" },
     { value: "anthropic/claude-3.5-sonnet",            label: "Claude 3.5 Sonnet (best)" },
+    { value: "anthropic/claude-sonnet-4-5",            label: "Claude Sonnet 4.5 (latest)" },
   ],
   groq: [
     { value: "llama3-8b-8192",       label: "Llama 3 8B (fast, free)" },
