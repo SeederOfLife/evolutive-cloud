@@ -38,7 +38,7 @@ const DEFAULT_CONFIG: AIConfig & { systemPrompt: string } = {
 
 // Default model per provider (used when auto-switching)
 const PROVIDER_DEFAULT_MODELS: Partial<Record<AIProvider, string>> = {
-  google:      'gemini-3-flash-preview',
+  google:      'gemini-2.0-flash',
   openai:      'gpt-4o-mini',
   anthropic:   'claude-haiku-4-5-20251001',
   openrouter:  'google/gemini-2.0-flash-exp:free',
@@ -108,7 +108,7 @@ export function useAI() {
   const [selectedModel, setSelectedModel] = useState(() => {
     const stored = localStorage.getItem('app_model');
     if (stored) return stored;
-    return 'gemini-3-flash-preview';
+    return 'gemini-2.0-flash';
   });
   const [providerKeys, setProviderKeys] = useState<Record<string, string[]>>(() =>
     parseProviderKeys(

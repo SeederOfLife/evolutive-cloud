@@ -1,5 +1,6 @@
 {
   "permissions": {
+    "defaultMode": "dontAsk",
     "allow": [
       "PowerShell($gitPaths = @\\(\"C:\\\\Program Files\\\\Git\\\\cmd\\\\git.exe\", \"C:\\\\Program Files \\(x86\\)\\\\Git\\\\cmd\\\\git.exe\"\\); foreach \\($p in $gitPaths\\) { if \\(Test-Path $p\\) { Write-Host \"Found: $p\" } })",
       "PowerShell(& \"C:\\\\Program Files\\\\Git\\\\bin\\\\git.exe\" status)",
@@ -12,7 +13,29 @@
       "PowerShell(cmd /c \"dir /s /b \"\"C:\\\\Users\\\\user palis\\\\AppData\\\\Local\\\\GitHubDesktop\\\\app-3.5.8\\\\resources\\\\app\\\\git\\\\cmd\\\\git.exe\"\" 2>nul || echo NOT FOUND\")",
       "PowerShell($git = \"C:\\\\Users\\\\user palis\\\\AppData\\\\Local\\\\GitHubDesktop\\\\app-3.5.8\\\\resources\\\\app\\\\git\\\\cmd\\\\git.exe\"; cmd /c \"\"\"$git\"\" -C \"\"c:\\\\Users\\\\user palis\\\\Documents\\\\GitHub\\\\evolutive-cloud\"\" status\"; cmd /c \"\"\"$git\"\" -C \"\"c:\\\\Users\\\\user palis\\\\Documents\\\\GitHub\\\\evolutive-cloud\"\" remote -v\")",
       "PowerShell(cmd /c \"cd \"\"c:\\\\Users\\\\user palis\\\\Documents\\\\GitHub\\\\evolutive-cloud\"\" && npx tsc --noEmit 2>&1\")",
-      "PowerShell(cmd /c \"dir \"\"c:\\\\Users\\\\user palis\\\\Documents\\\\GitHub\\\\evolutive-cloud\\\\node_modules\"\" /b 2>&1 | head\")"
+      "PowerShell(cmd /c \"dir \"\"c:\\\\Users\\\\user palis\\\\Documents\\\\GitHub\\\\evolutive-cloud\\\\node_modules\"\" /b 2>&1 | head\")",
+      "Bash(\"C:/Users/user palis/AppData/Local/GitHubDesktop/app-3.5.8/resources/app/git/cmd/git.exe\" add src/components/ModulePlayer.tsx src/App.tsx)",
+      "Bash(\"C:/Users/user palis/AppData/Local/GitHubDesktop/app-3.5.8/resources/app/git/cmd/git.exe\" commit -m \"fix: lucide version, fix-with-AI prompt, in-app chat improvements\")",
+      "Bash(\"C:/Users/user palis/AppData/Local/GitHubDesktop/app-3.5.8/resources/app/git/cmd/git.exe\" push origin main)",
+      "Bash(PATH='__TRACKED_VAR__:/c/Program Files/nodejs' npx tsc --noEmit)",
+      "Bash(\"C:/Users/user palis/AppData/Local/GitHubDesktop/app-3.5.8/resources/app/git/cmd/git.exe\" add src/components/AppSandbox.tsx src/components/ModulePlayer.tsx)",
+      "Bash(\"C:/Users/user palis/AppData/Local/GitHubDesktop/app-3.5.8/resources/app/git/cmd/git.exe\" commit -m \"fix: sandbox regex import strip and lucide version\")",
+      "Bash(\"C:/Users/user palis/AppData/Local/GitHubDesktop/app-3.5.8/resources/app/git/cmd/git.exe\" commit -m \"fix: sandbox sequential CDN loading framer-motion lucide\")",
+      "Bash(\"C:/Users/user palis/AppData/Local/GitHubDesktop/app-3.5.8/resources/app/git/cmd/git.exe\" commit -m \"fix: replace lucide CDN with inline stub icons\")",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(gh api *)",
+      "WebFetch(domain:api.github.com)",
+      "WebFetch(domain:github.com)",
+      "Bash(\"C:/Users/user palis/AppData/Local/GitHubDesktop/app-3.5.8/resources/app/git/cmd/git.exe\" add src/ package.json package-lock.json)",
+      "Bash(\"C:/Users/user palis/AppData/Local/GitHubDesktop/app-3.5.8/resources/app/git/cmd/git.exe\" commit -m \"feat: account linking via invite link and QR code\")",
+      "PowerShell(cd \"c:\\\\Users\\\\user palis\\\\Documents\\\\GitHub\\\\evolutive-cloud\"; $env:PATH += \";C:\\\\Program Files\\\\nodejs\"; npx tsc --noEmit 2>&1 | Select-Object -First 60)",
+      "PowerShell(Get-Command node, npm, npx -ErrorAction SilentlyContinue)",
+      "Read(//c/Program Files/nodejs/**)",
+      "PowerShell(Get-ChildItem \"C:\\\\Users\\\\user palis\\\\AppData\\\\Local\" -Directory -ErrorAction SilentlyContinue | Where-Object {$_.Name -match \"node|nvm\"} | Select-Object FullName; Get-ChildItem \"C:\\\\\" -Directory -ErrorAction SilentlyContinue | Where-Object {$_.Name -match \"node\"} | Select-Object FullName)",
+      "Read(//c//**)",
+      "PowerShell(Get-ChildItem \"C:\\\\Program Files\" | Where-Object {$_.Name -match \"node|nvm\"} | Select-Object FullName; Get-ChildItem \"C:\\\\Program Files \\(x86\\)\" | Where-Object {$_.Name -match \"node|nvm\"} | Select-Object FullName)"
     ]
   }
 }

@@ -531,7 +531,7 @@ export default function App() {
 
   const handleWaterApp = async (focus: FocusId, depth: DepthId, note: string) => {
     if (!launchTarget || launchTarget.id.startsWith('seed_')) return;
-    const isFreeProvider = activeProvider === 'webllm';
+    const isFreeProvider = activeProvider === 'web-llm';
     setWateringId(launchTarget.id);
     try {
       const evolution = await waterApp(launchTarget, focus, depth, note, callUnifiedAI);
@@ -1461,7 +1461,7 @@ ROADMAP: {"now":["what works today 1","what works today 2"],"next":["next wateri
             onWater={user?.uid === launchTarget.user_id && !launchTarget.id.startsWith('seed_') ? handleWaterApp : undefined}
             onAutoWaterChange={user?.uid === launchTarget.user_id && !launchTarget.id.startsWith('seed_') ? handleAutoWaterChange : undefined}
             isWatering={wateringId === launchTarget.id}
-            isFreeProvider={activeProvider === 'webllm'}
+            isFreeProvider={activeProvider === 'web-llm'}
             quota={apiQuota}
             pendingEvolution={pendingEvolution}
             onClearEvolution={() => setPendingEvolution(null)}

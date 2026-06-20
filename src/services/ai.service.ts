@@ -63,7 +63,7 @@ export async function callAIWithFallback(prompt: string, options: FallbackOption
 
   // 2. Other cloud providers with stored keys (skip the already-tried one)
   const cloudProviders: Array<{ provider: AIProvider; model: string; label: string }> = [
-    { provider: 'google',      model: 'gemini-3-flash-preview',        label: 'Google Gemini' },
+    { provider: 'google',      model: 'gemini-2.0-flash',              label: 'Google Gemini' },
     { provider: 'openai',      model: 'gpt-4o-mini',                   label: 'OpenAI' },
     { provider: 'anthropic',   model: 'claude-haiku-4-5-20251001',     label: 'Anthropic' },
     { provider: 'openrouter',  model: 'google/gemini-2.0-flash-exp:free', label: 'OpenRouter' },
@@ -79,10 +79,11 @@ export async function callAIWithFallback(prompt: string, options: FallbackOption
     if (result !== null) return result;
   }
 
-  // 2.5 OpenRouter free model cascade (when primary WAS openrouter, try the other free models)
-  if (options.provider === 'openrouter' && keys['openrouter']) {
+  // 2.5 OpenRouter free model cascade (try when we have an openrouter key, regardless of primary)
+  if (keys['openrouter']) {
+    const alreadyTriedModel = options.provider === 'openrouter' ? options.model : null;
     for (const freeModel of OPENROUTER_FREE_MODELS) {
-      if (freeModel === options.model) continue; // already tried
+      if (freeModel === alreadyTriedModel) continue; // already tried as primary
       const result = await attempt(`OpenRouter/${freeModel.split('/')[1]}`, () =>
         callOpenRouter(prompt, freeModel, keys['openrouter'])
       );
@@ -222,7 +223,7 @@ export async function callAI(prompt: string, options: AICallOptions): Promise<st
       if (provider === 'google') {
         const ai = new GoogleGenAI({ apiKey: googleKey || "" });
         let modelId = model;
-        if (!modelId.startsWith('gemini-') && !modelId.startsWith('gemma-')) modelId = "gemini-3-flash-preview";
+        if (!modelId.startsWith('gemini-') && !modelId.startsWith('gemma-')) modelId = "gemini-2.0-flash";
 
         const attemptCall = async (targetModel: string) => {
           const response = await ai.models.generateContent({
@@ -245,10 +246,10 @@ export async function callAI(prompt: string, options: AICallOptions): Promise<st
           return text;
         } catch (err: any) {
           if (err?.message?.includes('429') || err?.status === 429 || err?.message?.includes('quota') || err?.message?.includes('RESOURCE_EXHAUSTED')) {
-            console.warn(`Model ${modelId} failed quota, attempting fallback to gemini-3-flash-preview...`);
-            if (modelId !== 'gemini-3-flash-preview') {
+            console.warn(`Model ${modelId} failed quota, attempting fallback to gemini-2.0-flash...`);
+            if (modelId !== 'gemini-2.0-flash') {
               try {
-                const fallbackText = await attemptCall('gemini-3-flash-preview');
+                const fallbackText = await attemptCall('gemini-2.0-flash');
                 if (fallbackText) {
                   throw Object.assign(new Error("Warning: Neural Sync downgraded to Flash version due to Pro quota exhaustion."), { fallbackText });
                 }
