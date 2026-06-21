@@ -43,6 +43,7 @@ const PROVIDER_DEFAULT_MODELS: Partial<Record<AIProvider, string>> = {
   anthropic:   'claude-haiku-4-5-20251001',
   openrouter:  'google/gemini-2.0-flash-exp:free',
   groq:        'llama3-8b-8192',
+  cerebras:    'llama-3.3-70b',
   ollama:      'gemma2:2b',
   'web-llm':   'Qwen2.5-0.5B-Instruct-q4f16_1-MLC',
 };

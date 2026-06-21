@@ -8,7 +8,7 @@ import { callOpenRouter, OPENROUTER_FREE_MODELS } from "./providers/openrouter";
 import { callOllama } from "./providers/ollama";
 import { callGroq } from "./providers/groq";
 
-export type AIProvider = 'google' | 'openai' | 'anthropic' | 'custom' | 'web-llm' | 'gemini-nano' | 'mlc-mobile' | 'ollama' | 'openrouter' | 'groq';
+export type AIProvider = 'google' | 'openai' | 'anthropic' | 'custom' | 'web-llm' | 'gemini-nano' | 'mlc-mobile' | 'ollama' | 'openrouter' | 'groq' | 'cerebras';
 
 export interface AICallOptions {
   provider: AIProvider;
@@ -68,6 +68,7 @@ export async function callAIWithFallback(prompt: string, options: FallbackOption
     { provider: 'anthropic',   model: 'claude-haiku-4-5-20251001',     label: 'Anthropic' },
     { provider: 'openrouter',  model: 'google/gemini-2.0-flash-exp:free', label: 'OpenRouter' },
     { provider: 'groq',        model: 'llama3-8b-8192',                   label: 'Groq' },
+    { provider: 'cerebras',   model: 'llama-3.3-70b',                    label: 'Cerebras' },
   ];
 
   for (const cp of cloudProviders) {
@@ -218,6 +219,23 @@ export async function callAI(prompt: string, options: AICallOptions): Promise<st
 
       if (provider === 'groq') {
         return callGroq(prompt, activeKey, model);
+      }
+
+      if (provider === 'cerebras') {
+        if (!activeKey) throw new Error("No Cerebras API key found. Add one in Settings.");
+        const client = new OpenAI({
+          apiKey: activeKey,
+          baseURL: 'https://api.cerebras.ai/v1',
+          dangerouslyAllowBrowser: true,
+        });
+        const response = await client.chat.completions.create({
+          model: model || 'llama-3.3-70b',
+          messages: [{ role: 'user', content: prompt }],
+          temperature: config.temperature,
+          top_p: config.topP,
+          max_tokens: config.maxTokens,
+        });
+        return response.choices[0].message.content || '';
       }
 
       if (provider === 'google') {

@@ -212,7 +212,11 @@ export default function App() {
         cloudKeys[k] = Array.isArray(v) ? (v as string[]) : (typeof v === 'string' && v ? [v] : []);
       }
       setProviderKeys((prev) => {
-        const merged = { ...prev, ...cloudKeys };
+        const merged: Record<string, string[]> = { ...prev };
+        for (const [k, arr] of Object.entries(cloudKeys)) {
+          const existing = prev[k] || [];
+          merged[k] = [...new Set([...existing, ...arr])].filter(Boolean);
+        }
         localStorage.setItem("app_hub_keys", JSON.stringify(merged));
         return merged;
       });
@@ -227,7 +231,6 @@ export default function App() {
 
   useEffect(() => {
     if (!user) {
-      setProviderKeys({});
       localStorage.removeItem("app_nexus_keys");
       localStorage.removeItem("evolutive_energy_key");
     }

@@ -1,11 +1,12 @@
-import { Globe, Zap, Sparkles, Layers, Cpu, Server } from "lucide-react";
+import { Globe, Zap, Sparkles, Layers, Cpu, Server, Bolt } from "lucide-react";
 
 export const MANIFEST_PROVIDERS = [
-  { id: "google",      label: "Google Gemini", Icon: Globe,    model: "gemini-3-flash-preview" },
+  { id: "google",      label: "Google Gemini", Icon: Globe,    model: "gemini-2.0-flash" },
   { id: "openai",      label: "OpenAI GPT-4",  Icon: Zap,      model: "gpt-4o" },
   { id: "anthropic",   label: "Claude",         Icon: Sparkles, model: "claude-sonnet-4-20250514" },
   { id: "openrouter",  label: "OpenRouter",     Icon: Layers,   model: "google/gemini-2.0-flash-exp:free" },
   { id: "groq",        label: "Groq (Free)",    Icon: Zap,      model: "llama3-8b-8192" },
+  { id: "cerebras",    label: "Cerebras (Free)", Icon: Bolt,    model: "llama-3.3-70b" },
   { id: "web-llm",     label: "Free Local AI",  Icon: Cpu,      model: "Qwen2.5-0.5B-Instruct-q4f16_1-MLC" },
   { id: "ollama",      label: "Ollama",         Icon: Server,   model: "gemma2:2b" },
 ] as const;
