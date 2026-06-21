@@ -173,7 +173,7 @@ export function ModulePlayer({
       </div>
       <AnimatePresence>
         {isFixing && (
-          <AIProgress mode="fix" stage={fixStage as import("./AIProgress").AIStageIndex} error={fixError} highZ />
+          <AIProgress mode="fix" stage={fixStage as import("./AIProgress").AIStageIndex} error={fixError} highZ prompt={suggestion.content} />
         )}
       </AnimatePresence>
     </motion.div>

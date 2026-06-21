@@ -493,7 +493,7 @@ export default function App() {
 
       {/* Building overlay */}
       <AnimatePresence>
-        {isManifesting && <AIProgress stage={aiStage} />}
+        {isManifesting && <AIProgress stage={aiStage} prompt={input} provider={activeProvider} />}
       </AnimatePresence>
 
       {/* ── TOP BAR ─────────────────────────────────────────────────────────── */}

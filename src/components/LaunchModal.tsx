@@ -415,7 +415,7 @@ export function LaunchModal({
 
       {/* AIProgress — main loading overlay */}
       <AnimatePresence>
-        {isFixing && <AIProgress stage={fixStage} label="Fixing" highZ />}
+        {isFixing && <AIProgress stage={fixStage} label="Fixing" highZ prompt={title} />}
       </AnimatePresence>
 
       {/* Rubik's cube popup — only when switching providers or all failed */}
