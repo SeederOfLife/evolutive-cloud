@@ -58,6 +58,14 @@ export default function WaterDialog({ suggestion, quota, isFree, onWater, onClos
     return [extras.length ? `Also: ${extras.join(' + ')}.` : '', note].filter(Boolean).join(' ');
   };
 
+  const handleSubmit = async () => {
+    if (!canAfford) return;
+    if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+      await Notification.requestPermission();
+    }
+    onWater(focuses[0], depth, buildNote());
+  };
+
   return (
     <motion.div
       className="fixed inset-0 z-50 bg-gray-900 sm:bg-black/70 sm:backdrop-blur-sm sm:flex sm:items-center sm:justify-center sm:p-4"
@@ -242,12 +250,12 @@ export default function WaterDialog({ suggestion, quota, isFree, onWater, onClos
               </span>
             )}
           </div>
-          <button onClick={() => canAfford && onWater(focuses[0], depth, buildNote())} disabled={!canAfford}
+          <button onClick={handleSubmit} disabled={!canAfford}
             className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm transition-all ${
               canAfford ? 'bg-cyan-500 hover:bg-cyan-400 text-white shadow-lg shadow-cyan-500/20' : 'bg-gray-700 text-gray-500 cursor-not-allowed'
             }`}>
             <Droplets size={16} />
-            Water Now
+            Enable Watering
           </button>
         </div>
       </motion.div>
