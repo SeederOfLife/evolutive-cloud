@@ -241,6 +241,8 @@ export const ChatMessages = React.memo(function ChatMessages({ messages, contain
           <div className={`max-w-[88%] px-3 py-2 rounded-xl text-[11px] leading-relaxed ${
             msg.role === "user" ? "bg-indigo-600 text-white"
             : msg.text.startsWith("⚠️") ? "bg-red-900/30 text-red-300 border border-red-800/40"
+            : msg.text.startsWith("↑") ? "bg-amber-900/30 text-amber-300 border border-amber-800/40"
+            : msg.text.startsWith("↻") ? "bg-orange-900/30 text-orange-300 border border-orange-800/40"
             : "bg-gray-800 text-gray-300 border border-gray-700/60"
           }`}>{msg.text}</div>
         </div>

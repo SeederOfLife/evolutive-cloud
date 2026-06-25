@@ -10,6 +10,19 @@ import DiffViewer from "./DiffViewer";
 import { LaunchHeader } from "./LaunchHeader";
 import { LaunchSandboxBody } from "./LaunchSandboxBody";
 import type { Suggestion, AppEvolution } from "../types";
+
+function normalizeError(msg: string): string {
+  return msg
+    .replace(/\(at [^)]+\)/g, '')
+    .replace(/:\d+:\d+/g, '')
+    .trim()
+    .toLowerCase();
+}
+
+function summarizeError(msg: string): string {
+  const match = msg.match(/((?:Uncaught\s+)?(?:\w+Error|\w+Exception)[^(]+(?:\([^)]*\))?)/);
+  return match ? match[1].replace(/^Uncaught\s+/, '').trim() : msg.substring(0, 80);
+}
 import type { FocusId, DepthId } from "../services/watering";
 
 interface LaunchModalProps {
@@ -57,6 +70,8 @@ export function LaunchModal({
   const desktopChatContainerRef = useRef<HTMLDivElement>(null);
   const mobileChatContainerRef = useRef<HTMLDivElement>(null);
   const sendMessageRef = useRef<(msg: string) => void>(() => {});
+  const prevErrorBeforeFix = useRef<string | null>(null);
+  const afterFixRef = useRef(false);
 
   const isTruncated = useMemo(() => {
     if (!code) return false;
@@ -69,7 +84,18 @@ export function LaunchModal({
   const handleCodeError = (msg: string) => {
     setLastError(msg);
     setMessages(prev => {
-      if (prev.at(-1)?.text.startsWith("⚠️")) return prev;
+      const last = prev.at(-1)?.text ?? "";
+      if (last.startsWith("⚠️") || last.startsWith("↑") || last.startsWith("↻")) return prev;
+
+      if (afterFixRef.current && prevErrorBeforeFix.current) {
+        afterFixRef.current = false;
+        const same = normalizeError(msg) === normalizeError(prevErrorBeforeFix.current);
+        const text = same
+          ? "↻ Same error — the fix didn't work. Try describing the problem differently."
+          : `↑ Progress! That error is gone, but a new one appeared: ${summarizeError(msg)}`;
+        return [...prev, { role: "ai", text }];
+      }
+      afterFixRef.current = false;
       return [...prev, { role: "ai", text: `⚠️ ${msg}` }];
     });
     setShowChat(true);
@@ -94,6 +120,8 @@ export function LaunchModal({
 
   const sendMessage = async (text: string) => {
     if (!text?.trim() || !onRefine || isFixing) return;
+    prevErrorBeforeFix.current = lastError;
+    afterFixRef.current = false;
     setMessages(prev => [...prev, { role: "user", text }]);
     setIsFixing(true);
     setFixStage(0);
@@ -123,6 +151,7 @@ export function LaunchModal({
         setFixStage(6);
         await new Promise(r => setTimeout(r, 500));
         setMessages(prev => [...prev, { role: "ai", text: "Done — app updated." }]);
+        afterFixRef.current = true;
       }
     } catch (e: any) {
       clearTimeout(t1); clearTimeout(t2); clearTimeout(t3);
