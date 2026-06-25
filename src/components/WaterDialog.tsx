@@ -29,7 +29,9 @@ interface Props {
 }
 
 export default function WaterDialog({ suggestion, quota, isFree, onWater, onClose, onAutoWaterChange }: Props) {
-  const [focus, setFocus] = useState<FocusId>((suggestion.autoWaterFocus as FocusId) ?? 'ux');
+  const [focuses, setFocuses] = useState<FocusId[]>(
+    suggestion.autoWaterFocus ? [suggestion.autoWaterFocus as FocusId] : ['ux']
+  );
   const [depth, setDepth] = useState<DepthId>('balanced');
   const [note,  setNote]  = useState(suggestion.autoWaterNote ?? '');
 
@@ -38,11 +40,23 @@ export default function WaterDialog({ suggestion, quota, isFree, onWater, onClos
   const [awTimes,    setAwTimes]    = useState<number>(suggestion.autoWaterTimes ?? 5);
 
   const selectedDepth = DEPTH_OPTIONS.find(d => d.id === depth)!;
-  const cost     = isFree ? 0 : selectedDepth.cost;
+  const cost      = isFree ? 0 : selectedDepth.cost;
   const canAfford = isFree || quota >= selectedDepth.cost;
 
-  const fireAutoWater = (enabled: boolean, interval: number, times: number, f: string, n: string) =>
-    onAutoWaterChange?.(enabled, interval, times, f, n);
+  const handleFocusToggle = (id: FocusId) => {
+    const next = focuses.includes(id)
+      ? focuses.length > 1 ? focuses.filter(f => f !== id) : focuses
+      : [...focuses, id];
+    setFocuses(next);
+    onAutoWaterChange?.(awEnabled, awInterval, awTimes, next[0], note);
+  };
+
+  const buildNote = () => {
+    const extras = focuses.slice(1)
+      .map(id => FOCUS_AREAS.find(f => f.id === id)?.label)
+      .filter(Boolean);
+    return [extras.length ? `Also: ${extras.join(' + ')}.` : '', note].filter(Boolean).join(' ');
+  };
 
   return (
     <motion.div
@@ -74,23 +88,47 @@ export default function WaterDialog({ suggestion, quota, isFree, onWater, onClos
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto p-5 space-y-5">
-          {/* Focus */}
+
+          {/* Focus — circular ring */}
           <div>
-            <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">Evolution Focus</p>
-            <div className="grid grid-cols-2 gap-2">
-              {FOCUS_AREAS.map(f => (
-                <button key={f.id} onClick={() => { setFocus(f.id as FocusId); fireAutoWater(awEnabled, awInterval, awTimes, f.id, note); }}
-                  className={`flex items-start gap-2 p-3 rounded-xl border text-left transition-all min-h-[56px] ${
-                    focus === f.id ? 'border-cyan-500 bg-cyan-500/10 text-white' : 'border-white/10 bg-white/5 text-gray-300 hover:bg-white/10'
-                  }`}>
-                  <span className="text-lg leading-none mt-0.5 shrink-0">{f.icon}</span>
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium leading-tight">{f.label}</div>
-                    <div className="text-xs text-gray-400 mt-0.5 leading-snug">{f.description}</div>
-                  </div>
-                </button>
-              ))}
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">Evolution Focus</p>
+              {focuses.length > 1 && (
+                <motion.p
+                  initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                  className="text-[10px] text-amber-400/70">
+                  {focuses.length} selected · broader sweep
+                </motion.p>
+              )}
             </div>
+            <div className="flex gap-2.5 overflow-x-auto pb-2 pt-1 -mx-1 px-1"
+              style={{ scrollbarWidth: 'none' }}>
+              {FOCUS_AREAS.map(f => {
+                const selected = focuses.includes(f.id as FocusId);
+                return (
+                  <button
+                    key={f.id}
+                    onClick={() => handleFocusToggle(f.id as FocusId)}
+                    className={`flex flex-col items-center gap-1.5 px-3 py-3 rounded-2xl border transition-all shrink-0 min-w-[64px] ${
+                      selected
+                        ? 'border-cyan-400/50 bg-cyan-500/12 text-white'
+                        : 'border-white/8 bg-white/4 text-gray-500 hover:bg-white/8 hover:text-gray-300'
+                    }`}
+                    style={selected ? { boxShadow: '0 0 16px rgba(6,182,212,0.18)' } : undefined}
+                  >
+                    <span className="text-2xl leading-none">{f.icon}</span>
+                    <span className="text-[9px] font-black uppercase tracking-wide leading-tight whitespace-nowrap">
+                      {f.label}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            {focuses.length === 1 && (
+              <p className="text-[9px] text-gray-600 mt-2 ml-1">
+                {FOCUS_AREAS.find(f => f.id === focuses[0])?.description}
+              </p>
+            )}
           </div>
 
           {/* Depth */}
@@ -117,7 +155,11 @@ export default function WaterDialog({ suggestion, quota, isFree, onWater, onClos
             <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">
               Creator Note <span className="normal-case text-gray-500">(optional)</span>
             </p>
-            <textarea value={note} onChange={e => { setNote(e.target.value); fireAutoWater(awEnabled, awInterval, awTimes, focus, e.target.value); }}
+            <textarea value={note}
+              onChange={e => {
+                setNote(e.target.value);
+                onAutoWaterChange?.(awEnabled, awInterval, awTimes, focuses[0], e.target.value);
+              }}
               placeholder="Anything specific you want changed or preserved…" rows={3}
               className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-500 resize-none outline-none focus:border-white/30 transition-colors" />
           </div>
@@ -131,7 +173,11 @@ export default function WaterDialog({ suggestion, quota, isFree, onWater, onClos
                   <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">Auto-water</p>
                 </div>
                 <button
-                  onClick={() => { const v = !awEnabled; setAwEnabled(v); fireAutoWater(v, awInterval, awTimes, focus, note); }}
+                  onClick={() => {
+                    const v = !awEnabled;
+                    setAwEnabled(v);
+                    onAutoWaterChange?.(v, awInterval, awTimes, focuses[0], note);
+                  }}
                   className={`relative w-10 h-5 rounded-full transition-colors ${awEnabled ? 'bg-cyan-500' : 'bg-gray-700'}`}
                 >
                   <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${awEnabled ? 'translate-x-5' : ''}`} />
@@ -148,7 +194,7 @@ export default function WaterDialog({ suggestion, quota, isFree, onWater, onClos
                         <div className="flex gap-2 flex-wrap">
                           {INTERVALS.map(opt => (
                             <button key={opt.v}
-                              onClick={() => { setAwInterval(opt.v); fireAutoWater(true, opt.v, awTimes, focus, note); }}
+                              onClick={() => { setAwInterval(opt.v); onAutoWaterChange?.(true, opt.v, awTimes, focuses[0], note); }}
                               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
                                 awInterval === opt.v ? 'bg-cyan-500 text-white' : 'bg-white/10 text-gray-400 hover:bg-white/20'
                               }`}>
@@ -157,13 +203,12 @@ export default function WaterDialog({ suggestion, quota, isFree, onWater, onClos
                           ))}
                         </div>
                       </div>
-
                       <div>
                         <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-2">Total waterings</p>
                         <div className="flex gap-2">
                           {TIMES_OPTS.map(opt => (
                             <button key={opt.v}
-                              onClick={() => { setAwTimes(opt.v); fireAutoWater(true, awInterval, opt.v, focus, note); }}
+                              onClick={() => { setAwTimes(opt.v); onAutoWaterChange?.(true, awInterval, opt.v, focuses[0], note); }}
                               className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                                 awTimes === opt.v ? 'bg-cyan-500 text-white' : 'bg-white/10 text-gray-400 hover:bg-white/20'
                               }`}>
@@ -172,7 +217,6 @@ export default function WaterDialog({ suggestion, quota, isFree, onWater, onClos
                           ))}
                         </div>
                       </div>
-
                       <p className="text-[10px] text-cyan-400/70">
                         Will water every {INTERVALS.find(i => i.v === awInterval)?.l ?? awInterval + ' min'},&nbsp;
                         {awTimes === 0 ? 'unlimited times' : `${awTimes} times total`}
@@ -198,7 +242,7 @@ export default function WaterDialog({ suggestion, quota, isFree, onWater, onClos
               </span>
             )}
           </div>
-          <button onClick={() => canAfford && onWater(focus, depth, note)} disabled={!canAfford}
+          <button onClick={() => canAfford && onWater(focuses[0], depth, buildNote())} disabled={!canAfford}
             className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm transition-all ${
               canAfford ? 'bg-cyan-500 hover:bg-cyan-400 text-white shadow-lg shadow-cyan-500/20' : 'bg-gray-700 text-gray-500 cursor-not-allowed'
             }`}>
