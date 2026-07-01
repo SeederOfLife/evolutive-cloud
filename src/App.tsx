@@ -22,6 +22,7 @@ import { GalaxyView } from "./galaxy/GalaxyView";
 import { AIProgress } from "./components/AIProgress";
 import { PromptRefiner } from "./components/PromptRefiner";
 import AppBanners from "./components/AppBanners";
+import WhileYouWereAway from "./components/WhileYouWereAway";
 import { ScrollFeed } from "./components/ScrollFeed";
 import { HubView } from "./components/HubView";
 import { SEED_APPS } from "./services/seedApps";
@@ -287,6 +288,15 @@ export default function App() {
         showOnboarding={showOnboarding} setShowOnboarding={setShowOnboarding}
         onboardingStep={onboardingStep} setOnboardingStep={setOnboardingStep}
         fallbackToast={fallbackToast}
+        onSwitchWaterApp={(s) => {
+          setLaunchTarget(s);
+          setShowWaterDialog(true);
+        }}
+      />
+
+      <WhileYouWereAway
+        suggestions={suggestions}
+        onOpenApp={(s) => setLaunchTarget(s)}
       />
     </div>
   );

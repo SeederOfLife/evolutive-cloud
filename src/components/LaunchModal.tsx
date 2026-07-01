@@ -46,6 +46,8 @@ interface LaunchModalProps {
   chatProvider?: string;
   chatProviderOptions?: { id: string; label: string }[];
   onChatProviderSwitch?: (id: string) => void;
+  allApps?: Suggestion[];
+  onSwitchWaterApp?: (s: Suggestion) => void;
 }
 
 export function LaunchModal({
@@ -53,6 +55,7 @@ export function LaunchModal({
   onWater, onAutoWaterChange, isWatering, isFreeProvider, quota, pendingEvolution, onClearEvolution,
   showWaterDialog, setShowWaterDialog, onRefine, onOpenSettings,
   chatProvider, chatProviderOptions, onChatProviderSwitch,
+  allApps, onSwitchWaterApp,
 }: LaunchModalProps) {
   const [code, setCode] = useState(suggestion.built_code || "");
   const [lastError, setLastError] = useState<string | null>(null);
@@ -224,7 +227,8 @@ export function LaunchModal({
         {showWaterDialog && onWater && setShowWaterDialog && (
           <WaterDialog suggestion={suggestion} quota={quota ?? 100} isFree={isFreeProvider ?? false}
             onWater={(focus, depth, note) => { setShowWaterDialog(false); onWater(focus, depth, note); }}
-            onClose={() => setShowWaterDialog(false)} onAutoWaterChange={onAutoWaterChange} />
+            onClose={() => setShowWaterDialog(false)} onAutoWaterChange={onAutoWaterChange}
+            allApps={allApps} onSwitchToApp={s => { setShowWaterDialog(false); onSwitchWaterApp?.(s); }} />
         )}
       </AnimatePresence>
 

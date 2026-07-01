@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Zap, Droplets, Timer } from 'lucide-react';
 import { FOCUS_AREAS, DEPTH_OPTIONS, type FocusId, type DepthId } from '../services/watering';
 import type { Suggestion } from '../types';
+
+const PRIORITY_KEY = 'wq_priority';
 
 const INTERVALS = [
   { v: 5,   l: '5 min' },
@@ -26,9 +28,11 @@ interface Props {
   onWater: (focus: FocusId, depth: DepthId, note: string) => void;
   onClose: () => void;
   onAutoWaterChange?: (enabled: boolean, interval: number, times: number, focus: string, note: string) => void;
+  allApps?: Suggestion[];
+  onSwitchToApp?: (s: Suggestion) => void;
 }
 
-export default function WaterDialog({ suggestion, quota, isFree, onWater, onClose, onAutoWaterChange }: Props) {
+export default function WaterDialog({ suggestion, quota, isFree, onWater, onClose, onAutoWaterChange, allApps, onSwitchToApp }: Props) {
   const [focuses, setFocuses] = useState<FocusId[]>(
     suggestion.autoWaterFocus ? [suggestion.autoWaterFocus as FocusId] : ['ux']
   );
@@ -38,6 +42,28 @@ export default function WaterDialog({ suggestion, quota, isFree, onWater, onClos
   const [awEnabled,  setAwEnabled]  = useState<boolean>(suggestion.autoWaterEnabled ?? false);
   const [awInterval, setAwInterval] = useState<number>(suggestion.autoWaterInterval ?? 30);
   const [awTimes,    setAwTimes]    = useState<number>(suggestion.autoWaterTimes ?? 5);
+
+  const [priorityOrder, setPriorityOrder] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem(PRIORITY_KEY) ?? '[]'); } catch { return []; }
+  });
+
+  const sortedApps = useMemo(() => {
+    const built = (allApps ?? []).filter(s => s.status === 'built' && s.built_code && !s.is_deleted);
+    return [...built].sort((a, b) => {
+      const ia = priorityOrder.indexOf(a.id);
+      const ib = priorityOrder.indexOf(b.id);
+      if (ia === -1 && ib === -1) return 0;
+      if (ia === -1) return 1;
+      if (ib === -1) return -1;
+      return ia - ib;
+    });
+  }, [allApps, priorityOrder]);
+
+  const moveToTop = (id: string) => {
+    const next = [id, ...priorityOrder.filter(i => i !== id)];
+    setPriorityOrder(next);
+    localStorage.setItem(PRIORITY_KEY, JSON.stringify(next));
+  };
 
   const selectedDepth = DEPTH_OPTIONS.find(d => d.id === depth)!;
   const cost      = isFree ? 0 : selectedDepth.cost;
@@ -96,6 +122,34 @@ export default function WaterDialog({ suggestion, quota, isFree, onWater, onClos
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto p-5 space-y-5">
+
+            {/* App priority list */}
+          {sortedApps.length > 1 && (
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">Watering Priority</p>
+                <p className="text-[9px] text-gray-600">tap to promote · quota fills top-first</p>
+              </div>
+              <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1" style={{ scrollbarWidth: 'none' }}>
+                {sortedApps.map((app, idx) => {
+                  const isCurrent = app.id === suggestion.id;
+                  const label = app.content.length > 18 ? app.content.substring(0, 18) + '…' : app.content;
+                  return (
+                    <button key={app.id}
+                      onClick={() => { moveToTop(app.id); if (!isCurrent) onSwitchToApp?.(app); }}
+                      className={`flex flex-col items-start gap-0.5 px-2.5 py-2 rounded-xl border transition-all shrink-0 min-w-[72px] max-w-[96px] text-left ${
+                        isCurrent
+                          ? 'border-cyan-500/50 bg-cyan-500/10 text-white'
+                          : 'border-white/8 bg-white/4 text-gray-500 hover:bg-white/10 hover:text-gray-300'
+                      }`}>
+                      <span className="text-[8px] font-black text-gray-600 uppercase tracking-wider">#{idx + 1}</span>
+                      <span className="text-[10px] font-bold leading-tight">{label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Focus — circular ring */}
           <div>

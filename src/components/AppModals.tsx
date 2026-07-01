@@ -93,6 +93,7 @@ interface Props {
   setOnboardingStep: (v: number) => void;
   // Fallback toast
   fallbackToast: string | null;
+  onSwitchWaterApp?: (s: Suggestion) => void;
 }
 
 export function AppModals({
@@ -111,9 +112,10 @@ export function AppModals({
   forkTarget, handleForkConfirm, onCancelFork,
   joinToken, onJoinAccepted, onCloseJoin, onSignInRequired,
   showOnboarding, setShowOnboarding, onboardingStep, setOnboardingStep,
-  fallbackToast,
+  fallbackToast, onSwitchWaterApp,
 }: Props) {
   const isOwner = (s: Suggestion) => !!user?.uid && user.uid === s.user_id && !s.id.startsWith('seed_');
+  const myBuiltApps = suggestions.filter(s => isOwner(s) && s.status === 'built' && s.built_code && !s.is_deleted);
 
   return (
     <>
@@ -179,6 +181,8 @@ export function AppModals({
               if (p) setSelectedModel(p.model);
             }}
             onRefine={handleRefine}
+            allApps={myBuiltApps}
+            onSwitchWaterApp={onSwitchWaterApp}
           />
         )}
       </AnimatePresence>
