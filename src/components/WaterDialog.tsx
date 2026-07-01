@@ -1,25 +1,11 @@
-import React, { useState, useMemo } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { X, Zap, Droplets, Timer } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { motion } from 'motion/react';
+import { X, Zap, Droplets } from 'lucide-react';
 import { FOCUS_AREAS, DEPTH_OPTIONS, type FocusId, type DepthId } from '../services/watering';
+import WaterSchedule, { INTERVALS } from './WaterSchedule';
 import type { Suggestion } from '../types';
 
 const PRIORITY_KEY = 'wq_priority';
-
-const INTERVALS = [
-  { v: 5,   l: '5 min' },
-  { v: 15,  l: '15 min' },
-  { v: 30,  l: '30 min' },
-  { v: 60,  l: '1 hour' },
-  { v: 120, l: '2 hours' },
-];
-
-const TIMES_OPTS = [
-  { v: 3,  l: '3×' },
-  { v: 5,  l: '5×' },
-  { v: 10, l: '10×' },
-  { v: 0,  l: '∞' },
-];
 
 interface Props {
   suggestion: Suggestion;
@@ -89,7 +75,13 @@ export default function WaterDialog({ suggestion, quota, isFree, onWater, onClos
     if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
       await Notification.requestPermission();
     }
-    onWater(focuses[0], depth, buildNote());
+    if (awEnabled) {
+      // Save schedule and close — the auto-water timer fires after the interval, not now
+      onAutoWaterChange?.(true, awInterval, awTimes, focuses[0], buildNote());
+      onClose();
+    } else {
+      onWater(focuses[0], depth, buildNote());
+    }
   };
 
   return (
@@ -130,7 +122,8 @@ export default function WaterDialog({ suggestion, quota, isFree, onWater, onClos
                 <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">Watering Priority</p>
                 <p className="text-[9px] text-gray-600">tap to promote · quota fills top-first</p>
               </div>
-              <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1" style={{ scrollbarWidth: 'none' }}>
+              <div className="relative">
+              <div className="flex gap-2 overflow-x-auto pb-1 pr-6" style={{ scrollbarWidth: 'none' }}>
                 {sortedApps.map((app, idx) => {
                   const isCurrent = app.id === suggestion.id;
                   const label = app.content.length > 18 ? app.content.substring(0, 18) + '…' : app.content;
@@ -148,6 +141,8 @@ export default function WaterDialog({ suggestion, quota, isFree, onWater, onClos
                   );
                 })}
               </div>
+              <div className="absolute right-0 top-0 bottom-1 w-8 bg-gradient-to-l from-gray-900 to-transparent pointer-events-none" />
+              </div>
             </div>
           )}
 
@@ -163,7 +158,8 @@ export default function WaterDialog({ suggestion, quota, isFree, onWater, onClos
                 </motion.p>
               )}
             </div>
-            <div className="flex gap-2.5 overflow-x-auto pb-2 pt-1 -mx-1 px-1"
+            <div className="relative">
+            <div className="flex gap-2.5 overflow-x-auto pb-2 pt-1 pr-6"
               style={{ scrollbarWidth: 'none' }}>
               {FOCUS_AREAS.map(f => {
                 const selected = focuses.includes(f.id as FocusId);
@@ -185,6 +181,8 @@ export default function WaterDialog({ suggestion, quota, isFree, onWater, onClos
                   </button>
                 );
               })}
+            </div>
+            <div className="absolute right-0 top-0 bottom-2 w-8 bg-gradient-to-l from-gray-900 to-transparent pointer-events-none" />
             </div>
             {focuses.length === 1 && (
               <p className="text-[9px] text-gray-600 mt-2 ml-1">
@@ -228,66 +226,13 @@ export default function WaterDialog({ suggestion, quota, isFree, onWater, onClos
 
           {/* Auto-water schedule */}
           {onAutoWaterChange && (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Timer size={14} className="text-cyan-400" />
-                  <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">Auto-water</p>
-                </div>
-                <button
-                  onClick={() => {
-                    const v = !awEnabled;
-                    setAwEnabled(v);
-                    onAutoWaterChange?.(v, awInterval, awTimes, focuses[0], note);
-                  }}
-                  className={`relative w-10 h-5 rounded-full transition-colors ${awEnabled ? 'bg-cyan-500' : 'bg-gray-700'}`}
-                >
-                  <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${awEnabled ? 'translate-x-5' : ''}`} />
-                </button>
-              </div>
-
-              <AnimatePresence>
-                {awEnabled && (
-                  <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
-                    className="overflow-hidden">
-                    <div className="bg-white/5 rounded-xl p-4 space-y-4">
-                      <div>
-                        <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-2">Every</p>
-                        <div className="flex gap-2 flex-wrap">
-                          {INTERVALS.map(opt => (
-                            <button key={opt.v}
-                              onClick={() => { setAwInterval(opt.v); onAutoWaterChange?.(true, opt.v, awTimes, focuses[0], note); }}
-                              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                                awInterval === opt.v ? 'bg-cyan-500 text-white' : 'bg-white/10 text-gray-400 hover:bg-white/20'
-                              }`}>
-                              {opt.l}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                      <div>
-                        <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-2">Total waterings</p>
-                        <div className="flex gap-2">
-                          {TIMES_OPTS.map(opt => (
-                            <button key={opt.v}
-                              onClick={() => { setAwTimes(opt.v); onAutoWaterChange?.(true, awInterval, opt.v, focuses[0], note); }}
-                              className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                                awTimes === opt.v ? 'bg-cyan-500 text-white' : 'bg-white/10 text-gray-400 hover:bg-white/20'
-                              }`}>
-                              {opt.l}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                      <p className="text-[10px] text-cyan-400/70">
-                        Will water every {INTERVALS.find(i => i.v === awInterval)?.l ?? awInterval + ' min'},&nbsp;
-                        {awTimes === 0 ? 'unlimited times' : `${awTimes} times total`}
-                      </p>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
+            <WaterSchedule
+              awEnabled={awEnabled} setAwEnabled={setAwEnabled}
+              awInterval={awInterval} setAwInterval={setAwInterval}
+              awTimes={awTimes} setAwTimes={setAwTimes}
+              focus={focuses[0]} note={note}
+              onAutoWaterChange={onAutoWaterChange}
+            />
           )}
         </div>
 
