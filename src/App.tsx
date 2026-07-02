@@ -83,10 +83,6 @@ export default function App() {
   const [pendingEvolution, setPendingEvolution] = useState<AppEvolution | null>(null);
   const [isTestingAI, setIsTestingAI] = useState(false);
   const [testResponse, setTestResponse] = useState<string | null>(null);
-  const [zoomScale, setZoomScaleState] = useState<number>(() => {
-    const v = parseFloat(localStorage.getItem('app_zoom_scale') || '1');
-    return [0.8, 1.0, 1.2].includes(v) ? v : 1.0;
-  });
   const nodePositionsRef = useRef(new Map<string, THREE.Vector3>());
   const orbitControlsRef = useRef<any>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -153,7 +149,6 @@ export default function App() {
     return "IDLE";
   }, [isRateLimited, rateLimitCountdown, aiError, isManifesting, isBuilding, isLoading]);
 
-  const updateZoom = (s: number) => { setZoomScaleState(s); localStorage.setItem('app_zoom_scale', String(s)); };
   const handlers = useAppHandlers({
     user, isCreator, suggestions, deleteSuggestion, voteSuggestion, setSeedVotes,
     launchTarget, setLaunchTarget, forkTarget, setForkTarget,
@@ -165,7 +160,7 @@ export default function App() {
 
   return (
     <div className="w-full bg-gray-950 text-white flex flex-col overflow-hidden"
-      style={{ height: '100dvh', zoom: zoomScale !== 1 ? zoomScale : undefined }}>
+      style={{ height: '100dvh' }}>
 
       <AnimatePresence>
         {isInitializing && (
@@ -262,7 +257,6 @@ export default function App() {
         handleTestNeuralLink={handlers.handleTestNeuralLink} setTestResponse={setTestResponse}
         settingsMessage={settingsMessage} setSettingsMessage={setSettingsMessage}
         webGPUSupported={webGPUSupported} refreshLinkedAccounts={refreshLinkedAccounts}
-        zoomScale={zoomScale} updateZoom={updateZoom}
         showAuth={showAuth} onCloseAuth={() => setShowAuth(false)}
         authEmail={authEmail} setAuthEmail={setAuthEmail}
         authPassword={authPassword} setAuthPassword={setAuthPassword}

@@ -34,8 +34,6 @@ export interface SettingsModalProps {
   webGPUSupported?: boolean | null;
   user?: any;
   onLinkedAccountsChange?: () => void;
-  zoomScale: number;
-  onZoomChange: (s: number) => void;
 }
 
 export function SettingsModal({
@@ -45,7 +43,6 @@ export function SettingsModal({
   forceCloud, setForceCloud, aiConfig, setAiConfig,
   isTestingAI, testResponse, handleTestNeuralLink, setTestResponse,
   settingsMessage, setSettingsMessage, webGPUSupported, user, onLinkedAccountsChange,
-  zoomScale, onZoomChange,
 }: SettingsModalProps) {
   const [tab, setTab] = useState<"ai" | "network">("ai");
 
@@ -104,7 +101,7 @@ export function SettingsModal({
             aiConfig={aiConfig} setAiConfig={setAiConfig}
             isTestingAI={isTestingAI} testResponse={testResponse}
             handleTestNeuralLink={handleTestNeuralLink} setTestResponse={setTestResponse}
-            webGPUSupported={webGPUSupported} zoomScale={zoomScale} onZoomChange={onZoomChange}
+            webGPUSupported={webGPUSupported}
           />
         )}
       </motion.div>

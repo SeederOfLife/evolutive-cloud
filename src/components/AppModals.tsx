@@ -40,8 +40,6 @@ interface Props {
   setSettingsMessage: (m: string | null) => void;
   webGPUSupported: boolean | null;
   refreshLinkedAccounts: () => void;
-  zoomScale: number;
-  updateZoom: (s: number) => void;
   // Auth modal
   showAuth: boolean;
   onCloseAuth: () => void;
@@ -102,7 +100,7 @@ export function AppModals({
   customEndpoint, setCustomEndpoint, ollamaEndpoint, setOllamaEndpoint,
   forceCloud, setForceCloud, aiConfig, setAiConfig, providerHealth, checkHealth,
   isTestingAI, testResponse, handleTestNeuralLink, setTestResponse,
-  settingsMessage, setSettingsMessage, webGPUSupported, refreshLinkedAccounts, zoomScale, updateZoom,
+  settingsMessage, setSettingsMessage, webGPUSupported, refreshLinkedAccounts,
   showAuth, onCloseAuth, authEmail, setAuthEmail, authPassword, setAuthPassword,
   isSignUp, setIsSignUp, authError, isAuthLoading, signInWithEmail, signInWithGoogle, signInWithGithub, logout,
   user, suggestions,
@@ -137,7 +135,6 @@ export function AppModals({
             settingsMessage={settingsMessage} setSettingsMessage={setSettingsMessage}
             webGPUSupported={webGPUSupported} user={user}
             onLinkedAccountsChange={refreshLinkedAccounts}
-            zoomScale={zoomScale} onZoomChange={updateZoom}
           />
         )}
       </AnimatePresence>

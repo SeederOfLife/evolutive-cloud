@@ -91,8 +91,6 @@ export interface AITabProps {
   handleTestNeuralLink: () => void;
   setTestResponse: (r: string | null) => void;
   webGPUSupported?: boolean | null;
-  zoomScale: number;
-  onZoomChange: (s: number) => void;
 }
 
 export function SettingsAITab({
@@ -101,7 +99,7 @@ export function SettingsAITab({
   customEndpoint, setCustomEndpoint, ollamaEndpoint, setOllamaEndpoint,
   forceCloud, setForceCloud, aiConfig, setAiConfig,
   isTestingAI, testResponse, handleTestNeuralLink, setTestResponse,
-  webGPUSupported, zoomScale, onZoomChange,
+  webGPUSupported,
 }: AITabProps) {
   const [newKeyInput, setNewKeyInput] = useState("");
   const [ollamaTestResult, setOllamaTestResult] = useState<string | null>(null);
@@ -279,21 +277,6 @@ export function SettingsAITab({
           className="w-full accent-indigo-500 h-1 cursor-pointer" />
       </section>
 
-      {/* Zoom */}
-      <section className="flex items-center justify-between py-1">
-        <div>
-          <p className="text-sm font-medium text-white">Zoom</p>
-          <p className="text-xs text-gray-500">Scale UI for readability</p>
-        </div>
-        <div className="flex items-center gap-1">
-          {([0.8, 1.0, 1.2] as const).map(s => (
-            <button key={s} onClick={() => onZoomChange(s)}
-              className={`w-10 h-8 rounded-lg text-sm font-bold transition-all ${zoomScale === s ? 'bg-indigo-500 text-white' : 'bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700'}`}>
-              {s === 0.8 ? '−' : s === 1.2 ? '+' : '⊙'}
-            </button>
-          ))}
-        </div>
-      </section>
     </div>
   );
 }
