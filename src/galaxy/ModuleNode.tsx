@@ -5,7 +5,7 @@ import * as THREE from "three";
 import { Suggestion } from "../types";
 import { seededRand } from "../utils/seededRand";
 
-const TRAIL_LEN  = 7;
+const TRAIL_LEN   = 14;
 const NODE_COLORS = ["#ff006e", "#3a86ff", "#fb5607", "#ffbe0b", "#8338ec", "#00f5d4", "#06d6a0"];
 
 export function ModuleNode({ suggestion, onRun, linkedFromLabel, isWatering, forkCount, posRef }: {
@@ -16,12 +16,14 @@ export function ModuleNode({ suggestion, onRun, linkedFromLabel, isWatering, for
   forkCount?: number;
   posRef?: React.MutableRefObject<Map<string, THREE.Vector3>>;
 }) {
-  const meshRef  = useRef<THREE.Mesh>(null!);
-  const moonRef  = useRef<THREE.Mesh>(null!);
-  const trailRef = useRef<THREE.Points>(null!);
-  const ringRef  = useRef<THREE.Mesh>(null!);
-  const trailBuf = useRef(new Float32Array(TRAIL_LEN * 3));
-  const timeRef  = useRef(0);
+  const meshRef      = useRef<THREE.Mesh>(null!);
+  const moonRef      = useRef<THREE.Mesh>(null!);
+  const trailRef     = useRef<THREE.Points>(null!);
+  const ringRef      = useRef<THREE.Mesh>(null!);
+  const pulseRingRef = useRef<THREE.Mesh>(null!);
+  const outerGlowRef = useRef<THREE.Mesh>(null!);
+  const trailBuf     = useRef(new Float32Array(TRAIL_LEN * 3));
+  const timeRef      = useRef(0);
   const [hovered, setHovered] = useState(false);
 
   const evolutionCount = suggestion.evolutions?.length ?? 0;
@@ -34,7 +36,7 @@ export function ModuleNode({ suggestion, onRun, linkedFromLabel, isWatering, for
     const id     = suggestion.id;
     const energy = suggestion.energy || 0;
     const nodeSize = Math.min((0.13 + evolutionCount * 0.03 + (energy / 100) * 0.12) * 1.2, 0.54);
-    const arm     = Math.floor(seededRand(id, 5) * 2);
+    const arm    = Math.floor(seededRand(id, 5) * 2);
     const armBase = arm * Math.PI;
     const spread  = (seededRand(id, 6) - 0.5) * 1.7;
     const offset  = armBase + spread;
@@ -47,7 +49,7 @@ export function ModuleNode({ suggestion, onRun, linkedFromLabel, isWatering, for
     };
   }, [suggestion.id, suggestion.energy, linkedFromLabel, evolutionCount]);
 
-  const baseGlow = isWatering ? 3.5 : isRecent ? 2.8 : isNeglected ? 0.5 : 1.6;
+  const baseGlow = isWatering ? 4.0 : isRecent ? 3.2 : isNeglected ? 0.5 : 1.8;
   const opacity  = isNeglected ? 0.4 : 0.92;
   const showRing = hovered || !!isWatering;
 
@@ -58,14 +60,14 @@ export function ModuleNode({ suggestion, onRun, linkedFromLabel, isWatering, for
 
     const orbitT = t * speed + offset;
     meshRef.current.position.x = Math.cos(orbitT) * radius;
-    meshRef.current.position.y = 0;
+    meshRef.current.position.y = Math.sin(t * 0.18 + offset) * 0.22;
     meshRef.current.position.z = Math.sin(orbitT) * radius;
 
-    const wobbleScale = isWatering ? (1 + Math.sin(t * 2.4) * 0.15) : 1;
+    const wobble = isWatering ? (1 + Math.sin(t * 2.4) * 0.18) : 1;
     meshRef.current.scale.set(
-      wobbleScale * (1 + Math.sin(t * 0.84 + offset) * 0.07),
-      wobbleScale * (1 + Math.sin(t * 0.668 + offset + 1.1) * 0.07),
-      wobbleScale * (1 + Math.sin(t * 0.972 + offset + 2.2) * 0.07),
+      wobble * (1 + Math.sin(t * 0.84 + offset) * 0.07),
+      wobble * (1 + Math.sin(t * 0.668 + offset + 1.1) * 0.07),
+      wobble * (1 + Math.sin(t * 0.972 + offset + 2.2) * 0.07),
     );
     meshRef.current.rotation.x += delta * 0.12;
     meshRef.current.rotation.y += delta * 0.20;
@@ -90,20 +92,30 @@ export function ModuleNode({ suggestion, onRun, linkedFromLabel, isWatering, for
     }
 
     if (ringRef.current) {
-      ringRef.current.scale.setScalar(showRing ? 1.0 + Math.abs(Math.sin(t * Math.PI)) * 0.4 : 0);
+      ringRef.current.scale.setScalar(showRing ? 1.0 + Math.abs(Math.sin(t * Math.PI)) * 0.5 : 0);
+    }
+
+    if (pulseRingRef.current) {
+      const pulse = isWatering ? (((t * 0.55) % 1)) : 0;
+      pulseRingRef.current.scale.setScalar(isWatering ? 1.0 + pulse * 3.0 : 0);
+      if (pulseRingRef.current.material) {
+        (pulseRingRef.current.material as THREE.MeshBasicMaterial).opacity = isWatering ? (1 - pulse) * 0.5 : 0;
+      }
+    }
+
+    if (outerGlowRef.current) {
+      const glowPulse = 1 + Math.sin(t * 1.3 + offset) * 0.12;
+      outerGlowRef.current.scale.setScalar(glowPulse);
     }
 
     if (posRef) posRef.current.set(suggestion.id, meshRef.current.position.clone());
   });
 
-  const label = suggestion.content.length > 28
-    ? suggestion.content.substring(0, 28) + "…"
-    : suggestion.content;
+  const label = suggestion.content.length > 28 ? suggestion.content.substring(0, 28) + "…" : suggestion.content;
 
   return (
     <group>
-      <mesh
-        ref={meshRef}
+      <mesh ref={meshRef}
         onClick={(e) => { e.stopPropagation(); onRun(suggestion); }}
         onPointerOver={() => { setHovered(true); document.body.style.cursor = "pointer"; }}
         onPointerOut={() => { setHovered(false); document.body.style.cursor = "default"; }}
@@ -112,25 +124,37 @@ export function ModuleNode({ suggestion, onRun, linkedFromLabel, isWatering, for
         <meshStandardMaterial
           color={hovered ? "#fff" : color}
           emissive={hovered ? "#fff" : color}
-          emissiveIntensity={hovered ? 2.5 : baseGlow}
-          metalness={0.6} roughness={0.25} transparent opacity={opacity}
+          emissiveIntensity={hovered ? 2.8 : baseGlow}
+          metalness={0.6} roughness={0.22} transparent opacity={opacity}
         />
-        <mesh scale={1.8}>
+        {/* Inner glow halo */}
+        <mesh scale={2.0}>
           <sphereGeometry args={[nodeSize, 10, 10]} />
-          <meshBasicMaterial color={color} transparent opacity={0.15} blending={THREE.AdditiveBlending} depthWrite={false} />
+          <meshBasicMaterial color={color} transparent opacity={0.18} blending={THREE.AdditiveBlending} depthWrite={false} />
         </mesh>
+        {/* Outer diffuse glow — gives depth to each node */}
+        <mesh ref={outerGlowRef} scale={4.2}>
+          <sphereGeometry args={[nodeSize, 8, 8]} />
+          <meshBasicMaterial color={color} transparent opacity={0.055} blending={THREE.AdditiveBlending} depthWrite={false} />
+        </mesh>
+        {/* Hover/watering ring */}
         <mesh ref={ringRef} rotation={[Math.PI / 2, 0, 0]}>
-          <ringGeometry args={[nodeSize * 1.3, nodeSize * 1.55, 64]} />
+          <ringGeometry args={[nodeSize * 1.3, nodeSize * 1.6, 64]} />
           <meshBasicMaterial color="#ffffff" transparent opacity={0.55} side={THREE.DoubleSide} blending={THREE.AdditiveBlending} depthWrite={false} />
+        </mesh>
+        {/* Expanding watering pulse ring */}
+        <mesh ref={pulseRingRef} rotation={[Math.PI / 2, 0, 0]}>
+          <ringGeometry args={[nodeSize * 1.5, nodeSize * 2.0, 48]} />
+          <meshBasicMaterial color={color} transparent opacity={0} side={THREE.DoubleSide} blending={THREE.AdditiveBlending} depthWrite={false} />
         </mesh>
         {forkCount && forkCount > 0 && (
           <mesh ref={moonRef}>
             <icosahedronGeometry args={[nodeSize * 0.3, 0]} />
-            <meshStandardMaterial color="#a5b4fc" emissive="#a5b4fc" emissiveIntensity={1.2} transparent opacity={0.75} />
+            <meshStandardMaterial color="#a5b4fc" emissive="#a5b4fc" emissiveIntensity={1.4} transparent opacity={0.78} />
           </mesh>
         )}
         {hovered && (
-          <Html center position={[0, nodeSize + 0.3, 0]} zIndexRange={[100, 0]}>
+          <Html center position={[0, nodeSize + 0.35, 0]} zIndexRange={[100, 0]}>
             <div style={{
               background: "rgba(9,9,11,0.93)",
               border: `1px solid ${linkedFromLabel ? "rgba(52,211,153,0.45)" : "rgba(99,102,241,0.45)"}`,
@@ -158,7 +182,7 @@ export function ModuleNode({ suggestion, onRun, linkedFromLabel, isWatering, for
         <bufferGeometry>
           <bufferAttribute attach="attributes-position" count={TRAIL_LEN} array={trailBuf.current} itemSize={3} />
         </bufferGeometry>
-        <pointsMaterial size={nodeSize * 0.22} color={color} transparent opacity={0.22} sizeAttenuation blending={THREE.AdditiveBlending} depthWrite={false} />
+        <pointsMaterial size={nodeSize * 0.28} color={color} transparent opacity={0.35} sizeAttenuation blending={THREE.AdditiveBlending} depthWrite={false} />
       </points>
     </group>
   );

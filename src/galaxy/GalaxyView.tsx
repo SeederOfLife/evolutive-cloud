@@ -58,16 +58,19 @@ export function GalaxyView({
       <Canvas shadows camera={{ position: [0, 0, 10], fov: 75 }}
         className="cursor-grab active:cursor-grabbing"
         gl={{ antialias: true, alpha: true }} dpr={[1, 2]}>
-        <ambientLight intensity={0.2} />
-        <pointLight position={[10, 10, 10]} intensity={1.5} color="#ffffff" />
-        <pointLight position={[-10, -10, -10]} intensity={1} color="#6366f1" />
+        <fog attach="fog" color="#070710" near={24} far={68} />
+        <ambientLight intensity={0.28} />
+        <pointLight position={[10, 10, 10]} intensity={2.2} color="#ffffff" />
+        <pointLight position={[-10, -10, -10]} intensity={1.6} color="#6366f1" />
+        <pointLight position={[6, -9, 14]} intensity={0.9} color="#2dd4bf" />
         <EvolutiveSeed onClick={onOpenHub} isOpen={isHubOpen} />
         <Nebula />
         <GalaxyField />
-        <OrbitRing radius={3.5} opacity={0.18} color="#818cf8" />
-        <OrbitRing radius={5.0} opacity={0.11} color="#6366f1" />
-        <OrbitRing radius={6.5} opacity={0.07} color="#4f46e5" />
-        <OrbitRing radius={7.5} opacity={0.05} color="#4338ca" />
+        <OrbitRing radius={2.8} opacity={0.22} color="#c084fc" />
+        <OrbitRing radius={4.2} opacity={0.16} color="#818cf8" />
+        <OrbitRing radius={5.8} opacity={0.10} color="#6366f1" />
+        <OrbitRing radius={7.4} opacity={0.065} color="#4f46e5" />
+        <OrbitRing radius={9.0} opacity={0.04} color="#4338ca" />
         {allSuggestions.filter(s => s.status === "built" && s.built_code).map(s => (
           <ModuleNode key={s.id} suggestion={s} onRun={onLaunch}
             linkedFromLabel={s.user_id && linkedUserMap.has(s.user_id) ? linkedUserMap.get(s.user_id) : undefined}
