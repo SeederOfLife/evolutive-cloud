@@ -61,13 +61,14 @@ export async function callAIWithFallback(prompt: string, options: FallbackOption
     if (result !== null) return result;
   }
 
-  // 2.5 OpenRouter free model cascade
+  // 2.5 OpenRouter free model cascade — server-side failover in one call
   if (keys['openrouter']) {
-    const alreadyTriedModel = options.provider === 'openrouter' ? options.model : null;
-    for (const freeModel of OPENROUTER_FREE_MODELS) {
-      if (freeModel === alreadyTriedModel) continue;
-      const result = await attempt(`OpenRouter/${freeModel.split('/')[1]}`, () =>
-        callOpenRouter(prompt, freeModel, keys['openrouter'])
+    const cascade = options.provider === 'openrouter'
+      ? OPENROUTER_FREE_MODELS.filter(m => m !== options.model)
+      : [...OPENROUTER_FREE_MODELS];
+    if (cascade.length > 0) {
+      const result = await attempt('OpenRouter (free cascade)', () =>
+        callOpenRouter(prompt, cascade[0], keys['openrouter'], undefined, cascade)
       );
       if (result !== null) return result;
     }

@@ -10,6 +10,7 @@ export async function callOpenRouter(
   model: string,
   apiKey: string,
   onChunk?: (text: string) => void,
+  models?: readonly string[],
 ): Promise<string> {
   const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
@@ -20,7 +21,7 @@ export async function callOpenRouter(
       'X-Title': 'Evolutive Cloud',
     },
     body: JSON.stringify({
-      model,
+      ...(models && models.length > 0 ? { models } : { model }),
       stream: true,
       messages: [{ role: 'user', content: prompt }],
     }),
