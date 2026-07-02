@@ -23,6 +23,7 @@ import { AIProgress } from "./components/AIProgress";
 import { PromptRefiner } from "./components/PromptRefiner";
 import AppBanners from "./components/AppBanners";
 import WhileYouWereAway from "./components/WhileYouWereAway";
+import WaterHub from "./evolution/WaterHub";
 import { ScrollFeed } from "./components/ScrollFeed";
 import { HubView } from "./components/HubView";
 import { SEED_APPS } from "./services/seedApps";
@@ -52,7 +53,7 @@ export default function App() {
     user, aiProvider, providerKeys, setAiError, setLaunchTarget,
   });
 
-  const [view, setView] = useState<'galaxy' | 'feed' | 'hub'>('galaxy');
+  const [view, setView] = useState<'galaxy' | 'feed' | 'hub' | 'water'>('galaxy');
   const [showSettings, setShowSettings] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
   const [input, setInput] = useState("");
@@ -218,11 +219,8 @@ export default function App() {
           onChipClick={chip => setInput(chip)} inputRef={inputRef}
         />
 
-        {view === "feed" && (
-          <ScrollFeed suggestions={displaySuggestions}
-            onPlay={s => setLaunchTarget(s)} onVote={handlers.handleVote}
-            onBuild={s => buildEvolution(s)} />
-        )}
+        {view === "feed" && <ScrollFeed suggestions={displaySuggestions}
+          onPlay={s => setLaunchTarget(s)} onVote={handlers.handleVote} onBuild={s => buildEvolution(s)} />}
 
         {view === "hub" && (
           <HubView
@@ -235,6 +233,9 @@ export default function App() {
             onVote={handlers.handleVote}
           />
         )}
+
+        {view === "water" && <WaterHub suggestions={suggestions} user={user} wateringId={wateringId} apiQuota={apiQuota}
+          onOpenApp={s => setLaunchTarget(s)} onOpenWater={s => { setLaunchTarget(s); setShowWaterDialog(true); }} />}
       </main>
 
       <BottomBar
@@ -288,16 +289,10 @@ export default function App() {
         showOnboarding={showOnboarding} setShowOnboarding={setShowOnboarding}
         onboardingStep={onboardingStep} setOnboardingStep={setOnboardingStep}
         fallbackToast={fallbackToast}
-        onSwitchWaterApp={(s) => {
-          setLaunchTarget(s);
-          setShowWaterDialog(true);
-        }}
+        onSwitchWaterApp={s => { setLaunchTarget(s); setShowWaterDialog(true); }}
       />
 
-      <WhileYouWereAway
-        suggestions={suggestions}
-        onOpenApp={(s) => setLaunchTarget(s)}
-      />
+      <WhileYouWereAway suggestions={suggestions} onOpenApp={s => setLaunchTarget(s)} />
     </div>
   );
 }

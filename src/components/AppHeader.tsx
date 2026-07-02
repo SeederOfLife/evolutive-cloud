@@ -4,14 +4,15 @@ import type { User as FirebaseUser } from "firebase/auth";
 interface Props {
   user: FirebaseUser | null;
   neuralStatus: string;
-  view: "galaxy" | "feed" | "hub";
-  setView: (v: "galaxy" | "feed" | "hub") => void;
+  view: "galaxy" | "feed" | "hub" | "water";
+  setView: (v: "galaxy" | "feed" | "hub" | "water") => void;
   builtCount: number;
   onOpenSettings: () => void;
   onOpenAuth: () => void;
 }
 
 export function AppHeader({ user, neuralStatus, view, setView, builtCount, onOpenSettings, onOpenAuth }: Props) {
+  const tabs = ["galaxy", "feed", "hub", "water"] as const;
   return (
     <header className="flex-none h-14 bg-gray-900 border-b border-gray-800 flex items-center px-3 sm:px-4 gap-2 sm:gap-3">
       <div className="flex items-center gap-2 shrink-0">
@@ -27,7 +28,7 @@ export function AppHeader({ user, neuralStatus, view, setView, builtCount, onOpe
 
       <div className="flex-1 flex justify-center">
         <div className="flex bg-gray-800 rounded-lg p-1 gap-0.5 sm:gap-1">
-          {(["galaxy", "feed", "hub"] as const).map((v) => (
+          {tabs.map((v) => (
             <button key={v} onClick={() => setView(v)}
               className={`px-2.5 sm:px-4 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-all ${view === v ? "bg-indigo-500 text-white" : "text-gray-400 hover:text-white"}`}>
               <span className="sm:hidden font-black">{v.charAt(0).toUpperCase()}</span>
