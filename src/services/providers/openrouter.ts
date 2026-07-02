@@ -1,3 +1,5 @@
+import { OpenRouter } from '@openrouter/sdk';
+
 export const OPENROUTER_FREE_MODELS = [
   'google/gemini-2.0-flash-exp:free',
   'poolside/laguna-xs-2.1:free',
@@ -5,27 +7,35 @@ export const OPENROUTER_FREE_MODELS = [
   'mistralai/mistral-7b-instruct:free',
 ] as const;
 
-export async function callOpenRouter(prompt: string, model: string, apiKey: string): Promise<string> {
-  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-      'HTTP-Referer': 'https://evolutive-cloud.vercel.app',
-      'X-Title': 'Evolutive Cloud',
-    },
-    body: JSON.stringify({
+export async function callOpenRouter(
+  prompt: string,
+  model: string,
+  apiKey: string,
+  onChunk?: (text: string) => void,
+): Promise<string> {
+  const client = new OpenRouter({
+    apiKey,
+    httpReferer: 'https://evolutive-cloud.vercel.app',
+    appTitle: 'Evolutive Cloud',
+  });
+
+  const stream = await client.chat.send({
+    chatRequest: {
       model,
       messages: [{ role: 'user', content: prompt }],
-    }),
+      stream: true,
+    },
   });
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    const msg = err.error?.message || response.statusText;
-    throw new Error(`OpenRouter ${response.status}: ${msg}`);
+
+  let response = '';
+  for await (const chunk of stream) {
+    const content = (chunk as any).choices?.[0]?.delta?.content;
+    if (content) {
+      response += content;
+      onChunk?.(content);
+    }
   }
-  const data = await response.json();
-  const text = data.choices?.[0]?.message?.content;
-  if (!text) throw new Error('OpenRouter returned empty response.');
-  return text;
+
+  if (!response) throw new Error('OpenRouter returned empty response.');
+  return response;
 }
