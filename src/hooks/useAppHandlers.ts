@@ -133,6 +133,26 @@ export function useAppHandlers({
     finally { setWateringId(null); }
   }, [launchTarget, activeProvider, setWateringId, callUnifiedAI, consumeQuota, setPendingEvolution]);
 
+  const handleAutoWaterFire = useCallback(async (s: Suggestion, focus: FocusId, depth: DepthId, note: string) => {
+    if (s.id.startsWith('seed_')) return;
+    setWateringId(s.id);
+    try {
+      const evolution = await waterApp(s, focus, depth, note, callUnifiedAI);
+      const evolutions: AppEvolution[] = [evolution, ...(s.evolutions ?? [])].slice(0, 20);
+      await updateDoc(doc(db, 'suggestions', s.id), { built_code: evolution.code, evolutions });
+      if (activeProvider !== 'web-llm') {
+        const costs: Record<DepthId, number> = { gentle: 10, balanced: 20, wild: 35 };
+        consumeQuota(costs[depth]);
+      }
+      if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+        new Notification(`✨ ${s.content.substring(0, 40)} evolved!`, {
+          body: evolution.summary, icon: '/favicon.ico', tag: `water-${s.id}`,
+        });
+      }
+    } catch (e) { console.error('Auto-water fire failed:', e); }
+    finally { setWateringId(null); }
+  }, [callUnifiedAI, activeProvider, setWateringId, consumeQuota]);
+
   const checkHealth = useCallback(async (provider: string) => {
     setProviderHealth(prev => ({ ...prev, [provider]: { ...prev[provider], status: "checking" } }));
     const startTime = Date.now();
@@ -209,7 +229,7 @@ export function useAppHandlers({
 
   return {
     saveApiKeyToAccount, handleVote, handleDeleteSuggestion, handleForkConfirm,
-    handleToggleVisibility, handleAutoWaterChange, handleWaterApp,
+    handleToggleVisibility, handleAutoWaterChange, handleWaterApp, handleAutoWaterFire,
     checkHealth, handleTestNeuralLink, handleRefine,
   };
 }

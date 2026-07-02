@@ -24,6 +24,7 @@ import { PromptRefiner } from "./components/PromptRefiner";
 import AppBanners from "./components/AppBanners";
 import WhileYouWereAway from "./components/WhileYouWereAway";
 import WaterHub from "./evolution/WaterHub";
+import { AutoWaterRunner } from "./evolution/AutoWaterRunner";
 import { ScrollFeed } from "./components/ScrollFeed";
 import { HubView } from "./components/HubView";
 import { SEED_APPS } from "./services/seedApps";
@@ -153,8 +154,6 @@ export default function App() {
   }, [isRateLimited, rateLimitCountdown, aiError, isManifesting, isBuilding, isLoading]);
 
   const updateZoom = (s: number) => { setZoomScaleState(s); localStorage.setItem('app_zoom_scale', String(s)); };
-
-  // Handlers
   const handlers = useAppHandlers({
     user, isCreator, suggestions, deleteSuggestion, voteSuggestion, setSeedVotes,
     launchTarget, setLaunchTarget, forkTarget, setForkTarget,
@@ -293,6 +292,7 @@ export default function App() {
       />
 
       <WhileYouWereAway suggestions={suggestions} onOpenApp={s => setLaunchTarget(s)} />
+      <AutoWaterRunner suggestions={suggestions} wateringId={wateringId} onFire={handlers.handleAutoWaterFire} />
     </div>
   );
 }
