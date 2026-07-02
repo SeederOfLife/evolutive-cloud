@@ -1,5 +1,6 @@
 export const OPENROUTER_FREE_MODELS = [
   'google/gemini-2.0-flash-exp:free',
+  'poolside/laguna-xs-2.1:free',
   'meta-llama/llama-3.2-3b-instruct:free',
   'mistralai/mistral-7b-instruct:free',
 ] as const;
