@@ -109,8 +109,10 @@ export function useAppHandlers({
       autoWaterFocus: focus, autoWaterNote: note,
       autoWater: (enabled ? (interval <= 60 ? 'hourly' : 'daily') : 'off') as 'off' | 'hourly' | 'daily',
     };
-    await updateDoc(doc(db, "suggestions", launchTarget.id), update);
-    setLaunchTarget(prev => prev ? { ...prev, ...update } : null);
+    try {
+      await updateDoc(doc(db, "suggestions", launchTarget.id), update);
+      setLaunchTarget(prev => prev ? { ...prev, ...update } : null);
+    } catch (e) { console.error("Auto-water save failed:", e); }
   }, [launchTarget, setLaunchTarget]);
 
   const handleWaterApp = useCallback(async (focus: FocusId, depth: DepthId, note: string) => {

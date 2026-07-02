@@ -76,8 +76,7 @@ export default function WaterDialog({ suggestion, quota, isFree, onWater, onClos
       await Notification.requestPermission();
     }
     if (awEnabled) {
-      // Save schedule and close — the auto-water timer fires after the interval, not now
-      onAutoWaterChange?.(true, awInterval, awTimes, focuses[0], buildNote());
+      await onAutoWaterChange?.(true, awInterval, awTimes, focuses[0], buildNote());
       onClose();
     } else {
       onWater(focuses[0], depth, buildNote());
@@ -254,7 +253,7 @@ export default function WaterDialog({ suggestion, quota, isFree, onWater, onClos
               canAfford ? 'bg-cyan-500 hover:bg-cyan-400 text-white shadow-lg shadow-cyan-500/20' : 'bg-gray-700 text-gray-500 cursor-not-allowed'
             }`}>
             <Droplets size={16} />
-            Enable Watering
+            {awEnabled ? 'Save Schedule' : 'Water Now'}
           </button>
         </div>
       </motion.div>
