@@ -47,7 +47,7 @@ export async function callAIWithFallback(prompt: string, options: FallbackOption
     { provider: 'google',      model: 'gemini-2.0-flash',              label: 'Google Gemini' },
     { provider: 'openai',      model: 'gpt-4o-mini',                   label: 'OpenAI' },
     { provider: 'anthropic',   model: 'claude-haiku-4-5-20251001',     label: 'Anthropic' },
-    { provider: 'openrouter',  model: 'google/gemini-2.0-flash-exp:free', label: 'OpenRouter' },
+    { provider: 'openrouter',  model: 'poolside/laguna-xs-2.1:free',      label: 'OpenRouter' },
     { provider: 'groq',        model: 'llama3-8b-8192',                label: 'Groq' },
     { provider: 'cerebras',    model: 'llama-3.3-70b',                 label: 'Cerebras' },
   ];

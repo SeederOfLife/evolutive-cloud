@@ -25,7 +25,6 @@ const MODELS: Record<string, { value: string; label: string }[]> = {
   "gemini-nano": [{ value: "gemini-nano", label: "Gemini Nano" }],
   openrouter: [
     { value: "openrouter/auto",                        label: "Auto (best model per request)" },
-    { value: "google/gemini-2.0-flash-exp:free",       label: "Gemini 2.0 Flash (free)" },
     { value: "poolside/laguna-xs-2.1:free",            label: "Poolside Laguna XS 2.1 (free, code)" },
     { value: "meta-llama/llama-3.2-3b-instruct:free",  label: "Llama 3.2 3B (free)" },
     { value: "mistralai/mistral-7b-instruct:free",     label: "Mistral 7B (free)" },
