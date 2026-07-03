@@ -37,8 +37,9 @@ export async function callAIWithFallback(prompt: string, options: FallbackOption
     }
   };
 
-  // 1. Selected provider (Ollama gets a longer timeout — CPU inference is slow)
-  const primaryTimeout = options.provider === 'ollama' ? 120_000 : 30_000;
+  // 1. Selected provider (Ollama/OpenRouter free tier need longer timeouts)
+  const primaryTimeout = options.provider === 'ollama' ? 120_000
+    : options.provider === 'openrouter' ? 90_000 : 30_000;
   const primary = await attempt(options.provider, () => callAI(prompt, options), primaryTimeout);
   if (primary !== null) return primary;
 
@@ -55,8 +56,9 @@ export async function callAIWithFallback(prompt: string, options: FallbackOption
   for (const cp of cloudProviders) {
     if (cp.provider === options.provider) continue;
     if (!keys[cp.provider]) continue;
+    const timeout = cp.provider === 'openrouter' ? 90_000 : 30_000;
     const result = await attempt(cp.label, () =>
-      callAI(prompt, { ...options, provider: cp.provider, model: cp.model })
+      callAI(prompt, { ...options, provider: cp.provider, model: cp.model }), timeout
     );
     if (result !== null) return result;
   }
@@ -68,7 +70,7 @@ export async function callAIWithFallback(prompt: string, options: FallbackOption
       : [...OPENROUTER_FREE_MODELS];
     if (cascade.length > 0) {
       const result = await attempt('OpenRouter (free cascade)', () =>
-        callOpenRouter(prompt, cascade[0], keys['openrouter'], undefined, cascade)
+        callOpenRouter(prompt, cascade[0], keys['openrouter'], undefined, cascade), 90_000
       );
       if (result !== null) return result;
     }
