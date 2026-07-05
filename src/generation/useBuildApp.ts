@@ -113,7 +113,9 @@ ROADMAP: {"now":["what works today 1","what works today 2"],"next":["next wateri
 - Recharts (LineChart, BarChart, PieChart, AreaChart, ResponsiveContainer...)
 - motion.div, AnimatePresence from Framer Motion
 - Canvas 2D API, Web Audio API, SVG, requestAnimationFrame, Math — all available natively
-- IMPORTANT: localStorage is NOT available (sandbox restriction) — use React state only`,
+- Camera/microphone: navigator.mediaDevices.getUserMedia({video:true}) works (user sees a permission prompt) — attach the stream to a <video> element via ref
+- Persistent memory: const data = await AppStorage.load(); AppStorage.save(obj) — a plain JSON object that survives reload. Use it for scores, settings, saved notes.
+- IMPORTANT: localStorage is NOT available (sandbox restriction) — use React state + AppStorage only`,
         `\nCritical rules:
 - Start with: export default function App() {
 - NO import statements at all

@@ -6,6 +6,7 @@ import { isCodeBalanced, findAppFunctionEnd } from "../utils/sandboxUtils";
 import { AIProgress } from "./AIProgress";
 import type { FixStageIndex } from "./AIProgress";
 import { buildSrcDoc } from "../sandbox/buildSrcDoc";
+import { useSandboxCapabilities } from "../sandbox/capabilityBridge";
 import { PlayerSidebar, CombinedEntry } from "./PlayerSidebar";
 import { PlayerWorkspace } from "./PlayerWorkspace";
 
@@ -41,6 +42,7 @@ export function ModulePlayer({
   const [fixStage, setFixStage] = useState<FixStageIndex>(0);
   const [fixError, setFixError] = useState<string | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  useSandboxCapabilities(iframeRef, suggestion.id);
 
   useEffect(() => {
     if (suggestion.built_code && !code) setCode(suggestion.built_code);

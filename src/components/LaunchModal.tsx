@@ -199,7 +199,7 @@ export function LaunchModal({
       />
 
       <LaunchSandboxBody
-        code={code} appType={suggestion.app_type} onError={handleCodeError}
+        code={code} appType={suggestion.app_type} appId={suggestion.id} onError={handleCodeError}
         isTruncated={isTruncated} isFixing={isFixing} lastError={lastError}
         showChat={showChat} setShowChat={setShowChat} hasRefine={!!onRefine}
         sendMessage={sendMessage} messages={messages}

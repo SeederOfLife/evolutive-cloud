@@ -7,6 +7,7 @@ import { ChatInputBar, ChatMessages } from "./ChatPanel";
 interface Props {
   code: string;
   appType: any;
+  appId?: string;
   onError: (msg: string) => void;
   isTruncated: boolean;
   isFixing: boolean;
@@ -24,7 +25,7 @@ interface Props {
 }
 
 export function LaunchSandboxBody({
-  code, appType, onError, isTruncated, isFixing, lastError,
+  code, appType, appId, onError, isTruncated, isFixing, lastError,
   showChat, setShowChat, hasRefine, sendMessage, messages,
   desktopChatContainerRef, mobileChatContainerRef,
   chatProvider, chatProviderOptions, onChatProviderSwitch,
@@ -32,7 +33,7 @@ export function LaunchSandboxBody({
   return (
     <div className="flex-1 flex overflow-hidden">
       <div className="flex-1 relative min-w-0">
-        <AppSandbox code={code} appType={appType} className="absolute inset-0 w-full h-full" onError={onError} />
+        <AppSandbox code={code} appType={appType} appId={appId} className="absolute inset-0 w-full h-full" onError={onError} />
 
         {/* Truncation overlay */}
         <AnimatePresence>

@@ -2,6 +2,7 @@ import React from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Monitor, Code, FileJson, Loader2, RefreshCw, Zap } from "lucide-react";
 import { Suggestion } from "../types";
+import { IFRAME_ALLOW } from "../sandbox/capabilityBridge";
 
 interface Props {
   showPreview: boolean;
@@ -82,7 +83,7 @@ export function PlayerWorkspace({
             )}
             <iframe ref={iframeRef} srcDoc={srcDoc}
               className="w-full h-full border-none bg-black" title="app-player"
-              sandbox="allow-scripts"
+              sandbox="allow-scripts" allow={IFRAME_ALLOW}
             />
             {deviceFrame === "phone" && (
               <div className="absolute bottom-2 left-1/2 -translate-x-1/2 w-28 sm:w-36 h-1.5 bg-white/10 rounded-full z-10 pointer-events-none" />

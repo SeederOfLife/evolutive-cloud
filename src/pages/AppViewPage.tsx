@@ -117,7 +117,7 @@ export function AppViewPage() {
             </a>
           </div>
         ) : accessGranted && suggestion?.built_code ? (
-          <AppSandbox code={suggestion.built_code} appType={suggestion.app_type} className="w-full h-full" />
+          <AppSandbox code={suggestion.built_code} appType={suggestion.app_type} appId={suggestion.id} className="w-full h-full" />
         ) : null}
       </div>
 

@@ -200,9 +200,10 @@ export function EmulatorHub({ suggestions, currentUser, onExecute, onClose }: Em
                      <div className="absolute inset-x-0 bottom-0 h-64 bg-gradient-to-t from-black/80 via-black/40 to-transparent z-10 pointer-events-none" />
                      
                      <div className="w-full h-full relative">
-                        <AppSandbox 
-                          code={app.built_code || ""} 
+                        <AppSandbox
+                          code={app.built_code || ""}
                           appType={app.app_type}
+                          appId={app.id}
                           className="w-full h-full"
                         />
                         

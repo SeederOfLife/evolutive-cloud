@@ -1,9 +1,11 @@
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
+import { CAPABILITY_SNIPPET, IFRAME_ALLOW, useSandboxCapabilities } from "../sandbox/capabilityBridge";
 
 interface AppSandboxProps {
   code: string;
   appType?: 'phone' | 'desktop' | 'game' | 'terminal' | 'music' | 'art';
+  appId?: string;
   className?: string;
   onLog?: (msg: string) => void;
   onError?: (msg: string, stack?: string) => void;
@@ -55,7 +57,9 @@ function findAppFunctionEnd(code: string): number {
   return i;
 }
 
-export function AppSandbox({ code, className = "", onError }: AppSandboxProps) {
+export function AppSandbox({ code, appId, className = "", onError }: AppSandboxProps) {
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  useSandboxCapabilities(iframeRef, appId);
   const cleanCode = useMemo(() => sanitizeCode(code || ""), [code]);
   const isBalanced = useMemo(() => !cleanCode || isCodeBalanced(cleanCode), [cleanCode]);
 
@@ -93,6 +97,7 @@ body{background:#050508;color:#fff;margin:0;min-height:100vh;display:flex;flex-d
 </head>
 <body>
 <div id="root"></div>
+<script>${CAPABILITY_SNIPPET}<\/script>
 <script>
 (function(){
   var root=document.getElementById('root');
@@ -229,10 +234,12 @@ body{background:#050508;color:#fff;margin:0;min-height:100vh;display:flex;flex-d
 
   return (
     <iframe
+      ref={iframeRef}
       srcDoc={srcDoc}
       className={`w-full h-full border-none bg-black ${className}`}
       title="app-sandbox"
       sandbox="allow-scripts"
+      allow={IFRAME_ALLOW}
     />
   );
 }

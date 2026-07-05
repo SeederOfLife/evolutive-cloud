@@ -1,4 +1,5 @@
 import { isCodeBalanced, findAppFunctionEnd } from "../utils/sandboxUtils";
+import { CAPABILITY_SNIPPET } from "./capabilityBridge";
 
 export function buildSrcDoc(cleanCode: string): string {
   if (!cleanCode) {
@@ -30,6 +31,7 @@ body{background:#050508;color:#fff;margin:0;min-height:100vh;display:flex;flex-d
 </head>
 <body>
 <div id="root"></div>
+<script>${CAPABILITY_SNIPPET}<\/script>
 <script>
 (function(){
   var root=document.getElementById('root');

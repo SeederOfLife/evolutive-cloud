@@ -43,7 +43,7 @@ export function FeedCard({ suggestion: s, isActive, onPlay, onVote, onBuild }: P
       {/* Background */}
       <div className="absolute inset-0">
         {isBuilt ? (
-          <AppSandbox code={s.built_code!} appType={s.app_type} className="w-full h-full" />
+          <AppSandbox code={s.built_code!} appType={s.app_type} appId={s.id} className="w-full h-full" />
         ) : (
           <div className="absolute inset-0 bg-gradient-to-br from-[#07071a] via-black to-[#03030a]">
             <div className="absolute inset-0"
