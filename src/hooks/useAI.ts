@@ -11,8 +11,10 @@ export function useAI() {
     return stored || 'google';
   });
   const [selectedModel, setSelectedModel] = useState(() => {
+    // Models decommissioned upstream — a stale persisted choice must not survive.
+    const dead = ['llama3-8b-8192', 'llama3-70b-8192', 'mixtral-8x7b-32768', 'google/gemini-2.0-flash-exp:free'];
     const stored = localStorage.getItem('app_model');
-    if (stored) return stored;
+    if (stored && !dead.includes(stored)) return stored;
     return 'gemini-2.0-flash';
   });
   const [providerKeys, setProviderKeys] = useState<Record<string, string[]>>(() =>

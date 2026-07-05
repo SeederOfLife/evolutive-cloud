@@ -165,6 +165,7 @@ body{background:#050508;color:#fff;margin:0;min-height:100vh;display:flex;flex-d
       var R=window.React,RD=window.ReactDOM;
       var IC=window.lucideReact||window.LucideReact||{};
       var RC=window.Recharts||{};
+      var _fb=function(p){p=p||{};return R.createElement('svg',{width:p.size||16,height:p.size||16,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor',strokeWidth:2,className:p.className||''});};
 
       ['useState','useEffect','useMemo','useRef','useCallback','createContext','useContext',
        'useReducer','useLayoutEffect','forwardRef','Fragment','memo','Children','cloneElement'].forEach(function(h){
@@ -185,7 +186,7 @@ body{background:#050508;color:#fff;margin:0;min-height:100vh;display:flex;flex-d
       };
       // Make require('lucide-react') return a catch-all proxy so destructured named imports work
       try{
-        IC=new Proxy(IC,{get:function(t,k){return t[k]||window[k]||_ic;}});
+        IC=new Proxy(IC,{get:function(t,k){return t[k]||window[k]||_fb;}});
       }catch(e){}
 
       var mkEl=function(tag){return function(p){p=p||{};return R.createElement(tag,{className:p.className,style:p.style,id:p.id,onClick:p.onClick,onChange:p.onChange},p.children);};};
@@ -206,6 +207,11 @@ body{background:#050508;color:#fff;margin:0;min-height:100vh;display:flex;flex-d
       };
 
       var mountCode=decodeURIComponent("${encoded}");
+      // Stub any capitalized JSX tag that resolves to nothing (unknown Lucide icon,
+      // hallucinated component) as an empty icon — local declarations shadow the stub.
+      (mountCode.match(/<([A-Z][A-Za-z0-9_]*)/g)||[]).forEach(function(t){
+        var n=t.slice(1);if(window[n]===undefined)window[n]=_fb;
+      });
 
       var out;
       try{

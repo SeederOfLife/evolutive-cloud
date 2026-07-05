@@ -170,8 +170,8 @@ export async function callAI(prompt: string, options: AICallOptions): Promise<st
           return text;
         } catch (err: any) {
           if (err?.message?.includes('429') || err?.status === 429 || err?.message?.includes('quota') || err?.message?.includes('RESOURCE_EXHAUSTED')) {
-            console.warn(`Model ${modelId} failed quota, attempting fallback to gemini-2.0-flash...`);
             if (modelId !== 'gemini-2.0-flash') {
+              console.warn(`Model ${modelId} failed quota, attempting fallback to gemini-2.0-flash...`);
               try {
                 const fallbackText = await attemptCall('gemini-2.0-flash');
                 if (fallbackText) {
@@ -182,21 +182,9 @@ export async function callAI(prompt: string, options: AICallOptions): Promise<st
                 console.error("Flash fallback also failed:", fallbackErr);
               }
             }
-
-            if (retryCount < maxRetries) {
-              retryCount++;
-              // Fixed 30s wait matches Gemini's 20-req/min window
-              let countdown = 30;
-              onRateLimited?.(countdown);
-
-              const interval = setInterval(() => {
-                onRateLimited?.(Math.max(0, --countdown));
-              }, 1000);
-              await sleep(30000);
-              clearInterval(interval);
-              onRateLimitCleared?.();
-              continue;
-            }
+            // No 30s wait-and-retry here: the fallback chain's own timeout always
+            // killed it mid-sleep. Fail fast so the next provider gets the time.
+            throw new Error('Google rate limited (429) — moving to next provider.');
           }
           throw err;
         }

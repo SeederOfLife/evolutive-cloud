@@ -1,13 +1,12 @@
 export const GROQ_MODELS = [
-  'llama3-8b-8192',
-  'llama3-70b-8192',
-  'mixtral-8x7b-32768',
+  'llama-3.1-8b-instant',
+  'llama-3.3-70b-versatile',
 ] as const;
 
 export async function callGroq(
   prompt: string,
   apiKey: string,
-  model: string = 'llama3-8b-8192',
+  model: string = 'llama-3.1-8b-instant',
 ): Promise<string> {
   if (!apiKey) throw new Error('No Groq API key found. Add one in Settings.');
   const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
