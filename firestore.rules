@@ -41,16 +41,12 @@ service cloud.firestore {
         );
 
       allow update: if isSignedIn() && (
-        // Action: Owner/Creator Update
+        // Action: Owner/Creator Update — anything except identity fields.
+        // (An allowlist here broke silently every time the app wrote a new field.)
         (
-          (isOwner(existing().get('user_id', '')) || isProjectCreator()) && 
-          isValidSuggestion(incoming()) && 
-          incoming().diff(existing()).affectedKeys().hasOnly([
-            'content', 'status', 'votes', 'energy', 'built_code', 'pledged_by',
-            'history', 'chat_thread', 'is_deleted', 'roadmap', 'evolutions',
-            'autoWaterEnabled', 'autoWaterInterval', 'autoWaterTimes',
-            'autoWaterFocus', 'autoWaterNote', 'autoWater', 'visibility'
-          ])
+          (isOwner(existing().get('user_id', '')) || isProjectCreator()) &&
+          isValidSuggestion(incoming()) &&
+          !incoming().diff(existing()).affectedKeys().hasAny(['user_id', 'created_at'])
         ) ||
         // Action: Vote
         (
@@ -74,17 +70,16 @@ service cloud.firestore {
              (!('user_id' in data) || (data.user_id is string && data.user_id.size() <= 128));
     }
 
-    // Helper to check if user is the project creator via the config document
-    // We assume the project creator's ID is stored in a document where status == 'system_config'
-    // Since we can't easily find a doc by field in a rule without knowing its ID, 
-    // and if we don't have its ID, we can't 'get' it.
-    // However, the app can be modified to use a fixed ID for the config, OR we can rely on the fact 
-    // that the app passes creatorId around.
-    // For now, let's allow the owner of the first system_config doc to be "the" creator if we use user_id there.
+    // Project creator = has a doc in /admins/{uid}. Create it once in the
+    // Firebase console (doc ID = your auth UID, content can be empty).
     function isProjectCreator() {
-      // This is a placeholder logic. In production, you'd likely check a specific 'admins' collection.
-      // Or if the suggestion has no user_id (system config), we might store it in a way we can check.
-      return false; // Will be optimized if user_id is added to config doc
+      return isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    // --- Admins (console-managed only, never writable from the client) ---
+    match /admins/{userId} {
+      allow read: if isOwner(userId);
+      allow write: if false;
     }
 
     // --- User Profile Rules ---

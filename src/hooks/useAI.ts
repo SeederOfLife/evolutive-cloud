@@ -66,6 +66,18 @@ export function useAI() {
 
   const webLlmEngineRef = useRef<webllm.MLCEngine | null>(null);
 
+  // Uncaught async errors were dying silently in the console — surface them.
+  useEffect(() => {
+    const onRejection = (e: PromiseRejectionEvent) => {
+      const msg = e.reason?.message ?? String(e.reason);
+      if (msg && !/ResizeObserver|AbortError/i.test(msg)) {
+        setAiError(`Unexpected error: ${msg.slice(0, 200)}`);
+      }
+    };
+    window.addEventListener('unhandledrejection', onRejection);
+    return () => window.removeEventListener('unhandledrejection', onRejection);
+  }, []);
+
   // On mount: detect viable providers, then auto-select the best one
   useEffect(() => {
     const init = async () => {

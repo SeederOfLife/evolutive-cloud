@@ -155,7 +155,7 @@ export default function App() {
     providerKeys, setProviderKeys, aiProvider, activeProvider,
     callUnifiedAI, aiConfig, consumeQuota, customEndpoint,
     setProviderHealth, isTestingAI, setIsTestingAI, setTestResponse,
-    setWateringId, setPendingEvolution,
+    setWateringId, setPendingEvolution, setAiError,
   });
 
   return (

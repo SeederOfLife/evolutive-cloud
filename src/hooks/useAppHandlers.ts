@@ -32,6 +32,7 @@ interface HandlersInput {
   setTestResponse: React.Dispatch<React.SetStateAction<string | null>>;
   setWateringId: React.Dispatch<React.SetStateAction<string | null>>;
   setPendingEvolution: React.Dispatch<React.SetStateAction<AppEvolution | null>>;
+  setAiError: (msg: string | null) => void;
 }
 
 export function useAppHandlers({
@@ -40,7 +41,7 @@ export function useAppHandlers({
   providerKeys, setProviderKeys, aiProvider, activeProvider,
   callUnifiedAI, aiConfig, consumeQuota, customEndpoint,
   setProviderHealth, isTestingAI, setIsTestingAI, setTestResponse,
-  setWateringId, setPendingEvolution,
+  setWateringId, setPendingEvolution, setAiError,
 }: HandlersInput) {
 
   const saveApiKeyToAccount = useCallback(async (key: string, provider: string = aiProvider) => {
@@ -89,16 +90,16 @@ export function useAppHandlers({
       const docRef = await addDoc(collection(db, "suggestions"), newDoc);
       setForkTarget(null);
       setLaunchTarget({ id: docRef.id, ...newDoc } as Suggestion);
-    } catch (err: any) { console.error("Fork failed:", err); }
-  }, [forkTarget, user, setForkTarget, setLaunchTarget]);
+    } catch (err: any) { setAiError(`Fork failed: ${err.message}`); }
+  }, [forkTarget, user, setForkTarget, setLaunchTarget, setAiError]);
 
   const handleToggleVisibility = useCallback(async (newVis: 'public' | 'private') => {
     if (!launchTarget || launchTarget.id.startsWith('seed_')) return;
     try {
       await updateDoc(doc(db, "suggestions", launchTarget.id), { visibility: newVis });
       setLaunchTarget(prev => prev ? { ...prev, visibility: newVis } : null);
-    } catch (e) { console.error("Visibility update failed:", e); }
-  }, [launchTarget, setLaunchTarget]);
+    } catch (e: any) { setAiError(`Visibility update failed: ${e.message}`); }
+  }, [launchTarget, setLaunchTarget, setAiError]);
 
   const handleAutoWaterChange = useCallback(async (
     enabled: boolean, interval: number, times: number, focus: string, note: string,
@@ -112,8 +113,8 @@ export function useAppHandlers({
     try {
       await updateDoc(doc(db, "suggestions", launchTarget.id), update);
       setLaunchTarget(prev => prev ? { ...prev, ...update } : null);
-    } catch (e) { console.error("Auto-water save failed:", e); }
-  }, [launchTarget, setLaunchTarget]);
+    } catch (e: any) { setAiError(`Auto-water save failed: ${e.message}`); }
+  }, [launchTarget, setLaunchTarget, setAiError]);
 
   const handleWaterApp = useCallback(async (focus: FocusId, depth: DepthId, note: string) => {
     if (!launchTarget || launchTarget.id.startsWith('seed_')) return;
@@ -136,9 +137,9 @@ export function useAppHandlers({
       if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
         new Notification(`${launchTarget.content} evolved`, { body: evolution.summary });
       }
-    } catch (e) { console.error("Watering failed:", e); }
+    } catch (e: any) { setAiError(`Watering failed: ${e.message}`); }
     finally { setWateringId(null); }
-  }, [launchTarget, activeProvider, setWateringId, callUnifiedAI, consumeQuota, setPendingEvolution]);
+  }, [launchTarget, activeProvider, setWateringId, callUnifiedAI, consumeQuota, setPendingEvolution, setAiError]);
 
   const handleAutoWaterFire = useCallback(async (s: Suggestion, focus: FocusId, depth: DepthId, note: string) => {
     if (s.id.startsWith('seed_')) return;
@@ -156,9 +157,9 @@ export function useAppHandlers({
           body: evolution.summary, icon: '/favicon.ico', tag: `water-${s.id}`,
         });
       }
-    } catch (e) { console.error('Auto-water fire failed:', e); }
+    } catch (e: any) { setAiError(`Auto-water of "${s.content.substring(0, 30)}" failed: ${e.message}`); }
     finally { setWateringId(null); }
-  }, [callUnifiedAI, activeProvider, setWateringId, consumeQuota]);
+  }, [callUnifiedAI, activeProvider, setWateringId, consumeQuota, setAiError]);
 
   const checkHealth = useCallback(async (provider: string) => {
     setProviderHealth(prev => ({ ...prev, [provider]: { ...prev[provider], status: "checking" } }));
