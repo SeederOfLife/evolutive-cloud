@@ -153,7 +153,13 @@ ROADMAP: {"now":["what works today 1","what works today 2"],"next":["next wateri
       setAiStage(5);
       const saveData: Record<string, unknown> = { status: 'built', built_code: generatedCode };
       if (roadmap) saveData.roadmap = roadmap;
-      await updateDoc(doc(db, 'suggestions', suggestion.id), saveData);
+      try {
+        await updateDoc(doc(db, 'suggestions', suggestion.id), saveData);
+      } catch (saveErr: any) {
+        // Generation succeeded — never discard it because the save failed. Open locally, warn.
+        console.error('Cloud save failed, app kept in session:', saveErr);
+        setAiError(`App generated but cloud save failed (${saveErr?.code || saveErr?.message}). It opens locally — it won't persist after reload.`);
+      }
       consumeQuota(15);
       setAiStage(6);
       setLaunchTarget({ ...suggestion, status: 'built', built_code: generatedCode, ...(roadmap ? { roadmap } : {}) });

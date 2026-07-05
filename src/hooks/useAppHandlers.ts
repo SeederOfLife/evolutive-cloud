@@ -121,7 +121,12 @@ export function useAppHandlers({
     try {
       const evolution = await waterApp(launchTarget, focus, depth, note, callUnifiedAI);
       const evolutions: AppEvolution[] = [evolution, ...(launchTarget.evolutions ?? [])].slice(0, 20);
-      await updateDoc(doc(db, "suggestions", launchTarget.id), { built_code: evolution.code, evolutions });
+      try {
+        await updateDoc(doc(db, "suggestions", launchTarget.id), { built_code: evolution.code, evolutions });
+      } catch (saveErr) {
+        // Evolution succeeded — keep it in session even if the cloud save fails.
+        console.error("Evolution save failed, applied locally only:", saveErr);
+      }
       setLaunchTarget(prev => prev ? { ...prev, built_code: evolution.code, evolutions } : null);
       if (activeProvider !== 'web-llm') {
         const costs: Record<DepthId, number> = { gentle: 10, balanced: 20, wild: 35 };

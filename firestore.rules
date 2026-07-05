@@ -33,8 +33,8 @@ service cloud.firestore {
       allow create: if isSignedIn() && 
         isValidSuggestion(incoming()) && 
         (
-          // Standard creation
-          (incoming().status == 'pending' && (!('user_id' in incoming()) || incoming().user_id == request.auth.uid)) ||
+          // Standard creation ('pending') and forks ('built' with copied code)
+          (incoming().status in ['pending', 'built'] && (!('user_id' in incoming()) || incoming().user_id == request.auth.uid)) ||
           // Config creation (only if it doesn't exist yet, but rules can't easily check 'only if none exist' without collection group or similar, 
           // but we can allow any signed in user to create the first one)
           (incoming().status == 'system_config')
@@ -45,7 +45,12 @@ service cloud.firestore {
         (
           (isOwner(existing().get('user_id', '')) || isProjectCreator()) && 
           isValidSuggestion(incoming()) && 
-          incoming().diff(existing()).affectedKeys().hasOnly(['content', 'status', 'votes', 'energy', 'built_code', 'pledged_by', 'history', 'chat_thread', 'is_deleted'])
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'content', 'status', 'votes', 'energy', 'built_code', 'pledged_by',
+            'history', 'chat_thread', 'is_deleted', 'roadmap', 'evolutions',
+            'autoWaterEnabled', 'autoWaterInterval', 'autoWaterTimes',
+            'autoWaterFocus', 'autoWaterNote', 'autoWater', 'visibility'
+          ])
         ) ||
         // Action: Vote
         (
