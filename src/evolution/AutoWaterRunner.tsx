@@ -11,6 +11,9 @@ interface Props {
 export function AutoWaterRunner({ suggestions, wateringId, onFire }: Props) {
   const onFireRef = useRef(onFire);
   const wateringRef = useRef(wateringId);
+  // If a fire fails, no evolution is written and the app stays eligible —
+  // without this, it would retry every 15s and burn quota/rate limits.
+  const lastAttempt = useRef<Record<string, number>>({});
   useEffect(() => { onFireRef.current = onFire; }, [onFire]);
   useEffect(() => { wateringRef.current = wateringId; }, [wateringId]);
 
@@ -27,7 +30,10 @@ export function AutoWaterRunner({ suggestions, wateringId, onFire }: Props) {
         const refAt = lastTs
           ? new Date(lastTs).getTime()
           : (s.created_at ? new Date(s.created_at).getTime() : now);
+        const retryDelay = Math.max(intervalMs, 5 * 60_000);
+        if ((lastAttempt.current[s.id] ?? 0) + retryDelay > now) continue;
         if (now >= refAt + intervalMs) {
+          lastAttempt.current[s.id] = now;
           onFireRef.current(
             s,
             (s.autoWaterFocus ?? 'ux') as FocusId,
