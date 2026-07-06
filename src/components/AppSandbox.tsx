@@ -102,6 +102,12 @@ body{background:#050508;color:#fff;margin:0;min-height:100vh;display:flex;flex-d
 (function(){
   var root=document.getElementById('root');
   function showErr(msg,stack){
+    // Self-heal: 'Grid3X3 is not defined' (unknown icon/component in any usage,
+    // even async render) -> stub it as an empty icon and re-run the app.
+    var m=/([A-Za-z_$][\\w$]*) is not defined/.exec(String(msg));
+    if(m&&/^[A-Z]/.test(m[1])&&window.__fb&&window.__rerun&&(window.__stubbed=(window.__stubbed||0)+1)<=8){
+      window[m[1]]=window.__fb;window.__rerun();return;
+    }
     root.innerHTML='<div class="err"><b>Error:</b> '+String(msg)+(stack?'<br><pre style="font-size:9px;opacity:.5;margin-top:8px;overflow:auto;max-height:120px">'+String(stack)+'<\/pre>':'')+'<\/div>';
     try{window.parent&&window.parent.postMessage({type:'EVO_ERROR',msg:String(msg)},'*');}catch(x){}
   }
@@ -221,6 +227,10 @@ body{background:#050508;color:#fff;margin:0;min-height:100vh;display:flex;flex-d
         return;
       }
 
+      window.__fb=_fb;
+      window.__rerun=function(){
+        try{(new Function(out))();}catch(e){showErr('Runtime: '+e.message,e.stack);}
+      };
       // Run via Function() so errors are synchronous and caught below
       try{
         (new Function(out))();
