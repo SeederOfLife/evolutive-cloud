@@ -1,0 +1,8 @@
+{
+  "crons": [
+    { "path": "/api/auto-water", "schedule": "0 * * * *" }
+  ],
+  "functions": {
+    "api/auto-water.ts": { "maxDuration": 60 }
+  }
+}
