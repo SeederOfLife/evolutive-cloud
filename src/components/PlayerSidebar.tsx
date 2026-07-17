@@ -8,6 +8,7 @@ import {
 import { Suggestion } from "../types";
 import { buildProjectFiles, projectName } from "../services/projectScaffold";
 import { saveProjectToFolder, downloadProjectZip, fsAccessSupported } from "../services/exportProject";
+import { GithubPushButton } from "./GithubPushButton";
 
 export type CombinedEntry = {
   timestamp: string;
@@ -157,6 +158,7 @@ export function PlayerSidebar({
                       </button>
                     </div>
                     {exportMsg && <p className="text-[9px] text-center text-indigo-300/80 font-mono">{exportMsg}</p>}
+                    <GithubPushButton suggestion={suggestion} code={code} />
                   </div>
                   <div className="flex items-center gap-2 px-2 py-1.5 text-white/40 text-[10px]">
                     <ChevronDown className="w-3 h-3" />

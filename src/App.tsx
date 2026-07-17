@@ -21,6 +21,7 @@ import { AppModals } from "./components/AppModals";
 import { GalaxyView } from "./galaxy/GalaxyView";
 import { AIProgress } from "./components/AIProgress";
 import { PromptRefiner } from "./components/PromptRefiner";
+import { useGithubCallback } from "./identity/useGithubCallback";
 import AppBanners from "./components/AppBanners";
 import WhileYouWereAway from "./components/WhileYouWereAway";
 import WaterHub from "./evolution/WaterHub";
@@ -45,6 +46,7 @@ export default function App() {
     call: callUnifiedAI,
   } = useAI();
 
+  const ghStatus = useGithubCallback();
   const isIOS = useMemo(() => /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream, []);
   const { suggestions, deleteSuggestion, voteSuggestion } = useSuggestions();
   const { isFinalized, creatorId, isInitializing, linkedUserMap, refreshLinkedAccounts } = useProjectData(user);
@@ -183,6 +185,12 @@ export default function App() {
       <AnimatePresence>
         {isManifesting && <AIProgress stage={aiStage} prompt={input} provider={activeProvider} />}
       </AnimatePresence>
+
+      {ghStatus && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[400] px-4 py-2 rounded-xl bg-gray-900 border border-white/10 text-xs font-semibold text-white shadow-xl">
+          {ghStatus}
+        </div>
+      )}
 
       <AppHeader
         user={user} neuralStatus={neuralStatus} view={view} setView={setView}
