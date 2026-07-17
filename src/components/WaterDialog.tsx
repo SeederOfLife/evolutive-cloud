@@ -27,7 +27,7 @@ export default function WaterDialog({ suggestion, quota, isFree, onWater, onClos
 
   const [awEnabled,  setAwEnabled]  = useState<boolean>(suggestion.autoWaterEnabled ?? false);
   const [awInterval, setAwInterval] = useState<number>(suggestion.autoWaterInterval ?? 30);
-  const [awTimes,    setAwTimes]    = useState<number>(suggestion.autoWaterTimes ?? 5);
+  const [awTimes,    setAwTimes]    = useState<number>(suggestion.autoWaterTimes ?? 0);
 
   const [priorityOrder, setPriorityOrder] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem(PRIORITY_KEY) ?? '[]'); } catch { return []; }

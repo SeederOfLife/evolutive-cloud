@@ -2,6 +2,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Timer } from 'lucide-react';
 
 export const INTERVALS = [
+  { v: 1,   l: '1 min' },
+  { v: 2,   l: '2 min' },
   { v: 5,   l: '5 min' },
   { v: 15,  l: '15 min' },
   { v: 30,  l: '30 min' },
@@ -10,10 +12,10 @@ export const INTERVALS = [
 ];
 
 export const TIMES_OPTS = [
-  { v: 3,  l: '3×' },
+  { v: 0,  l: '∞' },
   { v: 5,  l: '5×' },
   { v: 10, l: '10×' },
-  { v: 0,  l: '∞' },
+  { v: 25, l: '25×' },
 ];
 
 interface Props {
