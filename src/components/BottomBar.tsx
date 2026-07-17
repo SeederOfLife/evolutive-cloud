@@ -3,11 +3,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { ChevronDown, Sparkles, Loader2 } from "lucide-react";
 import { MANIFEST_PROVIDERS } from "../constants/appConstants";
 
-const APP_TYPES = ["phone", "desktop", "game", "terminal", "music", "art"] as const;
-
 interface Props {
-  newAppType: string;
-  setNewAppType: (t: string) => void;
   input: string;
   setInput: (v: string) => void;
   inputRef: React.RefObject<HTMLInputElement>;
@@ -23,7 +19,7 @@ interface Props {
 }
 
 export function BottomBar({
-  newAppType, setNewAppType, input, setInput, inputRef,
+  input, setInput, inputRef,
   canSuggest, isLoading, isBuilding, isManifesting,
   aiProvider, setAiProvider, setSelectedModel, activeProvider, onManifest,
 }: Props) {
@@ -77,18 +73,9 @@ export function BottomBar({
     <footer className="fixed bottom-0 left-0 right-0 z-[100] bg-gray-900 border-t border-gray-800 flex flex-col sm:flex-row sm:items-center sm:h-[68px]"
       style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 8px)' }}>
 
-      {/* App type chips + mobile provider */}
-      <div className="flex items-center gap-2 px-3 sm:px-4 pt-2 sm:py-0 sm:shrink-0">
-        <div className="flex gap-1.5 overflow-x-auto flex-1 sm:flex-none"
-          style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' } as React.CSSProperties}>
-          {APP_TYPES.map(type => (
-            <button key={type} onClick={() => setNewAppType(type)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all shrink-0 ${newAppType === type ? "bg-indigo-500 text-white" : "bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700"}`}>
-              {type.charAt(0).toUpperCase() + type.slice(1)}
-            </button>
-          ))}
-        </div>
-        <div ref={mobileDropRef} className="relative shrink-0 sm:hidden">
+      {/* Mobile provider selector */}
+      <div className="flex items-center gap-2 px-3 sm:px-4 pt-2 sm:py-0 sm:shrink-0 sm:hidden">
+        <div ref={mobileDropRef} className="relative shrink-0">
           <button onClick={() => setShowDrop(v => !v)}
             className="flex items-center justify-center w-9 h-9 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-lg text-gray-300 hover:text-white transition-all">
             <active.Icon className="w-4 h-4" />
@@ -101,7 +88,7 @@ export function BottomBar({
       <div className="flex items-center gap-2 px-3 sm:px-4 pt-1.5 pb-1 sm:py-0 flex-1 min-w-0">
         <input ref={inputRef} value={input} onChange={e => setInput(e.target.value)}
           onKeyDown={e => e.key === "Enter" && onManifest()}
-          placeholder={`Describe your ${newAppType} app...`}
+          placeholder="Describe your app or project idea..."
           autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
           name="app-description"
           className="flex-1 min-w-0 min-h-[44px] bg-gray-800 border border-gray-700 rounded-lg px-3 sm:px-4 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-indigo-500 transition-colors"

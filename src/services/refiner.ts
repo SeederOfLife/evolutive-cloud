@@ -1,8 +1,22 @@
+import type { AppType } from "./agentSkills";
+
 export interface RefinementQuestion {
   priority: "Critical" | "High Priority";
   question: string;
   why: string;
   suggestions: string[];
+}
+
+// Instant keyword heuristic — gives step 1 a sensible default type so the AI has
+// project context. The user confirms/changes it in the refiner before building.
+export function detectAppType(idea: string): AppType {
+  const s = ` ${idea.toLowerCase()} `;
+  if (/\b(game|jeu|play|arcade|platformer|shooter|shoot|rpg|puzzle|snake|tetris|maze|racing|dungeon|roguelike|tower ?defense)\b/.test(s)) return 'game';
+  if (/\b(terminal|cli|command ?line|console|shell|hacker?|bash|prompt)\b/.test(s)) return 'terminal';
+  if (/\b(music|synth|piano|drum|beat|sound|audio|melody|sequencer|daw|metronome)\b/.test(s)) return 'music';
+  if (/\b(art|paint|draw|drawing|generative|shader|fractal|particle|kaleidoscope|visualizer)\b/.test(s)) return 'art';
+  if (/\b(phone|mobile|swipe|chat app|social|feed|stories|dating|messenger)\b/.test(s)) return 'phone';
+  return 'desktop';
 }
 
 export interface RefinementResult {

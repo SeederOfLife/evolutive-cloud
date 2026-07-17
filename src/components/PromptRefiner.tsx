@@ -22,8 +22,8 @@ interface Props {
   questions: RefinementQuestion[];
   appType?: AppType;
   onTypeChange?: (type: AppType) => void;
-  onBuild: (answers: Record<number, string>, editedTitle: string) => void;
-  onSkip: (editedTitle: string) => void;
+  onBuild: (answers: Record<number, string>, editedTitle: string, appType: AppType) => void;
+  onSkip: (editedTitle: string, appType: AppType) => void;
   callAI: (prompt: string) => Promise<string>;
 }
 
@@ -205,13 +205,13 @@ export function PromptRefiner({ idea, title: initialTitle, questions: initialQs,
         {/* Footer */}
         <div className="px-5 py-4 border-t border-gray-800 flex gap-3 shrink-0">
           <button
-            onClick={() => onSkip(title)}
+            onClick={() => onSkip(title, localType)}
             className="flex-1 py-3 rounded-xl border border-gray-700 text-[11px] font-bold uppercase tracking-[3px] text-gray-400 hover:text-white hover:border-gray-500 transition-all"
           >
             Skip
           </button>
           <button
-            onClick={() => onBuild(collectAnswers(), title)}
+            onClick={() => onBuild(collectAnswers(), title, localType)}
             className={`flex-1 py-3 rounded-xl flex items-center justify-center gap-2 text-[11px] font-black uppercase tracking-[3px] transition-all ${
               answeredCount > 0
                 ? "bg-indigo-500 hover:bg-indigo-600 text-white shadow-lg active:scale-95"

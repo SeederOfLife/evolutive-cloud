@@ -5,7 +5,7 @@ import { collection, addDoc, updateDoc, doc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import type { Suggestion, AIConfig, GoalPlan } from '../types';
 import { AGENT_SYSTEM_PROMPTS, AGENT_GUIDELINES, type AppType } from '../services/agentSkills';
-import { generateRefinementQuestions, buildFinalPrompt, type RefinementQuestion } from '../services/refiner';
+import { generateRefinementQuestions, buildFinalPrompt, detectAppType, type RefinementQuestion } from '../services/refiner';
 import { decomposeGoal } from '../services/decomposer';
 import type { AIStageIndex } from '../components/AIProgress';
 
@@ -13,8 +13,9 @@ export interface PendingRefiner {
   idea: string;
   title: string;
   questions: RefinementQuestion[];
-  onBuild: (answers: Record<number, string>, editedTitle: string) => void;
-  onSkip: (editedTitle: string) => void;
+  appType: AppType;
+  onBuild: (answers: Record<number, string>, editedTitle: string, appType: AppType) => void;
+  onSkip: (editedTitle: string, appType: AppType) => void;
 }
 
 interface Options {
@@ -177,7 +178,6 @@ ROADMAP: {"now":["what works today 1","what works today 2"],"next":["next wateri
   const handleSuggest = useCallback(async (
     input: string,
     setInput: (s: string) => void,
-    newAppType: AppType,
     canSuggest: boolean,
   ) => {
     if (!input.trim() || !canSuggest) return;
@@ -196,10 +196,12 @@ ROADMAP: {"now":["what works today 1","what works today 2"],"next":["next wateri
     try {
       setAiStage(0);
       setIsManifesting(true);
+      // Step 1 owns the type: detect a default from the idea, user confirms in the refiner.
+      const detectedType = detectAppType(rawInput);
       let questions: RefinementQuestion[] = [];
       let aiTitle = rawInput;
       try {
-        const result = await generateRefinementQuestions(rawInput, newAppType, callAI);
+        const result = await generateRefinementQuestions(rawInput, detectedType, callAI);
         questions = result.questions;
         aiTitle = result.title || rawInput;
       } catch (err: any) {
@@ -207,14 +209,15 @@ ROADMAP: {"now":["what works today 1","what works today 2"],"next":["next wateri
       }
       setIsManifesting(false);
 
-      type RefinerResult = { answers: Record<number, string>; title: string; skipped: boolean };
-      const { answers, title: finalTitle, skipped } = await new Promise<RefinerResult>(resolve => {
+      type RefinerResult = { answers: Record<number, string>; title: string; skipped: boolean; appType: AppType };
+      const { answers, title: finalTitle, skipped, appType } = await new Promise<RefinerResult>(resolve => {
         setPendingRefiner({
           idea: rawInput,
           title: aiTitle,
           questions,
-          onBuild: (answers, editedTitle) => resolve({ answers, title: editedTitle, skipped: false }),
-          onSkip: (editedTitle) => resolve({ answers: {}, title: editedTitle, skipped: true }),
+          appType: detectedType,
+          onBuild: (answers, editedTitle, chosenType) => resolve({ answers, title: editedTitle, skipped: false, appType: chosenType }),
+          onSkip: (editedTitle, chosenType) => resolve({ answers: {}, title: editedTitle, skipped: true, appType: chosenType }),
         });
       });
       setPendingRefiner(null);
@@ -224,7 +227,7 @@ ROADMAP: {"now":["what works today 1","what works today 2"],"next":["next wateri
       let buildPrompt = rawInput;
       if (!skipped && Object.values(answers).some(v => v.trim())) {
         try {
-          buildPrompt = await buildFinalPrompt(rawInput, answers, questions, newAppType, callAI);
+          buildPrompt = await buildFinalPrompt(rawInput, answers, questions, appType, callAI);
         } catch (err: any) {
           if (err?.message?.includes('All AI providers exhausted')) throw err;
           buildPrompt = rawInput;
@@ -234,7 +237,7 @@ ROADMAP: {"now":["what works today 1","what works today 2"],"next":["next wateri
 
       const insertData: any = {
         content: finalTitle,
-        app_type: newAppType,
+        app_type: appType,
         status: 'pending',
         votes: 0,
         energy: 0,

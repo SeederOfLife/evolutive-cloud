@@ -58,9 +58,6 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
   const [input, setInput] = useState("");
-  const [newAppType, setNewAppType] = useState<any>('desktop');
-  const newAppTypeRef = useRef<any>('desktop');
-  useEffect(() => { newAppTypeRef.current = newAppType; }, [newAppType]);
   const [forkTarget, setForkTarget] = useState<Suggestion | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterType, setFilterType] = useState<'all' | 'built' | 'pending' | 'mine'>('all');
@@ -176,8 +173,8 @@ export default function App() {
         {pendingRefiner && (
           <PromptRefiner
             idea={pendingRefiner.idea} title={pendingRefiner.title}
-            questions={pendingRefiner.questions} appType={newAppTypeRef.current}
-            onTypeChange={setNewAppType} onBuild={pendingRefiner.onBuild}
+            questions={pendingRefiner.questions} appType={pendingRefiner.appType}
+            onBuild={pendingRefiner.onBuild}
             onSkip={pendingRefiner.onSkip} callAI={callUnifiedAI}
           />
         )}
@@ -233,13 +230,12 @@ export default function App() {
       </main>
 
       <BottomBar
-        newAppType={newAppType} setNewAppType={setNewAppType}
         input={input} setInput={setInput} inputRef={inputRef}
         canSuggest={canSuggest} isLoading={isLoading}
         isBuilding={isBuilding} isManifesting={isManifesting}
         aiProvider={aiProvider} setAiProvider={setAiProvider}
         setSelectedModel={setSelectedModel} activeProvider={activeProvider}
-        onManifest={() => handleSuggest(input, setInput, newAppType, canSuggest)}
+        onManifest={() => handleSuggest(input, setInput, canSuggest)}
       />
 
       <AppModals
